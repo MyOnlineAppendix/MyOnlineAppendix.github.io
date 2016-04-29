@@ -1,0 +1,272 @@
+<h3 style="margin:0px">Class: org.apache.sling.testing.samples.integrationtests.serverside.sling.post.SlingPostChunkUploadTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-6 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test upload on a existing node. Test that binary content doesn't get
+ * updated until chunk upload finishes.
+ */
+@Test public void testChunkUploadOnExistingNode(){
+  try {
+    File file=createFile("helloworld",170);
+    String nodeName=file.getName();
+    InputStream fis=new FileInputStream(file);
+    uploadMultiPart(parentPath,null,fis,file.getName());
+    fis.close();
+    HttpResponse response=httpGet(parentPath + "/" + nodeName);
+    fis=new FileInputStream(file);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    File secondFile=createFile("helloearth",100);
+    int chunkSize=200;
+    uploadChunks(parentPath,secondFile,nodeName,0,chunkSize,3);
+    JSONObject json=getChunkJson(parentPath + "/" + nodeName);
+    validate(json,600,3);
+    response=httpGet(parentPath + "/" + nodeName);
+    fis=new FileInputStream(file);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    uploadChunks(parentPath,secondFile,nodeName,600,chunkSize,Integer.MAX_VALUE);
+    response=httpGet(parentPath + "/" + nodeName);
+    fis=new FileInputStream(secondFile);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    Map<String,String> reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    response=uploadMultiPart(parentPath + "/" + nodeName,reqParams,null,null);
+    response=httpGet(parentPath + "/" + nodeName);
+    Assert.assertEquals("status should be 404 not found ",404,response.getStatusLine().getStatusCode());
+    file.delete();
+    secondFile.delete();
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+ finally {
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test two concurrent chunk upload. Second will fail. Test deletion of
+ * incomplete upload and test new upload on the same path.
+ */
+@Test public void testConcurrentChunkUpload(){
+  try {
+    File file=createFile("helloworld",170);
+    String nodeName=file.getName();
+    int chunkSize=200;
+    uploadChunks(parentPath,file,nodeName,0,chunkSize,3);
+    JSONObject json=getChunkJson(parentPath + "/" + file.getName());
+    validate(json,600,3);
+    File secondFile=createFile("helloearth",100);
+    chunkSize=300;
+    try {
+      uploadChunks(parentPath,secondFile,nodeName,0,chunkSize,1);
+      Assert.fail("second upload should fail");
+    }
+ catch (    Exception ignore) {
+    }
+    try {
+      uploadChunks(parentPath,secondFile,nodeName,200,chunkSize,2);
+      Assert.fail("second upload should fail");
+    }
+ catch (    Exception ignore) {
+    }
+    Map<String,String> reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    reqParams.put(":applyToChunks","true");
+    HttpResponse response=uploadMultiPart(parentPath + "/" + file.getName(),reqParams,null,null);
+    Assert.assertEquals("status should be 200 OK ",200,response.getStatusLine().getStatusCode());
+    chunkSize=200;
+    uploadChunks(parentPath,secondFile,nodeName,0,chunkSize,Integer.MAX_VALUE);
+    response=httpGet(parentPath + "/" + nodeName);
+    InputStream fis=new FileInputStream(secondFile);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    response=uploadMultiPart(parentPath + "/" + nodeName,reqParams,null,null);
+    response=httpGet(parentPath + "/" + nodeName);
+    Assert.assertEquals("status should be 404 not found ",404,response.getStatusLine().getStatusCode());
+    file.delete();
+    secondFile.delete();
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test use case where file size is not known in advance. File parameter
+ * "@Completed" indicates file completion.
+ */
+@Test public void testChunkUploadOnStreaming(){
+  try {
+    File file=createFile("helloworld",170);
+    String nodeName=file.getName();
+    InputStream fis=new FileInputStream(file);
+    int chunkSize=200;
+    uploadPart(parentPath,file,file.getName(),0,0,chunkSize,false);
+    uploadPart(parentPath,file,file.getName(),0,200,chunkSize,false);
+    uploadPart(parentPath,file,file.getName(),0,400,chunkSize,true);
+    fis.close();
+    File secondFile=createFile("helloworld",60);
+    HttpResponse response=httpGet(parentPath + "/" + nodeName);
+    fis=new FileInputStream(secondFile);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    Map<String,String> reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    response=uploadMultiPart(parentPath + "/" + nodeName,reqParams,null,null);
+    response=httpGet(parentPath + "/" + nodeName);
+    Assert.assertEquals("status should be 404 not found ",404,response.getStatusLine().getStatusCode());
+    file.delete();
+    secondFile.delete();
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+ finally {
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test chunk upload without interruption.
+ */
+@Test public void testChunkUpload(){
+  try {
+    File file=createFile("helloworld",100);
+    int chunkSize=400;
+    String nodeName=file.getName();
+    uploadChunks(parentPath,file,nodeName,0,chunkSize,Integer.MAX_VALUE);
+    HttpResponse response=httpGet(parentPath + "/" + nodeName);
+    InputStream fis=new FileInputStream(file);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    Map<String,String> reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    response=uploadMultiPart(parentPath + "/" + nodeName,reqParams,null,null);
+    response=httpGet(parentPath + "/" + nodeName);
+    Assert.assertEquals("status should be 404 not found ",404,response.getStatusLine().getStatusCode());
+    file.delete();
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test chunk upload after interruption. Test the use of variable chunk
+ * size. After interruption, client retrieves chunk upload information and
+ * resume upload with variable chunk size.
+ */
+@Test public void testInterruptedChunkUpload(){
+  try {
+    File file=createFile("helloworld",170);
+    String nodeName=file.getName();
+    int chunkSize=200;
+    uploadChunks(parentPath,file,nodeName,0,chunkSize,1);
+    JSONObject json=getChunkJson(parentPath + "/" + nodeName);
+    validate(json,200,1);
+    chunkSize=300;
+    uploadChunks(parentPath,file,nodeName,200,chunkSize,2);
+    json=getChunkJson(parentPath + "/" + nodeName);
+    validate(json,800,3);
+    chunkSize=400;
+    uploadChunks(parentPath,file,nodeName,json.getInt(SlingPostConstants.NT_SLING_CHUNKS_LENGTH),chunkSize,2);
+    json=getChunkJson(parentPath + "/" + nodeName);
+    validate(json,1600,5);
+    chunkSize=500;
+    uploadChunks(parentPath,file,nodeName,json.getInt(SlingPostConstants.NT_SLING_CHUNKS_LENGTH),chunkSize,Integer.MAX_VALUE);
+    HttpResponse response=httpGet(parentPath + "/" + nodeName);
+    InputStream fis=new FileInputStream(file);
+    Assert.assertEquals("content stream doesn't match",true,IOUtils.contentEquals(fis,new ByteArrayInputStream(getRequestExecutor().getContent().getBytes())));
+    fis.close();
+    Map<String,String> reqParams=new HashMap<String,String>();
+    reqParams.put(SlingPostConstants.RP_OPERATION,"delete");
+    response=uploadMultiPart(parentPath + "/" + nodeName,reqParams,null,null);
+    response=httpGet(parentPath + "/" + nodeName);
+    Assert.assertEquals("status should be 404 not found ",404,response.getStatusLine().getStatusCode());
+    file.delete();
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test chunk upload from midway
+ */
+@Test public void testMidwayChunkUpload(){
+  File file=null;
+  try {
+    file=createFile("helloworld",170);
+    int chunkSize=200;
+    try {
+      uploadChunks(parentPath,file,file.getName(),200,chunkSize,1);
+      Assert.fail("upload should fail");
+    }
+ catch (    Exception ignore) {
+    }
+  }
+ catch (  Exception e) {
+    log.error("error:",e);
+    Assert.fail("exception caught: " + e.getMessage());
+  }
+ finally {
+    file.delete();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

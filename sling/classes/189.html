@@ -1,0 +1,114 @@
+<h3 style="margin:0px">Class: org.apache.sling.event.it.ChaosTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(1)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before public void setup() throws IOException {
+  super.setup();
+  final org.osgi.service.cm.Configuration orderedConfig=this.configAdmin.createFactoryConfiguration("org.apache.sling.event.jobs.QueueConfiguration",null);
+  final Dictionary<String,Object> orderedProps=new Hashtable<String,Object>();
+  orderedProps.put(ConfigurationConstants.PROP_NAME,"chaos-ordered");
+  orderedProps.put(ConfigurationConstants.PROP_TYPE,QueueConfiguration.Type.ORDERED.name());
+  orderedProps.put(ConfigurationConstants.PROP_TOPICS,ORDERED_TOPICS);
+  orderedProps.put(ConfigurationConstants.PROP_RETRIES,2);
+  orderedProps.put(ConfigurationConstants.PROP_RETRY_DELAY,2000L);
+  orderedConfig.update(orderedProps);
+  final org.osgi.service.cm.Configuration rrConfig=this.configAdmin.createFactoryConfiguration("org.apache.sling.event.jobs.QueueConfiguration",null);
+  final Dictionary<String,Object> rrProps=new Hashtable<String,Object>();
+  rrProps.put(ConfigurationConstants.PROP_NAME,"chaos-roundrobin");
+  rrProps.put(ConfigurationConstants.PROP_TYPE,QueueConfiguration.Type.TOPIC_ROUND_ROBIN.name());
+  rrProps.put(ConfigurationConstants.PROP_TOPICS,ROUND_TOPICS);
+  rrProps.put(ConfigurationConstants.PROP_RETRIES,2);
+  rrProps.put(ConfigurationConstants.PROP_RETRY_DELAY,2000L);
+  rrProps.put(ConfigurationConstants.PROP_MAX_PARALLEL,5);
+  rrConfig.update(rrProps);
+  this.sleep(1000L);
+}
+
+</code></pre>
+
+<pre class="type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After public void cleanup(){
+  super.cleanup();
+}
+
+</code></pre>
+
+<pre class="type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=DURATION * 4000) public void testDoChaos() throws Exception {
+  final JobManager jobManager=this.getJobManager();
+  final Map<String,AtomicLong> added=new HashMap<String,AtomicLong>();
+  final Map<String,AtomicLong> created=new HashMap<String,AtomicLong>();
+  final Map<String,AtomicLong> finished=new HashMap<String,AtomicLong>();
+  final List<String> topics=new ArrayList<String>();
+  for (int i=0; i < NUM_ORDERED_TOPICS; i++) {
+    added.put(ORDERED_TOPICS[i],new AtomicLong());
+    created.put(ORDERED_TOPICS[i],new AtomicLong());
+    finished.put(ORDERED_TOPICS[i],new AtomicLong());
+    topics.add(ORDERED_TOPICS[i]);
+  }
+  for (int i=0; i < NUM_PARALLEL_TOPICS; i++) {
+    added.put(PARALLEL_TOPICS[i],new AtomicLong());
+    created.put(PARALLEL_TOPICS[i],new AtomicLong());
+    finished.put(PARALLEL_TOPICS[i],new AtomicLong());
+    topics.add(PARALLEL_TOPICS[i]);
+  }
+  for (int i=0; i < NUM_ROUND_TOPICS; i++) {
+    added.put(ROUND_TOPICS[i],new AtomicLong());
+    created.put(ROUND_TOPICS[i],new AtomicLong());
+    finished.put(ROUND_TOPICS[i],new AtomicLong());
+    topics.add(ROUND_TOPICS[i]);
+  }
+  final List<Thread> threads=new ArrayList<Thread>();
+  final AtomicLong finishedThreads=new AtomicLong();
+  this.registerEventHandler("org/apache/sling/event/notification/job/*",new EventHandler(){
+    @Override public void handleEvent(    final Event event){
+      final String topic=(String)event.getProperty(NotificationConstants.NOTIFICATION_PROPERTY_JOB_TOPIC);
+      if (NotificationConstants.TOPIC_JOB_FINISHED.equals(event.getTopic())) {
+        finished.get(topic).incrementAndGet();
+      }
+ else       if (NotificationConstants.TOPIC_JOB_ADDED.equals(event.getTopic())) {
+        added.get(topic).incrementAndGet();
+      }
+    }
+  }
+);
+  this.setupJobConsumers();
+  this.setupJobCreationThreads(threads,jobManager,created,finishedThreads);
+  this.setupChaosThreads(threads,finishedThreads);
+  System.out.println("Starting threads...");
+  for (  final Thread t : threads) {
+    t.setDaemon(true);
+    t.start();
+  }
+  System.out.println("Sleeping for " + DURATION + " seconds to wait for threads to finish...");
+  this.sleep(DURATION * 1000);
+  System.out.println("Polling for threads to finish...");
+  while (finishedThreads.get() < threads.size()) {
+    this.sleep(100);
+  }
+  System.out.println("Waiting for job handling to finish...");
+  final Set<String> allTopics=new HashSet<String>(topics);
+  while (!allTopics.isEmpty()) {
+    final Iterator<String> iter=allTopics.iterator();
+    while (iter.hasNext()) {
+      final String topic=iter.next();
+      if (finished.get(topic).get() == created.get(topic).get()) {
+        iter.remove();
+      }
+    }
+    this.sleep(100);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

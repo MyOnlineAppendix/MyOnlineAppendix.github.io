@@ -1,0 +1,119 @@
+<h3 style="margin:0px">Class: org.apache.sling.event.it.OrderedQueueTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After public void cleanup(){
+  super.cleanup();
+}
+
+</code></pre>
+
+<pre class="type-13 type-9 type-3 type-10 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Ordered Queue Test
+ */
+@Test(timeout=DEFAULT_TEST_TIMEOUT) public void testOrderedQueue() throws Exception {
+  final JobManager jobManager=this.getJobManager();
+  final Barrier cb=new Barrier(2);
+  final AtomicInteger count=new AtomicInteger(0);
+  final AtomicInteger parallelCount=new AtomicInteger(0);
+  this.registerJobConsumer("sling/orderedtest/*",new JobConsumer(){
+    private volatile int lastCounter=-1;
+    @Override public JobResult process(    final Job job){
+      final int counter=job.getProperty("counter",-10);
+      assertNotEquals("Counter property is missing",-10,counter);
+      assertTrue("Counter should only increment by max of 1 " + counter + " - "+ lastCounter,counter == lastCounter || counter == lastCounter + 1);
+      lastCounter=counter;
+      if ("sling/orderedtest/start".equals(job.getTopic())) {
+        cb.block();
+        return JobResult.OK;
+      }
+      if (parallelCount.incrementAndGet() > 1) {
+        parallelCount.decrementAndGet();
+        return JobResult.FAILED;
+      }
+      final String topic=job.getTopic();
+      if (topic.endsWith("sub1")) {
+        final int i=(Integer)job.getProperty(Job.PROPERTY_JOB_RETRY_COUNT);
+        if (i == 0) {
+          parallelCount.decrementAndGet();
+          return JobResult.FAILED;
+        }
+      }
+      try {
+        Thread.sleep(30);
+      }
+ catch (      InterruptedException ie) {
+      }
+      parallelCount.decrementAndGet();
+      return JobResult.OK;
+    }
+  }
+);
+  this.registerEventHandler(NotificationConstants.TOPIC_JOB_FINISHED,new EventHandler(){
+    @Override public void handleEvent(    final Event event){
+      count.incrementAndGet();
+    }
+  }
+);
+  final Map<String,Object> properties=new HashMap<String,Object>();
+  properties.put("counter",-1);
+  jobManager.addJob("sling/orderedtest/start",properties);
+  assertTrue("No event received in the given time.",cb.block(5));
+  cb.reset();
+  final Queue q=jobManager.getQueue("orderedtest");
+  assertNotNull("Queue 'orderedtest' should exist!",q);
+  q.suspend();
+  final int NUM_JOBS=30;
+  for (int i=0; i < NUM_JOBS; i++) {
+    final String subTopic="sling/orderedtest/sub" + (i % 10);
+    properties.clear();
+    properties.put("counter",i);
+    jobManager.addJob(subTopic,properties);
+  }
+  q.resume();
+  while (count.get() < NUM_JOBS + 1) {
+    try {
+      Thread.sleep(500);
+    }
+ catch (    InterruptedException ie) {
+    }
+  }
+  assertEquals("Finished count",NUM_JOBS + 1,count.get());
+  assertEquals("Finished count",NUM_JOBS + 1,jobManager.getStatistics().getNumberOfFinishedJobs());
+  assertEquals("Finished count",NUM_JOBS + 1,q.getStatistics().getNumberOfFinishedJobs());
+  assertEquals("Failed count",NUM_JOBS / 10,q.getStatistics().getNumberOfFailedJobs());
+  assertEquals("Cancelled count",0,q.getStatistics().getNumberOfCancelledJobs());
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before public void setup() throws IOException {
+  super.setup();
+  final org.osgi.service.cm.Configuration orderedConfig=this.configAdmin.createFactoryConfiguration("org.apache.sling.event.jobs.QueueConfiguration",null);
+  final Dictionary<String,Object> orderedProps=new Hashtable<String,Object>();
+  orderedProps.put(ConfigurationConstants.PROP_NAME,"orderedtest");
+  orderedProps.put(ConfigurationConstants.PROP_TYPE,QueueConfiguration.Type.ORDERED.name());
+  orderedProps.put(ConfigurationConstants.PROP_TOPICS,"sling/orderedtest/*");
+  orderedProps.put(ConfigurationConstants.PROP_RETRIES,2);
+  orderedProps.put(ConfigurationConstants.PROP_RETRY_DELAY,2000L);
+  orderedConfig.update(orderedProps);
+  this.sleep(1000L);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

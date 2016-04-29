@@ -1,0 +1,324 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.sling.discovery.commons.providers.spi.base.TestOakSyncTokenService </h4><pre class="type-11 type-13 type-9 type-3 type-10 type-19 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTwoNodesOneLeaving() throws Exception {
+  logger.info("testTwoNodesOneLeaving: start");
+  String slingId2=UUID.randomUUID().toString();
+  DummyTopologyView two1=TestHelper.newView(true,slingId1,slingId1,slingId1,slingId2);
+  Lock lock1=new ReentrantLock();
+  OakBacklogClusterSyncService cs1=OakBacklogClusterSyncService.testConstructorAndActivate(new SimpleCommonsConfig(),idMapService1,new DummySlingSettingsService(slingId1),factory1);
+  ViewStateManager vsm1=ViewStateManagerFactory.newViewStateManager(lock1,cs1);
+  DummyListener l=new DummyListener();
+  vsm1.bind(l);
+  vsm1.handleActivated();
+  vsm1.handleNewView(two1);
+  cs1.triggerBackgroundCheck();
+  assertEquals(0,l.countEvents());
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory1,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(1).seq(1).activeIds(1).deactivatingIds(2));
+  cs1.triggerBackgroundCheck();
+  assertEquals(0,l.countEvents());
+  logger.info("testTwoNodesOneLeaving: sync service should be waiting for backlog to disappear");
+  Thread.sleep(2000);
+  BackgroundCheckRunnable backgroundCheckRunnable=cs1.backgroundCheckRunnable;
+  assertNotNull(backgroundCheckRunnable);
+  assertFalse(backgroundCheckRunnable.isDone());
+  assertFalse(backgroundCheckRunnable.cancelled());
+  logger.info("testTwoNodesOneLeaving: freeing backlog - sync service should finish up");
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory1,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(1).seq(2).activeIds(1));
+  cs1.triggerBackgroundCheck();
+  Thread.sleep(2000);
+  backgroundCheckRunnable=cs1.backgroundCheckRunnable;
+  assertNotNull(backgroundCheckRunnable);
+  assertFalse(backgroundCheckRunnable.cancelled());
+  assertTrue(backgroundCheckRunnable.isDone());
+  assertEquals(0,vsm1.waitForAsyncEvents(1000));
+  logger.info("testTwoNodesOneLeaving: setting up 2nd node");
+  Lock lock2=new ReentrantLock();
+  IdMapService idMapService2=IdMapService.testConstructor(new SimpleCommonsConfig(),new DummySlingSettingsService(slingId2),factory2);
+  OakBacklogClusterSyncService cs2=OakBacklogClusterSyncService.testConstructorAndActivate(new SimpleCommonsConfig(),idMapService2,new DummySlingSettingsService(slingId2),factory2);
+  ViewStateManager vsm2=ViewStateManagerFactory.newViewStateManager(lock2,cs2);
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(1,l.countEvents());
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory2,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(2).seq(3).activeIds(1,2));
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(1,l.countEvents());
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory1,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(1).seq(3).activeIds(1,2));
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(1,l.countEvents());
+  vsm2.handleActivated();
+  assertTrue(idMapService1.waitForInit(5000));
+  assertTrue(idMapService2.waitForInit(5000));
+  DummyTopologyView two2=TestHelper.newView(two1.getLocalClusterSyncTokenId(),two1.getLocalInstance().getClusterView().getId(),true,slingId1,slingId1,slingId1,slingId2);
+  vsm2.handleNewView(two2);
+  cs1.triggerBackgroundCheck();
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(0,vsm1.waitForAsyncEvents(1000));
+  assertEquals(1,l.countEvents());
+  logger.info("testTwoNodesOneLeaving: removing instance2 from the view - even though vsm1 didn't really know about it, it should send a TOPOLOGY_CHANGING - we leave it as deactivating for now...");
+  DummyTopologyView oneLeaving=two1.clone();
+  oneLeaving.removeInstance(slingId2);
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory1,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(1).seq(1).activeIds(1).deactivatingIds(2));
+  vsm1.handleNewView(oneLeaving);
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(0,vsm1.waitForAsyncEvents(5000));
+  assertEquals(2,l.countEvents());
+  logger.info("testTwoNodesOneLeaving: marking instance2 as no longer deactivating, so vsm1 should now send a TOPOLOGY_CHANGED");
+  DescriptorHelper.setDiscoveryLiteDescriptor(factory1,new DiscoveryLiteDescriptorBuilder().setFinal(true).me(1).seq(2).activeIds(1).inactiveIds(2));
+  cs1.triggerBackgroundCheck();
+  cs2.triggerBackgroundCheck();
+  assertEquals(0,vsm1.waitForAsyncEvents(5000));
+  RepositoryTestHelper.dumpRepo(factory1);
+  assertEquals(3,l.countEvents());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sling.engine.impl.request.FastMessageFormatTest </h4><pre class="type-9 type-3 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testFormat(){
+  FormatTest[] tests={new FormatTest("{0}",1),new FormatTest("{0}",Integer.MAX_VALUE),new FormatTest("{0}",Long.MAX_VALUE),new FormatTest("{0}",Math.PI),new FormatTest("{0}",123456.123456),new FormatTest("{0}",Float.MAX_VALUE),new FormatTest("{0}",new Date()),new FormatTest("{0}",Calendar.getInstance()),new FormatTest("{0}",true),new FormatTest("{0}",false),new FormatTest("{0}",new int[]{1,2,3}),new FormatTest("{0}",(Object)new Integer[]{1,2,3}),new FormatTest("{0}",Arrays.asList(1,2,3)),new FormatTest("{0}","text"),new FormatTest("{0}{0}",1,2),new FormatTest("a{0}b{1}c",1,2),new FormatTest("a{0}b{1}c{2}d",1,2,3),new FormatTest("a{0}bb{1}ccc{2}dddd",10,20,30),new FormatTest("c{1}b{0}a",1,2),new FormatTest("c{1}b{0}a{1}c",1,2),new FormatTest("c{0,number,#.##}b{0}a{1}c",1,2),new FormatTest("{0,number,#.##}",1.2345),new FormatTest("'{0}'",1)};
+  FastMessageFormat fastMessageFormat=new FastMessageFormat();
+  for (  FormatTest test : tests) {
+    String expected=MessageFormat.format(test.pattern,test.args);
+    String actual=fastMessageFormat.format(test.pattern,test.args);
+    assertEquals(expected,actual);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sling.launchpad.webapp.integrationtest.JspScriptingTest </h4><pre class="type-13 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test @Retry public void testEnum() throws Exception {
+  String toDelete=null;
+  try {
+    toDelete=H.uploadTestScript(unstructuredNode.scriptPath,"enum-test.jsp","txt.jsp");
+    final String content=H.getContent(unstructuredNode.nodeUrl + ".txt",HttpTest.CONTENT_TYPE_PLAIN);
+    for (    String expected : new String[]{"FOO=FOO","BAR=BAR"}) {
+      assertTrue("Content contains '" + expected + "'("+ content+ ")",content.contains(expected));
+    }
+  }
+  finally {
+    if (toDelete != null) {
+      H.getTestClient().delete(toDelete);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test @Retry public void testRtNoScript() throws Exception {
+  final String content=H.getContent(rtNode.nodeUrl + ".txt",HttpTest.CONTENT_TYPE_PLAIN);
+  assertTrue(content.contains("PlainTextRendererServlet"));
+  assertTrue("Content contains " + rtNode.testText + " ("+ content+ ")",content.contains(rtNode.testText));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test @Retry public void testTagFile() throws Exception {
+  String tagFile=null;
+  String tagUsingScript=null;
+  try {
+    H.getTestClient().mkdirs(HttpTest.WEBDAV_BASE_URL,"/apps/testing/tags");
+    tagFile=H.uploadTestScript("/apps/testing/tags","example.tag","example.tag");
+    tagUsingScript=H.uploadTestScript(unstructuredNode.scriptPath,"withtag.jsp","html.jsp");
+    final String content=H.getContent(unstructuredNode.nodeUrl + ".html",HttpTest.CONTENT_TYPE_HTML);
+    assertTrue("JSP script executed as expected (" + content + ")",content.contains("<h1>Hello, Sling User</h1>"));
+  }
+  finally {
+    if (tagFile != null) {
+      H.getTestClient().delete(tagFile);
+    }
+    if (tagUsingScript != null) {
+      H.getTestClient().delete(tagUsingScript);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test @Retry public void testUnstructuredNoScript() throws Exception {
+  final String content=H.getContent(unstructuredNode.nodeUrl + ".txt",HttpTest.CONTENT_TYPE_PLAIN);
+  assertTrue(content.contains("PlainTextRendererServlet"));
+  assertTrue("Content contains " + unstructuredNode.testText + " ("+ content+ ")",content.contains(unstructuredNode.testText));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sling.launchpad.webapp.integrationtest.ServerSideScriptsTest </h4><pre class="type-12 type-6 type-9 type-3 type-19 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void runScripts() throws Exception {
+  final String resourceType=RESOURCE_TYPE_PREFIX + '/' + test.testName;
+  final String scriptPath="/apps/" + resourceType;
+  String toDelete=null;
+  try {
+    this.slingClient.createNode(scriptPath,"jcr:primaryType","sling:Folder","jcr:mixinTypes","sling:Test","sling:resourceType",RESOURCE_TYPE_PREFIX + '/' + test.testName);
+    toDelete=scriptPath;
+    final String destPath=scriptPath + "/test.txt" + test.scriptExtension;
+    logger.info("Setting up node {} for {}",destPath,test.testScriptFile.getAbsoluteFile());
+    this.slingClient.upload(destPath,new FileInputStream(test.testScriptFile),-1,false);
+    Thread.sleep(2000L);
+    final long startTime=System.currentTimeMillis();
+    final ServerSideTestClient.TestResults results=slingClient.runTests("org.apache.sling.junit.scriptable.ScriptableTestsProvider");
+    assertEquals("Expecting 1 scriptable test",1,results.getTestCount());
+    final int failureCount=test.willFail ? 1 : 0;
+    if (results.getFailures().size() != failureCount) {
+      fail("Expected " + failureCount + " failing tests but got "+ results.getFailures().size()+ " for "+ test.testScriptFile.getAbsolutePath()+ ": "+ results.getFailures());
+    }
+    logger.info("Execution of {} took {} msec",test,System.currentTimeMillis() - startTime);
+  }
+  finally {
+    if (toDelete != null) {
+      this.slingClient.delete(toDelete);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sling.repoinit.jcr.GeneralAclTest </h4><pre class="type-6 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test public void readOnlyThenWriteThenDeny() throws Exception {
+  final Node tmp=U.adminSession.getRootNode().addNode("tmp_" + U.id);
+  U.adminSession.save();
+  final String path=tmp.getPath();
+  try {
+    s.getNode(path);
+    fail("Expected read access to be initially denied:" + path);
+  }
+ catch (  PathNotFoundException ignore) {
+  }
+  final String allowRead="set ACL for " + U.username + "\n"+ "allow jcr:read on "+ path+ "\n"+ "end";
+  U.parseAndExecute(allowRead);
+  final Node n=s.getNode(path);
+  try {
+    n.setProperty("U.id",U.id);
+    s.save();
+    fail("Expected write access to be initially denied:" + path);
+  }
+ catch (  AccessDeniedException ignore) {
+  }
+  s.refresh(false);
+  final String allowWrite="set ACL for " + U.username + "\n"+ "allow jcr:write on "+ path+ "\n"+ "end";
+  U.parseAndExecute(allowWrite);
+  n.setProperty("U.id",U.id);
+  s.save();
+  final String deny="set ACL for " + U.username + "\n"+ "deny jcr:all on "+ path+ "\n"+ "end";
+  U.parseAndExecute(deny);
+  try {
+    s.getNode(path);
+    fail("Expected access to be denied again:" + path);
+  }
+ catch (  PathNotFoundException ignore) {
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-9 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+@Test public void addChildAtRoot() throws Exception {
+  final String nodename="test_" + U.id;
+  final String path="/" + nodename;
+  final String aclSetup="set ACL for " + U.username + "\n"+ "allow jcr:all on /\n"+ "end";
+  U.parseAndExecute(aclSetup);
+  try {
+    assertFalse(s.itemExists(path));
+    s.getRootNode().addNode(nodename);
+    s.save();
+    assertTrue(s.nodeExists(path));
+    s.getNode(path).remove();
+    s.save();
+    assertFalse(s.itemExists(path));
+  }
+  finally {
+    s.logout();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sling.repoinit.parser.test.ParserTest </h4><pre class="type-11 type-3 type-19 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void checkResult() throws ParseException, IOException {
+  final String expected=IOUtils.toString(tc.expected,DEFAULT_ENCODING).trim();
+  try {
+    final StringWriter sw=new StringWriter();
+    final OperationVisitor v=new OperationToStringVisitor(new PrintWriter(sw));
+    final List<Operation> result=new RepoInitParserImpl(tc.input).parse();
+    for (    Operation o : result) {
+      o.accept(v);
+    }
+    sw.flush();
+    assertEquals(expected,sw.toString().trim());
+  }
+  finally {
+    tc.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

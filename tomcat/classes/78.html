@@ -1,0 +1,102 @@
+<h3 style="margin:0px">Class: org.apache.catalina.mbeans.TestRegistration (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-12 type-11 type-3 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMBeanDeregistration() throws Exception {
+  final MBeanServer mbeanServer=Registry.getRegistry(null,null).getMBeanServer();
+  Set<ObjectName> onames=mbeanServer.queryNames(new ObjectName("Catalina:*"),null);
+  log.info(MBeanDumper.dumpBeans(mbeanServer,onames));
+  assertEquals("Unexpected: " + onames,0,onames.size());
+  onames=mbeanServer.queryNames(new ObjectName("Tomcat:*"),null);
+  log.info(MBeanDumper.dumpBeans(mbeanServer,onames));
+  assertEquals("Unexpected: " + onames,0,onames.size());
+  final Tomcat tomcat=getTomcatInstance();
+  final File contextDir=new File(getTemporaryDirectory(),"webappFoo");
+  addDeleteOnTearDown(contextDir);
+  if (!contextDir.mkdirs() && !contextDir.isDirectory()) {
+    fail("Failed to create: [" + contextDir.toString() + "]");
+  }
+  Context ctx=tomcat.addContext(contextName,contextDir.getAbsolutePath());
+  CombinedRealm combinedRealm=new CombinedRealm();
+  Realm nullRealm=new NullRealm();
+  combinedRealm.addRealm(nullRealm);
+  ctx.setRealm(combinedRealm);
+  tomcat.start();
+  getUrl("http://localhost:" + getPort());
+  onames=mbeanServer.queryNames(new ObjectName("Catalina:*"),null);
+  log.info(MBeanDumper.dumpBeans(mbeanServer,onames));
+  assertEquals("Found: " + onames,0,onames.size());
+  onames=mbeanServer.queryNames(new ObjectName("Tomcat:*"),null);
+  ArrayList<String> found=new ArrayList<>(onames.size());
+  for (  ObjectName on : onames) {
+    found.add(on.toString());
+  }
+  String protocol=tomcat.getConnector().getProtocolHandlerClassName();
+  if (protocol.indexOf("Nio2") > 0) {
+    protocol="nio2";
+  }
+ else   if (protocol.indexOf("Apr") > 0) {
+    protocol="apr";
+  }
+ else {
+    protocol="nio";
+  }
+  String index=tomcat.getConnector().getProperty("nameIndex").toString();
+  ArrayList<String> expected=new ArrayList<>(Arrays.asList(basicMBeanNames()));
+  expected.addAll(Arrays.asList(hostMBeanNames("localhost")));
+  expected.addAll(Arrays.asList(contextMBeanNames("localhost",contextName)));
+  expected.addAll(Arrays.asList(connectorMBeanNames("auto-" + index,protocol)));
+  expected.addAll(Arrays.asList(optionalMBeanNames("localhost")));
+  expected.addAll(Arrays.asList(requestMBeanNames("auto-" + index + "-"+ getPort(),protocol)));
+  ArrayList<String> missing=new ArrayList<>(expected);
+  missing.removeAll(found);
+  assertTrue("Missing Tomcat MBeans: " + missing,missing.isEmpty());
+  List<String> additional=found;
+  additional.removeAll(expected);
+  assertTrue("Unexpected Tomcat MBeans: " + additional,additional.isEmpty());
+  tomcat.stop();
+  onames=mbeanServer.queryNames(new ObjectName("Tomcat:*"),null);
+  assertTrue("No Tomcat MBeans",onames.size() > 0);
+  StandardHost host=new StandardHost();
+  host.setName("otherhost");
+  tomcat.getEngine().addChild(host);
+  final File contextDir2=new File(getTemporaryDirectory(),"webappFoo2");
+  addDeleteOnTearDown(contextDir2);
+  if (!contextDir2.mkdirs() && !contextDir2.isDirectory()) {
+    fail("Failed to create: [" + contextDir2.toString() + "]");
+  }
+  tomcat.addContext(host,contextName + "2",contextDir2.getAbsolutePath());
+  tomcat.start();
+  tomcat.stop();
+  tomcat.destroy();
+  onames=mbeanServer.queryNames(new ObjectName("Catalina:*"),null);
+  log.info(MBeanDumper.dumpBeans(mbeanServer,onames));
+  assertEquals("Remaining: " + onames,0,onames.size());
+  onames=mbeanServer.queryNames(new ObjectName("Tomcat:*"),null);
+  log.info(MBeanDumper.dumpBeans(mbeanServer,onames));
+  assertEquals("Remaining: " + onames,0,onames.size());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testNames() throws MalformedObjectNameException {
+  ObjectName on1=new ObjectName("test:foo=a,bar=b");
+  ObjectName on2=new ObjectName("test:bar=b,foo=a");
+  Assert.assertTrue(on1.equals(on2));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

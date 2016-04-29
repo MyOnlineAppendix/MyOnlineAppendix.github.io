@@ -1,0 +1,146 @@
+<h3 style="margin:0px">Class: org.apache.syncope.fit.core.MultitenancyITCase (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-6 type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void createResourceAndSync(){
+  ConnInstanceTO conn=adminClient.getService(ConnectorService.class).read(100L,Locale.ENGLISH.getLanguage());
+  assertNotNull(conn);
+  assertEquals("LDAP",conn.getDisplayName());
+  ResourceTO resource=new ResourceTO();
+  resource.setKey("new-ldap-resource");
+  resource.setConnector(conn.getKey());
+  ProvisionTO provisionTO=new ProvisionTO();
+  provisionTO.setAnyType(AnyTypeKind.USER.name());
+  provisionTO.setObjectClass(ObjectClass.ACCOUNT_NAME);
+  resource.getProvisions().add(provisionTO);
+  MappingTO mapping=new MappingTO();
+  mapping.setConnObjectLink("'uid=' + username + ',ou=people,o=isp'");
+  provisionTO.setMapping(mapping);
+  MappingItemTO item=new MappingItemTO();
+  item.setIntAttrName("username");
+  item.setIntMappingType(IntMappingType.Username);
+  item.setExtAttrName("cn");
+  item.setPurpose(MappingPurpose.BOTH);
+  mapping.setConnObjectKeyItem(item);
+  item=new MappingItemTO();
+  item.setPassword(true);
+  item.setIntMappingType(IntMappingType.Password);
+  item.setExtAttrName("userPassword");
+  item.setPurpose(MappingPurpose.BOTH);
+  item.setMandatoryCondition("true");
+  mapping.add(item);
+  item=new MappingItemTO();
+  item.setIntMappingType(IntMappingType.UserKey);
+  item.setPurpose(MappingPurpose.BOTH);
+  item.setExtAttrName("sn");
+  item.setMandatoryCondition("true");
+  mapping.add(item);
+  item=new MappingItemTO();
+  item.setIntAttrName("email");
+  item.setIntMappingType(IntMappingType.UserPlainSchema);
+  item.setPurpose(MappingPurpose.BOTH);
+  item.setExtAttrName("mail");
+  mapping.add(item);
+  Response response=adminClient.getService(ResourceService.class).create(resource);
+  assertEquals(Response.Status.CREATED.getStatusCode(),response.getStatus());
+  resource=adminClient.getService(ResourceService.class).read(resource.getKey());
+  assertNotNull(resource);
+  SyncTaskTO task=new SyncTaskTO();
+  task.setName("LDAP Sync Task");
+  task.setActive(true);
+  task.setDestinationRealm(SyncopeConstants.ROOT_REALM);
+  task.setResource(resource.getKey());
+  task.setSyncMode(SyncMode.FULL_RECONCILIATION);
+  task.setPerformCreate(true);
+  response=adminClient.getService(TaskService.class).create(task);
+  assertEquals(Response.Status.CREATED.getStatusCode(),response.getStatus());
+  task=adminClient.getService(TaskService.class).read(Long.valueOf(StringUtils.substringAfterLast(response.getLocation().toASCIIString(),"/")),true);
+  assertNotNull(resource);
+  TaskExecTO execution=AbstractTaskITCase.execProvisioningTask(adminClient.getService(TaskService.class),task.getKey(),50,false);
+  String status=execution.getStatus();
+  assertNotNull(status);
+  assertEquals(PropagationTaskExecStatus.SUCCESS,PropagationTaskExecStatus.valueOf(status));
+  PagedResult<UserTO> matchingUsers=adminClient.getService(UserService.class).search(new AnySearchQuery.Builder().realm(SyncopeConstants.ROOT_REALM).fiql(SyncopeClient.getUserSearchConditionBuilder().is("username").equalTo("syncFromLDAP").query()).build());
+  assertNotNull(matchingUsers);
+  assertEquals(1,matchingUsers.getResult().size());
+}
+
+</code></pre>
+
+<pre class="type-4 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void masterOnly(){
+  try {
+    adminClient.getService(DomainService.class).read("Two");
+    fail();
+  }
+ catch (  AccessControlException e) {
+    assertNotNull(e);
+  }
+  try {
+    adminClient.getService(LoggerService.class).list(LoggerType.LOG);
+    fail();
+  }
+ catch (  AccessControlException e) {
+    assertNotNull(e);
+  }
+  adminClient.getService(LoggerService.class).list(LoggerType.AUDIT);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void readRealm(){
+  List<RealmTO> realms=adminClient.getService(RealmService.class).list();
+  assertEquals(1,realms.size());
+  assertEquals(SyncopeConstants.ROOT_REALM,realms.get(0).getName());
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void readPlainSchemas(){
+  assertEquals(17,adminClient.getService(SchemaService.class).list(new SchemaQuery.Builder().type(SchemaType.PLAIN).build()).size());
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void createUser(){
+  assertNull(adminClient.getService(RealmService.class).list().get(0).getPasswordPolicy());
+  UserTO user=new UserTO();
+  user.setRealm(SyncopeConstants.ROOT_REALM);
+  user.setUsername(getUUIDString());
+  user.setPassword("password");
+  Response response=adminClient.getService(UserService.class).create(user);
+  assertEquals(Response.Status.CREATED.getStatusCode(),response.getStatus());
+  user=response.readEntity(new GenericType<ProvisioningResult<UserTO>>(){
+  }
+).getAny();
+  assertNotNull(user);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

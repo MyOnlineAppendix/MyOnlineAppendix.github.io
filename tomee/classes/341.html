@@ -1,0 +1,90 @@
+<h3 style="margin:0px">Class: org.apache.openejb.maven.plugins.TomEEEmbeddedMojoTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-2 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void run() throws MojoFailureException, MojoExecutionException, IOException {
+  final CountDownLatch started=new CountDownLatch(1);
+  final TomEEEmbeddedMojo mojo=new TomEEEmbeddedMojo();
+  mojo.classpathAsWar=true;
+  mojo.httpPort=NetworkUtil.getNextAvailablePort();
+  mojo.ssl=false;
+  mojo.containerProperties=new HashMap<>();
+  mojo.containerProperties.put(DeploymentFilterable.CLASSPATH_INCLUDE,".*tomee-embedded-maven-plugin.*");
+  mojo.containerProperties.put("openejb.additional.include","tomee-embedded-maven-plugin");
+  mojo.setLog(new SystemStreamLog(){
+    @Override public void info(    final CharSequence charSequence){
+      final String string=charSequence.toString();
+      if (string.startsWith("TomEE embedded started on") || string.equals("can't start TomEE")) {
+        started.countDown();
+      }
+      super.info(charSequence);
+    }
+  }
+);
+  final InputStream originalIn=System.in;
+  final ByteArrayInputStream newIn=new ByteArrayInputStream("exit".getBytes());
+  final CountDownLatch sendExitLatch=new CountDownLatch(1);
+  final CountDownLatch stopped=new CountDownLatch(1);
+  System.setIn(new InputStream(){
+    @Override public int read() throws IOException {
+      try {
+        sendExitLatch.await();
+      }
+ catch (      final InterruptedException e) {
+        Thread.interrupted();
+      }
+      return newIn.read();
+    }
+  }
+);
+  final AtomicReference<Exception> error=new AtomicReference<>();
+  final Thread mojoThread=new Thread(){
+{
+      setName("Mojo-Starter");
+    }
+    @Override public void run(){
+      try {
+        mojo.execute();
+      }
+ catch (      final Exception e) {
+        error.set(e);
+      }
+ finally {
+        stopped.countDown();
+      }
+    }
+  }
+;
+  mojoThread.start();
+  try {
+    try {
+      started.await(10,TimeUnit.MINUTES);
+    }
+ catch (    final InterruptedException e) {
+      Thread.interrupted();
+    }
+    assertNull("all started fine",error.get());
+    assertEquals("ok",IO.slurp(new URL("http://localhost:" + mojo.httpPort + "/endpoint/")).trim());
+    sendExitLatch.countDown();
+    try {
+      stopped.await(5,TimeUnit.MINUTES);
+    }
+ catch (    final InterruptedException e) {
+      Thread.interrupted();
+    }
+  }
+  finally {
+    System.setIn(originalIn);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

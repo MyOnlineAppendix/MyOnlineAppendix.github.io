@@ -1,0 +1,108 @@
+<h3 style="margin:0px">Class: org.apache.openejb.itest.legacy.LegacyClientTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void afterClass(){
+  for (  final Map.Entry<String,StandaloneServer> entry : servers.entrySet()) {
+    try {
+      final StandaloneServer server=entry.getValue();
+      server.kill();
+    }
+ catch (    final Throwable t) {
+    }
+  }
+  if (null != root) {
+    try {
+      root.kill();
+    }
+ catch (    final Throwable t) {
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void test() throws Exception {
+  System.setProperty("openejb.client.connection.strategy","roundrobin");
+  StandaloneServer.ServerService multipoint=root.getServerService("multipoint");
+  multipoint.setBind("localhost");
+  multipoint.setPort(getNextAvailablePort());
+  multipoint.setDisabled(false);
+  multipoint.set("discoveryName",rootname);
+  logger.info("Starting Root server");
+  root.start();
+  final Services services=new Services();
+  Client.addEventObserver(services);
+  for (  final String name : new String[]{"red","green","blue"}) {
+    final File home=new File(dir,name);
+    Files.mkdir(home);
+    Zips.unzip(zip,home,true);
+    final StandaloneServer server=new StandaloneServer(home,home);
+    server.killOnExit();
+    server.ignoreOut();
+    server.setProperty("name",name);
+    server.setProperty("openejb.extract.configuration","false");
+    server.getJvmOpts().add("-Dopenejb.classloader.forced-load=org.apache.openejb");
+    IO.copy(app,Files.path(home,"apps","itest.jar"));
+    IO.copy(IO.read("<openejb><Deployments dir=\"apps/\"/></openejb>"),Files.path(home,"conf","openejb.xml"));
+    final StandaloneServer.ServerService ejbd=server.getServerService("ejbd");
+    ejbd.setBind("localhost");
+    ejbd.setDisabled(false);
+    ejbd.setPort(getNextAvailablePort());
+    ejbd.setThreads(5);
+    final URI uri=URI.create(String.format("ejbd://%s:%s/%s",ejbd.getBind(),ejbd.getPort(),name));
+    ejbd.set("discovery","ejb:" + uri);
+    services.add(uri);
+    server.getContext().set(URI.class,uri);
+    multipoint=server.getServerService("multipoint");
+    multipoint.setPort(getNextAvailablePort());
+    multipoint.setDisabled(false);
+    multipoint.set("discoveryName",name);
+    multipoint.set("initialServers","localhost:" + root.getServerService("multipoint").getPort());
+    servers.put(name,server);
+    logger.info(String.format("Starting %s server",name));
+    server.start(1,TimeUnit.MINUTES);
+  }
+  System.setProperty("openejb.client.requestretry","true");
+  System.setProperty("openejb.client.connection.strategy","random");
+  logger.info("Beginning Test");
+  final Properties environment=new Properties();
+  environment.put(Context.INITIAL_CONTEXT_FACTORY,RemoteInitialContextFactory.class.getName());
+  environment.put(Context.PROVIDER_URL,"ejbd://localhost:" + servers.values().iterator().next().getServerService("ejbd").getPort() + "/provider");
+  final InitialContext context=new InitialContext(environment);
+  final Calculator bean=(Calculator)context.lookup("CalculatorBeanRemote");
+  for (  final Map.Entry<String,StandaloneServer> entry : servers.entrySet()) {
+    final String name=entry.getKey();
+    final StandaloneServer server=entry.getValue();
+    final URI serverURI=server.getContext().get(URI.class);
+    logger.info("Waiting for updated list");
+    services.assertServices(2,TimeUnit.MINUTES,new CalculatorCallable(bean),1500);
+    logger.info("Asserting balance");
+    assertBalance(bean,services.get().size());
+    logger.info("Shutting down " + name);
+    server.kill();
+    services.remove(serverURI);
+  }
+  logger.info("All Servers Shutdown");
+  try {
+    logger.info("Making one last request, expecting complete failover");
+    final String name=bean.name();
+    Assert.fail("Server should be destroyed: " + name);
+  }
+ catch (  final EJBException e) {
+    logger.info(String.format("Pass.  Request resulted in %s: %s",e.getCause().getClass().getSimpleName(),e.getMessage()));
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

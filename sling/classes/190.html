@@ -1,0 +1,130 @@
+<h3 style="margin:0px">Class: org.apache.sling.event.it.ClassloadingTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before public void setup() throws IOException {
+  super.setup();
+  final org.osgi.service.cm.Configuration orderedConfig=this.configAdmin.createFactoryConfiguration("org.apache.sling.event.jobs.QueueConfiguration",null);
+  final Dictionary<String,Object> orderedProps=new Hashtable<String,Object>();
+  orderedProps.put(ConfigurationConstants.PROP_NAME,QUEUE_NAME);
+  orderedProps.put(ConfigurationConstants.PROP_TYPE,QueueConfiguration.Type.UNORDERED.name());
+  orderedProps.put(ConfigurationConstants.PROP_TOPICS,TOPIC);
+  orderedConfig.update(orderedProps);
+  this.sleep(1000L);
+}
+
+</code></pre>
+
+<pre class="type-9 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=DEFAULT_TEST_TIMEOUT) public void testFailedClassloading() throws Exception {
+  final AtomicInteger failedJobsCount=new AtomicInteger(0);
+  final List<Event> finishedEvents=Collections.synchronizedList(new ArrayList<Event>());
+  this.registerJobConsumer(TOPIC + "/failed",new JobConsumer(){
+    @Override public JobResult process(    Job job){
+      failedJobsCount.incrementAndGet();
+      return JobResult.OK;
+    }
+  }
+);
+  this.registerEventHandler(NotificationConstants.TOPIC_JOB_FINISHED,new EventHandler(){
+    @Override public void handleEvent(    Event event){
+      finishedEvents.add(event);
+    }
+  }
+);
+  final JobManager jobManager=this.getJobManager();
+  final DataObject dao=new DataObject();
+  final Map<String,Object> props=new HashMap<String,Object>();
+  props.put("dao",dao);
+  final String id=jobManager.addJob(TOPIC + "/failed",props).getId();
+  new RetryLoop(new RetryLoop.Condition(){
+    @Override public boolean isTrue() throws Exception {
+      return failedJobsCount.get() == 0 && finishedEvents.size() == 0 && jobManager.findJobs(JobManager.QueryType.ALL,TOPIC + "/failed",-1,(Map<String,Object>[])null).size() == 1 && jobManager.getStatistics().getNumberOfQueuedJobs() == 0 && jobManager.getStatistics().getNumberOfActiveJobs() == 0;
+    }
+    @Override public String getDescription(){
+      return "Waiting for job failure to be recorded. Conditions " + "faildJobsCount=" + failedJobsCount.get() + ", finishedEvents="+ finishedEvents.size()+ ", findJobs= "+ jobManager.findJobs(JobManager.QueryType.ALL,TOPIC + "/failed",-1,(Map<String,Object>[])null).size()+ ", queuedJobs="+ jobManager.getStatistics().getNumberOfQueuedJobs()+ ", activeJobs="+ jobManager.getStatistics().getNumberOfActiveJobs();
+    }
+  }
+,CONDITION_TIMEOUT_SECONDS,CONDITION_INTERVAL_MILLIS);
+  jobManager.removeJobById(id);
+  assertEquals(0,jobManager.findJobs(JobManager.QueryType.ALL,TOPIC + "/failed",-1,(Map<String,Object>[])null).size());
+  jobManager.removeJobById(id);
+}
+
+</code></pre>
+
+<pre class="type-11 type-3 type-10 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=DEFAULT_TEST_TIMEOUT) public void testSimpleClassloading() throws Exception {
+  final AtomicInteger processedJobsCount=new AtomicInteger(0);
+  final List<Event> finishedEvents=Collections.synchronizedList(new ArrayList<Event>());
+  this.registerJobConsumer(TOPIC,new JobConsumer(){
+    @Override public JobResult process(    Job job){
+      processedJobsCount.incrementAndGet();
+      return JobResult.OK;
+    }
+  }
+);
+  this.registerEventHandler(NotificationConstants.TOPIC_JOB_FINISHED,new EventHandler(){
+    @Override public void handleEvent(    Event event){
+      finishedEvents.add(event);
+    }
+  }
+);
+  final JobManager jobManager=this.getJobManager();
+  final List<String> list=new ArrayList<String>();
+  list.add("1");
+  list.add("2");
+  final Map<String,String> map=new HashMap<String,String>();
+  map.put("a","a1");
+  map.put("b","b2");
+  final Map<String,Object> props=new HashMap<String,Object>();
+  props.put("string","Hello");
+  props.put("int",new Integer(5));
+  props.put("long",new Long(7));
+  props.put("list",list);
+  props.put("map",map);
+  final String jobId=jobManager.addJob(TOPIC,props).getId();
+  new RetryLoop(Conditions.collectionIsNotEmptyCondition(finishedEvents,"Waiting for finishedEvents to have at least one element"),5,50);
+  new RetryLoop(new RetryLoop.Condition(){
+    @Override public String getDescription(){
+      return "Waiting for job to be processed. Conditions: queuedJobs=" + jobManager.getStatistics().getNumberOfQueuedJobs() + ", jobsCount="+ processedJobsCount+ ", findJobs="+ jobManager.findJobs(JobManager.QueryType.ALL,TOPIC,-1,(Map<String,Object>[])null).size();
+    }
+    @Override public boolean isTrue() throws Exception {
+      return jobManager.getStatistics().getNumberOfQueuedJobs() == 0 && processedJobsCount.get() == 1 && jobManager.findJobs(JobManager.QueryType.ALL,TOPIC,-1,(Map<String,Object>[])null).size() == 0;
+    }
+  }
+,CONDITION_TIMEOUT_SECONDS,CONDITION_INTERVAL_MILLIS);
+  final String jobTopic=(String)finishedEvents.get(0).getProperty(NotificationConstants.NOTIFICATION_PROPERTY_JOB_TOPIC);
+  assertNotNull(jobTopic);
+  assertEquals("Hello",finishedEvents.get(0).getProperty("string"));
+  assertEquals(new Integer(5),Integer.valueOf(finishedEvents.get(0).getProperty("int").toString()));
+  assertEquals(new Long(7),Long.valueOf(finishedEvents.get(0).getProperty("long").toString()));
+  assertEquals(list,finishedEvents.get(0).getProperty("list"));
+  assertEquals(map,finishedEvents.get(0).getProperty("map"));
+  jobManager.removeJobById(jobId);
+}
+
+</code></pre>
+
+<pre class="type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After public void cleanup(){
+  super.cleanup();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,131 @@
+<h3 style="margin:0px">Class: org.apache.sling.installer.it.BundleInstallStressTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After public void tearDown(){
+  super.tearDown();
+  eventsDetector.close();
+}
+
+</code></pre>
+
+<pre class="type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testSemiRandomInstall() throws Exception {
+  if (cycleCount < 1) {
+    fail("Cycle count (" + cycleCount + ") should be >= 1");
+  }
+  final int initialBundleCount=bundleContext.getBundles().length;
+  log(LogService.LOG_INFO,"Initial bundle count=" + initialBundleCount);
+  logInstalledBundles();
+  Object listener=this.startObservingBundleEvents();
+  log(LogService.LOG_INFO,"Registering all test bundles, " + testBundles.size() + " resources");
+  install(testBundles);
+  BundleEvent[] installedEvents=new BundleEvent[testBundles.size()];
+  for (int i=0; i < installedEvents.length; i++) {
+    installedEvents[i]=new BundleEvent(null,null,org.osgi.framework.BundleEvent.INSTALLED);
+  }
+  this.waitForBundleEvents("All bundles should be installed",listener,expectBundlesTimeoutMsec,installedEvents);
+  expectBundleCount("After installing all test bundles",initialBundleCount + testBundles.size());
+  final List<File> currentInstallation=new ArrayList<File>(testBundles);
+  for (int i=0; i < cycleCount; i++) {
+    final long start=System.currentTimeMillis();
+    log(LogService.LOG_INFO,"Test cycle " + i + ", semi-randomly selecting a subset of our test bundles");
+    for (    final File f : currentInstallation) {
+      log(LogService.LOG_DEBUG,"Installed bundle: " + f);
+    }
+    final List<File> toInstall=selectRandomBundles();
+    log(LogService.LOG_INFO,"Re-registering " + toInstall.size() + " randomly selected resources (other test bundles should be uninstalled)");
+    for (    final File f : toInstall) {
+      log(LogService.LOG_DEBUG,"Re-Registering bundle: " + f);
+    }
+    int updates=0;
+    int installs=0;
+    for (    final File f : toInstall) {
+      if (currentInstallation.contains(f)) {
+        updates++;
+      }
+ else {
+        installs++;
+      }
+    }
+    final int removes=currentInstallation.size() - updates;
+    installedEvents=new BundleEvent[removes + installs];
+    for (int m=0; m < installedEvents.length; m++) {
+      if (m < removes) {
+        installedEvents[m]=new BundleEvent(null,null,org.osgi.framework.BundleEvent.UNINSTALLED);
+      }
+ else {
+        installedEvents[m]=new BundleEvent(null,null,org.osgi.framework.BundleEvent.INSTALLED);
+      }
+    }
+    log(LogService.LOG_DEBUG,"Cycle results in " + removes + " removed bundles, "+ updates+ " updated bundles, "+ installs+ " installed bundles");
+    listener=this.startObservingBundleEvents();
+    install(toInstall);
+    this.waitForBundleEvents("All bundles should be installed in cycle " + i,listener,expectBundlesTimeoutMsec,installedEvents);
+    eventsDetector.waitForNoEvents(MSEC_WITHOUT_EVENTS,expectBundlesTimeoutMsec);
+    expectBundleCount("At cycle " + i,initialBundleCount + toInstall.size());
+    log(LogService.LOG_INFO,"Test cycle " + i + " successful, "+ toInstall.size()+ " bundles, "+ (System.currentTimeMillis() - start)+ " msec");
+    currentInstallation.clear();
+    currentInstallation.addAll(toInstall);
+    try {
+      Thread.sleep(500);
+    }
+ catch (    final InterruptedException ie) {
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-12 type-6 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Allocates resources before the execution of the test cases
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setUp(){
+  setupInstaller();
+  final String bf=System.getProperty(PROP_BUNDLES_FOLDER);
+  if (bf == null) {
+    fail("Missing system property: " + PROP_BUNDLES_FOLDER);
+  }
+  bundlesFolder=new File(bf);
+  if (!bundlesFolder.isDirectory()) {
+    fail("Bundles folder '" + bundlesFolder.getAbsolutePath() + "' not found");
+  }
+  final String cc=System.getProperty(PROP_CYCLE_COUNT);
+  if (cc == null) {
+    fail("Missing system property:" + PROP_CYCLE_COUNT);
+  }
+  cycleCount=Integer.parseInt(cc);
+  final String et=System.getProperty(PROP_EXPECT_TIMEOUT_SECONDS);
+  if (et == null) {
+    fail("Missing system property:" + PROP_EXPECT_TIMEOUT_SECONDS);
+  }
+  expectBundlesTimeoutMsec=Integer.parseInt(et) * 1000L;
+  log(LogService.LOG_INFO,getClass().getSimpleName() + ": cycle count=" + cycleCount+ ", expect timeout (msec)="+ expectBundlesTimeoutMsec+ ", test bundles folder="+ bundlesFolder.getAbsolutePath());
+  testBundles=new LinkedList<File>();
+  final String[] files=bundlesFolder.list();
+  for (  String filename : files) {
+    if (filename.endsWith(".jar")) {
+      testBundles.add(new File(bundlesFolder,filename));
+    }
+  }
+  if (testBundles.size() < MIN_TEST_BUNDLES) {
+    fail("Found only " + testBundles.size() + " bundles in test folder, expected at least "+ MIN_TEST_BUNDLES+ " (test folder="+ bundlesFolder.getAbsolutePath()+ ")");
+  }
+  random=new Random(42 + cycleCount);
+  eventsDetector=new EventsDetector(bundleContext);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

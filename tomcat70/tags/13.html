@@ -1,0 +1,276 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAssumptionSetter</h3><kbd>Sets implicit assumptions </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.catalina.comet.TestCometProcessor </h4><pre class="type-4 type-10 type-12 type-3 type-11 type-13 type-5 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConnectionClose() throws Exception {
+  Assume.assumeTrue("This test is skipped, because this connector does not support Comet.",isCometSupported());
+  Tomcat tomcat=getTomcatInstance();
+  Context root=tomcat.addContext("",null);
+  Tomcat.addServlet(root,"comet",new ConnectionCloseServlet());
+  root.addServletMapping("/comet","comet");
+  Tomcat.addServlet(root,"hello",new HelloWorldServlet());
+  root.addServletMapping("/hello","hello");
+  tomcat.getConnector().setProperty("connectionTimeout","5000");
+  tomcat.start();
+  final Socket socket=SocketFactory.getDefault().createSocket("localhost",getPort());
+  socket.setSoTimeout(5000);
+  final OutputStream os=socket.getOutputStream();
+  String requestLine="POST http://localhost:" + getPort() + "/comet HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("transfer-encoding: chunked\r\n".getBytes());
+  os.write("\r\n".getBytes());
+  os.write("0\r\n\r\n".getBytes());
+  InputStream is=socket.getInputStream();
+  ResponseReaderThread readThread=new ResponseReaderThread(is);
+  readThread.start();
+  int count=0;
+  while (count < 10 && !readThread.getResponse().endsWith("OK")) {
+    Thread.sleep(500);
+    count++;
+  }
+  if (count == 10) {
+    fail("Comet request did not complete");
+  }
+  Assert.assertFalse(readThread.isAlive());
+  Assert.assertNull(readThread.getException());
+  os.close();
+  is.close();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-11 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests if the Comet connection is closed if the Tomcat connector is
+ * stopped.
+ */
+@Test public void testCometConnectorStop() throws Exception {
+  Assume.assumeTrue("This test is skipped, because this connector does not support Comet.",isCometSupported());
+  SimpleCometServlet servlet=new SimpleCometServlet();
+  Tomcat tomcat=getTomcatInstance();
+  Context root=tomcat.addContext("",null);
+  Tomcat.addServlet(root,"comet",servlet);
+  root.addServletMapping("/","comet");
+  tomcat.start();
+  final Socket socket=SocketFactory.getDefault().createSocket("localhost",getPort());
+  socket.setSoTimeout(10000);
+  final OutputStream os=socket.getOutputStream();
+  String requestLine="POST http://localhost:" + getPort() + "/ HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("transfer-encoding: chunked\r\n".getBytes());
+  os.write("\r\n".getBytes());
+  PingWriterThread writeThread=new PingWriterThread(100,os);
+  writeThread.start();
+  InputStream is=socket.getInputStream();
+  ResponseReaderThread readThread=new ResponseReaderThread(is);
+  readThread.start();
+  Thread.sleep(3000);
+  tomcat.getConnector().stop();
+  readThread.join(5000);
+  writeThread.join(5000);
+  tomcat.getConnector().destroy();
+  String[] response=readThread.getResponse().split("\r\n");
+  String lastMessage="";
+  String lastResponseLine="";
+  for (int i=response.length; --i >= 0; ) {
+    lastMessage=response[i];
+    if (lastMessage.startsWith("Client:")) {
+      break;
+    }
+  }
+  for (int i=response.length; --i >= 0; ) {
+    lastResponseLine=response[i];
+    if (lastResponseLine.length() > 0) {
+      break;
+    }
+  }
+  StringBuilder status=new StringBuilder();
+  status.append("Status:");
+  status.append("\nWriterThread exception: " + writeThread.getException());
+  status.append("\nReaderThread exception: " + readThread.getException());
+  status.append("\nLast message: [" + lastMessage + "]");
+  status.append("\nLast response line: [" + lastResponseLine + "]");
+  status.append("\nLast comet event: [" + servlet.getLastEvent() + "]");
+  status.append("\nEND event occurred: [" + servlet.getEndEventOccurred() + "]");
+  if (writeThread.getException() == null || !lastMessage.contains("Client: END") || !EventType.END.equals(servlet.getLastEvent())) {
+    log.error(status);
+  }
+ else {
+    log.info(status);
+  }
+  assertTrue("Comet END event not received",servlet.getEndEventOccurred());
+  assertTrue("Comet END event not last event received",EventType.END.equals(servlet.getLastEvent()));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-10 type-12 type-3 type-11 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSyncClose() throws Exception {
+  Assume.assumeTrue("This test is skipped, because this connector does not support Comet.",isCometSupported());
+  Tomcat tomcat=getTomcatInstance();
+  Context root=tomcat.addContext("",null);
+  Tomcat.addServlet(root,"comet",new CometCloseServlet());
+  root.addServletMapping("/comet","comet");
+  Tomcat.addServlet(root,"hello",new HelloWorldServlet());
+  root.addServletMapping("/hello","hello");
+  tomcat.getConnector().setProperty("connectionTimeout","5000");
+  tomcat.start();
+  final Socket socket=SocketFactory.getDefault().createSocket("localhost",getPort());
+  socket.setSoTimeout(5000);
+  final OutputStream os=socket.getOutputStream();
+  String requestLine="POST http://localhost:" + getPort() + "/comet HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("transfer-encoding: chunked\r\n".getBytes());
+  os.write("\r\n".getBytes());
+  os.write("0\r\n\r\n".getBytes());
+  InputStream is=socket.getInputStream();
+  ResponseReaderThread readThread=new ResponseReaderThread(is);
+  readThread.start();
+  int count=0;
+  while (count < 10 && !readThread.getResponse().endsWith("0\r\n\r\n")) {
+    Thread.sleep(500);
+    count++;
+  }
+  Assert.assertTrue(readThread.getResponse().contains("2\r\nOK"));
+  if (count == 10) {
+    fail("Comet request did not complete");
+  }
+  requestLine="GET http://localhost:" + getPort() + "/hello HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("connection: close\r\n".getBytes());
+  os.write("\r\n".getBytes());
+  count=0;
+  while (count < 10 && !readThread.getResponse().contains(HelloWorldServlet.RESPONSE_TEXT)) {
+    Thread.sleep(500);
+    count++;
+  }
+  if (count == 10) {
+    fail("Non-comet request did not complete");
+  }
+  readThread.join();
+  os.close();
+  is.close();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-12 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAsyncClose() throws Exception {
+  Assume.assumeTrue("This test is skipped, because this connector does not support Comet.",isCometSupported());
+  Tomcat tomcat=getTomcatInstance();
+  Context root=tomcat.addContext("",null);
+  Tomcat.addServlet(root,"comet",new SimpleCometServlet());
+  root.addServletMapping("/comet","comet");
+  Tomcat.addServlet(root,"hello",new HelloWorldServlet());
+  root.addServletMapping("/hello","hello");
+  root.getPipeline().addValve(new AsyncCometCloseValve());
+  tomcat.getConnector().setProperty("connectionTimeout","5000");
+  tomcat.start();
+  final Socket socket=SocketFactory.getDefault().createSocket("localhost",getPort());
+  socket.setSoTimeout(5000);
+  final OutputStream os=socket.getOutputStream();
+  String requestLine="POST http://localhost:" + getPort() + "/comet HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("transfer-encoding: chunked\r\n".getBytes());
+  os.write("\r\n".getBytes());
+  InputStream is=socket.getInputStream();
+  ResponseReaderThread readThread=new ResponseReaderThread(is);
+  readThread.start();
+  int count=0;
+  while (count < 10 && !readThread.getResponse().endsWith("0\r\n\r\n")) {
+    Thread.sleep(500);
+    count++;
+  }
+  if (count == 10) {
+    fail("Comet request did not complete");
+  }
+  requestLine="GET http://localhost:" + getPort() + "/hello HTTP/1.1\r\n";
+  os.write(requestLine.getBytes());
+  os.write("\r\n".getBytes());
+  count=0;
+  while (count < 10 && !readThread.getResponse().contains(HelloWorldServlet.RESPONSE_TEXT)) {
+    Thread.sleep(500);
+    count++;
+  }
+  if (count == 10) {
+    fail("Non-comet request did not complete");
+  }
+  readThread.join();
+  os.close();
+  is.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.tomcat.util.net.TestSsl </h4><pre class="type-12 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRenegotiateWorks() throws Exception {
+  Tomcat tomcat=getTomcatInstance();
+  Assume.assumeTrue("SSL renegotiation has to be supported for this test",TesterSupport.isRenegotiationSupported(getTomcatInstance()));
+  File appDir=new File(getBuildDirectory(),"webapps/examples");
+  tomcat.addWebapp(null,"/examples",appDir.getAbsolutePath());
+  TesterSupport.initSsl(tomcat);
+  tomcat.start();
+  SSLContext sslCtx=SSLContext.getInstance("TLS");
+  sslCtx.init(null,TesterSupport.getTrustManagers(),null);
+  SSLSocketFactory socketFactory=new TesterSupport.NoSSLv2SocketFactory(sslCtx.getSocketFactory());
+  SSLSocket socket=(SSLSocket)socketFactory.createSocket("localhost",getPort());
+  OutputStream os=socket.getOutputStream();
+  os.write("GET /examples/servlets/servlet/HelloWorldExample HTTP/1.1\n".getBytes());
+  os.flush();
+  socket.startHandshake();
+  try {
+    os.write("Host: localhost\n\n".getBytes());
+  }
+ catch (  IOException ex) {
+    ex.printStackTrace();
+    fail("Re-negotiation failed");
+  }
+  InputStream is=socket.getInputStream();
+  Reader r=new InputStreamReader(is);
+  BufferedReader br=new BufferedReader(r);
+  String line=br.readLine();
+  while (line != null) {
+    line=br.readLine();
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>
