@@ -1,0 +1,249 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspLogger</h3><kbd>Invokes logging operations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.accumulo.core.client.lexicoder.ReverseLexicoderTest </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Just a simple test verifying reverse indexed dates
+ */
+@Test public void testReverseSortDates() throws UnsupportedEncodingException {
+  ReverseLexicoder<Date> revLex=new ReverseLexicoder<Date>(new DateLexicoder());
+  Calendar cal=Calendar.getInstance();
+  cal.set(1920,1,2,3,4,5);
+  Date date0=new Date(cal.getTimeInMillis());
+  Date date1=new Date();
+  Date date2=new Date(System.currentTimeMillis() + 10000);
+  Date date3=new Date(System.currentTimeMillis() + 500);
+  Comparator<Date> comparator=Collections.reverseOrder();
+  assertSortOrder(revLex,comparator,Arrays.asList(date0,date1,date2,date3));
+  long time=System.currentTimeMillis() - (System.currentTimeMillis() % 3600000);
+  Date date=new Date(time);
+  System.out.println(date);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.accumulo.gc.GarbageCollectionTest </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testBadDeletes() throws Exception {
+  GarbageCollectionAlgorithm gca=new GarbageCollectionAlgorithm();
+  TestGCE gce=new TestGCE();
+  gce.candidates.add("");
+  gce.candidates.add("A");
+  gce.candidates.add("/");
+  gce.candidates.add("//");
+  gce.candidates.add("///");
+  gce.candidates.add("////");
+  gce.candidates.add("/1/2/3/4");
+  gce.candidates.add("/a");
+  gce.candidates.add("hdfs://foo.com:6000/accumulo/tbls/5/F00.rf");
+  gce.candidates.add("hdfs://foo.com:6000/");
+  gce.candidates.add("hdfs://foo.com:6000/accumulo/tables/");
+  gce.candidates.add("hdfs://foo.com:6000/user/foo/tables/a/t-0/t-1/F00.rf");
+  gca.collect(gce);
+  System.out.println(gce.deletes);
+  assertRemoved(gce);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.accumulo.test.functional.BatchScanSplitIT </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void test() throws Exception {
+  Connector c=getConnector();
+  String tableName=getUniqueNames(1)[0];
+  c.tableOperations().create(tableName);
+  int numRows=1 << 18;
+  BatchWriter bw=getConnector().createBatchWriter(tableName,new BatchWriterConfig());
+  for (int i=0; i < numRows; i++) {
+    Mutation m=new Mutation(new Text(String.format("%09x",i)));
+    m.put(new Text("cf1"),new Text("cq1"),new Value(String.format("%016x",numRows - i).getBytes(UTF_8)));
+    bw.addMutation(m);
+  }
+  bw.close();
+  getConnector().tableOperations().flush(tableName,null,null,true);
+  getConnector().tableOperations().setProperty(tableName,Property.TABLE_SPLIT_THRESHOLD.getKey(),"4K");
+  Collection<Text> splits=getConnector().tableOperations().listSplits(tableName);
+  while (splits.size() < 2) {
+    sleepUninterruptibly(1,TimeUnit.MILLISECONDS);
+    splits=getConnector().tableOperations().listSplits(tableName);
+  }
+  System.out.println("splits : " + splits);
+  Random random=new Random(19011230);
+  HashMap<Text,Value> expected=new HashMap<Text,Value>();
+  ArrayList<Range> ranges=new ArrayList<Range>();
+  for (int i=0; i < 100; i++) {
+    int r=random.nextInt(numRows);
+    Text row=new Text(String.format("%09x",r));
+    expected.put(row,new Value(String.format("%016x",numRows - r).getBytes(UTF_8)));
+    ranges.add(new Range(row));
+  }
+  HashMap<Text,Value> found=new HashMap<Text,Value>();
+  for (int i=0; i < 20; i++) {
+    BatchScanner bs=getConnector().createBatchScanner(tableName,Authorizations.EMPTY,4);
+    found.clear();
+    long t1=System.currentTimeMillis();
+    bs.setRanges(ranges);
+    for (    Entry<Key,Value> entry : bs) {
+      found.put(entry.getKey().getRow(),entry.getValue());
+    }
+    bs.close();
+    long t2=System.currentTimeMillis();
+    log.info(String.format("rate : %06.2f%n",ranges.size() / ((t2 - t1) / 1000.0)));
+    if (!found.equals(expected))     throw new Exception("Found and expected differ " + found + " "+ expected);
+  }
+  splits=getConnector().tableOperations().listSplits(tableName);
+  log.info("splits : " + splits);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.accumulo.test.functional.MaxOpenIT </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void run() throws Exception {
+  final Connector c=getConnector();
+  final String tableName=getUniqueNames(1)[0];
+  final ClientConfiguration clientConf=cluster.getClientConfig();
+  c.tableOperations().create(tableName);
+  c.tableOperations().setProperty(tableName,Property.TABLE_MAJC_RATIO.getKey(),"10");
+  c.tableOperations().addSplits(tableName,TestIngest.getSplitPoints(0,NUM_TO_INGEST,NUM_TABLETS));
+  for (int i=0; i < 3; i++) {
+    TestIngest.Opts opts=new TestIngest.Opts();
+    opts.timestamp=i;
+    opts.dataSize=50;
+    opts.rows=NUM_TO_INGEST;
+    opts.cols=1;
+    opts.random=i;
+    opts.setTableName(tableName);
+    if (clientConf.getBoolean(ClientProperty.INSTANCE_RPC_SASL_ENABLED.getKey(),false)) {
+      opts.updateKerberosCredentials(clientConf);
+    }
+ else {
+      opts.setPrincipal(getAdminPrincipal());
+    }
+    TestIngest.ingest(c,opts,new BatchWriterOpts());
+    c.tableOperations().flush(tableName,null,null,true);
+    FunctionalTestUtils.checkRFiles(c,tableName,NUM_TABLETS,NUM_TABLETS,i + 1,i + 1);
+  }
+  List<Range> ranges=new ArrayList<Range>(NUM_TO_INGEST);
+  for (int i=0; i < NUM_TO_INGEST; i++) {
+    ranges.add(new Range(TestIngest.generateRow(i,0)));
+  }
+  long time1=batchScan(c,tableName,ranges,1);
+  time1=batchScan(c,tableName,ranges,1);
+  long time2=batchScan(c,tableName,ranges,NUM_TABLETS);
+  System.out.printf("Single thread scan time   %6.2f %n",time1 / 1000.0);
+  System.out.printf("Multiple thread scan time %6.2f %n",time2 / 1000.0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.accumulo.test.functional.NativeMapIT </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void test11(){
+  NativeMap nm=new NativeMap();
+  Random r=new Random(75);
+  ArrayList<Pair<Key,Value>> testData=new ArrayList<Pair<Key,Value>>();
+  for (int i=0; i < 100000; i++) {
+    Key k=new Key(rlrf(r,97),rlrf(r,13),rlrf(r,31),rlrf(r,11),(r.nextLong() & 0x7fffffffffffffffl),false,false);
+    Value v=new Value(rlrf(r,511));
+    testData.add(new Pair<Key,Value>(k,v));
+  }
+  for (  Pair<Key,Value> pair : testData) {
+    nm.put(pair.getFirst(),pair.getSecond());
+  }
+  for (int i=0; i < 2; i++) {
+    Collections.sort(testData,new Comparator<Pair<Key,Value>>(){
+      @Override public int compare(      Pair<Key,Value> o1,      Pair<Key,Value> o2){
+        return o1.getFirst().compareTo(o2.getFirst());
+      }
+    }
+);
+    Iterator<Entry<Key,Value>> iter1=nm.iterator();
+    Iterator<Pair<Key,Value>> iter2=testData.iterator();
+    while (iter1.hasNext() && iter2.hasNext()) {
+      Entry<Key,Value> e=iter1.next();
+      Pair<Key,Value> p=iter2.next();
+      if (!e.getKey().equals(p.getFirst()))       throw new RuntimeException("Keys not equal");
+      if (!e.getValue().equals(p.getSecond()))       throw new RuntimeException("Values not equal");
+    }
+    if (iter1.hasNext())     throw new RuntimeException("Not all of native map consumed");
+    if (iter2.hasNext())     throw new RuntimeException("Not all of test data consumed");
+    System.out.println("test 11 nm mem " + nm.getMemoryUsed());
+    Collections.shuffle(testData,r);
+    for (    Pair<Key,Value> pair : testData) {
+      pair.getSecond().set(rlrf(r,511));
+      nm.put(pair.getFirst(),pair.getSecond());
+    }
+  }
+  nm.delete();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.accumulo.test.functional.ScanIteratorIT </h4><pre class="type-12 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void run() throws Exception {
+  String tableName=getUniqueNames(1)[0];
+  Connector c=getConnector();
+  BatchWriter bw=c.createBatchWriter(tableName,new BatchWriterConfig());
+  for (int i=0; i < 1000; i++) {
+    Mutation m=new Mutation(new Text(String.format("%06d",i)));
+    m.put(new Text("cf1"),new Text("cq1"),new Value(Integer.toString(1000 - i).getBytes(UTF_8)));
+    m.put(new Text("cf1"),new Text("cq2"),new Value(Integer.toString(i - 1000).getBytes(UTF_8)));
+    bw.addMutation(m);
+  }
+  bw.close();
+  Scanner scanner=c.createScanner(tableName,new Authorizations());
+  setupIter(scanner);
+  verify(scanner,1,999);
+  BatchScanner bscanner=c.createBatchScanner(tableName,new Authorizations(),3);
+  bscanner.setRanges(Collections.singleton(new Range((Key)null,null)));
+  setupIter(bscanner);
+  verify(bscanner,1,999);
+  ArrayList<Range> ranges=new ArrayList<Range>();
+  ranges.add(new Range(new Text(String.format("%06d",1))));
+  ranges.add(new Range(new Text(String.format("%06d",6)),new Text(String.format("%06d",16))));
+  ranges.add(new Range(new Text(String.format("%06d",20))));
+  ranges.add(new Range(new Text(String.format("%06d",23))));
+  ranges.add(new Range(new Text(String.format("%06d",56)),new Text(String.format("%06d",61))));
+  ranges.add(new Range(new Text(String.format("%06d",501)),new Text(String.format("%06d",504))));
+  ranges.add(new Range(new Text(String.format("%06d",998)),new Text(String.format("%06d",1000))));
+  HashSet<Integer> got=new HashSet<Integer>();
+  HashSet<Integer> expected=new HashSet<Integer>();
+  for (  int i : new int[]{1,7,9,11,13,15,23,57,59,61,501,503,999}) {
+    expected.add(i);
+  }
+  bscanner.setRanges(ranges);
+  for (  Entry<Key,Value> entry : bscanner) {
+    got.add(Integer.parseInt(entry.getKey().getRow().toString()));
+  }
+  System.out.println("got : " + got);
+  if (!got.equals(expected)) {
+    throw new Exception(got + " != " + expected);
+  }
+  bscanner.close();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

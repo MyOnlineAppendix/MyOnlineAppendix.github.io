@@ -1,0 +1,96 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.nodemanager.containermanager.localizer.TestContainerLocalizer (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testContainerLocalizerMain() throws Exception {
+  FileContext fs=FileContext.getLocalFSFileContext();
+  spylfs=spy(fs.getDefaultFileSystem());
+  ContainerLocalizer localizer=setupContainerLocalizerForTest();
+  List<Path> privCacheList=new ArrayList<Path>();
+  List<Path> appCacheList=new ArrayList<Path>();
+  for (  Path p : localDirs) {
+    Path base=new Path(new Path(p,ContainerLocalizer.USERCACHE),appUser);
+    Path privcache=new Path(base,ContainerLocalizer.FILECACHE);
+    privCacheList.add(privcache);
+    Path appDir=new Path(base,new Path(ContainerLocalizer.APPCACHE,appId));
+    Path appcache=new Path(appDir,ContainerLocalizer.FILECACHE);
+    appCacheList.add(appcache);
+  }
+  ResourceLocalizationSpec rsrcA=getMockRsrc(random,LocalResourceVisibility.PRIVATE,privCacheList.get(0));
+  ResourceLocalizationSpec rsrcB=getMockRsrc(random,LocalResourceVisibility.PRIVATE,privCacheList.get(0));
+  ResourceLocalizationSpec rsrcC=getMockRsrc(random,LocalResourceVisibility.APPLICATION,appCacheList.get(0));
+  ResourceLocalizationSpec rsrcD=getMockRsrc(random,LocalResourceVisibility.PRIVATE,privCacheList.get(0));
+  when(nmProxy.heartbeat(isA(LocalizerStatus.class))).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.LIVE,Collections.singletonList(rsrcA))).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.LIVE,Collections.singletonList(rsrcB))).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.LIVE,Collections.singletonList(rsrcC))).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.LIVE,Collections.singletonList(rsrcD))).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.LIVE,Collections.<ResourceLocalizationSpec>emptyList())).thenReturn(new MockLocalizerHeartbeatResponse(LocalizerAction.DIE,null));
+  LocalResource tRsrcA=rsrcA.getResource();
+  LocalResource tRsrcB=rsrcB.getResource();
+  LocalResource tRsrcC=rsrcC.getResource();
+  LocalResource tRsrcD=rsrcD.getResource();
+  doReturn(new FakeDownload(rsrcA.getResource().getResource().getFile(),true)).when(localizer).download(isA(Path.class),eq(tRsrcA),isA(UserGroupInformation.class));
+  doReturn(new FakeDownload(rsrcB.getResource().getResource().getFile(),true)).when(localizer).download(isA(Path.class),eq(tRsrcB),isA(UserGroupInformation.class));
+  doReturn(new FakeDownload(rsrcC.getResource().getResource().getFile(),true)).when(localizer).download(isA(Path.class),eq(tRsrcC),isA(UserGroupInformation.class));
+  doReturn(new FakeDownload(rsrcD.getResource().getResource().getFile(),true)).when(localizer).download(isA(Path.class),eq(tRsrcD),isA(UserGroupInformation.class));
+  assertEquals(0,localizer.runLocalization(nmAddr));
+  for (  Path p : localDirs) {
+    Path base=new Path(new Path(p,ContainerLocalizer.USERCACHE),appUser);
+    Path privcache=new Path(base,ContainerLocalizer.FILECACHE);
+    verify(spylfs).mkdir(eq(privcache),eq(CACHE_DIR_PERM),eq(false));
+    Path appDir=new Path(base,new Path(ContainerLocalizer.APPCACHE,appId));
+    Path appcache=new Path(appDir,ContainerLocalizer.FILECACHE);
+    verify(spylfs).mkdir(eq(appcache),eq(CACHE_DIR_PERM),eq(false));
+  }
+  verify(spylfs).open(tokenPath);
+  verify(nmProxy).heartbeat(argThat(new HBMatches(rsrcA.getResource())));
+  verify(nmProxy).heartbeat(argThat(new HBMatches(rsrcB.getResource())));
+  verify(nmProxy).heartbeat(argThat(new HBMatches(rsrcC.getResource())));
+  verify(nmProxy).heartbeat(argThat(new HBMatches(rsrcD.getResource())));
+  verify(nmProxy,never()).heartbeat(argThat(new ArgumentMatcher<LocalizerStatus>(){
+    @Override public boolean matches(    Object o){
+      LocalizerStatus status=(LocalizerStatus)o;
+      return !containerId.equals(status.getLocalizerId());
+    }
+  }
+));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testLocalizerTokenIsGettingRemoved() throws Exception {
+  FileContext fs=FileContext.getLocalFSFileContext();
+  spylfs=spy(fs.getDefaultFileSystem());
+  ContainerLocalizer localizer=setupContainerLocalizerForTest();
+  doNothing().when(localizer).localizeFiles(any(LocalizationProtocol.class),any(CompletionService.class),any(UserGroupInformation.class));
+  localizer.runLocalization(nmAddr);
+  verify(spylfs,times(1)).delete(tokenPath,false);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testContainerLocalizerClosesFilesystems() throws Exception {
+  FileContext fs=FileContext.getLocalFSFileContext();
+  spylfs=spy(fs.getDefaultFileSystem());
+  ContainerLocalizer localizer=setupContainerLocalizerForTest();
+  doNothing().when(localizer).localizeFiles(any(LocalizationProtocol.class),any(CompletionService.class),any(UserGroupInformation.class));
+  verify(localizer,never()).closeFileSystems(any(UserGroupInformation.class));
+  localizer.runLocalization(nmAddr);
+  verify(localizer).closeFileSystems(any(UserGroupInformation.class));
+  spylfs=spy(fs.getDefaultFileSystem());
+  localizer=setupContainerLocalizerForTest();
+  doThrow(new YarnRuntimeException("Forced Failure")).when(localizer).localizeFiles(any(LocalizationProtocol.class),any(CompletionService.class),any(UserGroupInformation.class));
+  verify(localizer,never()).closeFileSystems(any(UserGroupInformation.class));
+  localizer.runLocalization(nmAddr);
+  verify(localizer).closeFileSystems(any(UserGroupInformation.class));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

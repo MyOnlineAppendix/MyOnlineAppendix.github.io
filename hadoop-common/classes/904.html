@@ -1,0 +1,207 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.v2.app.launcher.TestContainerLauncherImpl (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  serviceResponse.clear();
+  serviceResponse.put(ShuffleHandler.MAPREDUCE_SHUFFLE_SERVICEID,ShuffleHandler.serializeMetaData(80));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings({"rawtypes","unchecked"}) @Test(timeout=5000) public void testContainerCleaned() throws Exception {
+  LOG.info("STARTING testContainerCleaned");
+  CyclicBarrier startLaunchBarrier=new CyclicBarrier(2);
+  CyclicBarrier completeLaunchBarrier=new CyclicBarrier(2);
+  AppContext mockContext=mock(AppContext.class);
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  when(mockContext.getEventHandler()).thenReturn(mockEventHandler);
+  ContainerManagementProtocol mockCM=new ContainerManagerForTest(startLaunchBarrier,completeLaunchBarrier);
+  ContainerLauncherImplUnderTest ut=new ContainerLauncherImplUnderTest(mockContext,mockCM);
+  Configuration conf=new Configuration();
+  ut.init(conf);
+  ut.start();
+  try {
+    ContainerId contId=makeContainerId(0l,0,0,1);
+    TaskAttemptId taskAttemptId=makeTaskAttemptId(0l,0,0,TaskType.MAP,0);
+    String cmAddress="127.0.0.1:8000";
+    StartContainersResponse startResp=recordFactory.newRecordInstance(StartContainersResponse.class);
+    startResp.setAllServicesMetaData(serviceResponse);
+    LOG.info("inserting launch event");
+    ContainerRemoteLaunchEvent mockLaunchEvent=mock(ContainerRemoteLaunchEvent.class);
+    when(mockLaunchEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_LAUNCH);
+    when(mockLaunchEvent.getContainerID()).thenReturn(contId);
+    when(mockLaunchEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockLaunchEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    when(mockLaunchEvent.getContainerToken()).thenReturn(createNewContainerToken(contId,cmAddress));
+    ut.handle(mockLaunchEvent);
+    startLaunchBarrier.await();
+    LOG.info("inserting cleanup event");
+    ContainerLauncherEvent mockCleanupEvent=mock(ContainerLauncherEvent.class);
+    when(mockCleanupEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_CLEANUP);
+    when(mockCleanupEvent.getContainerID()).thenReturn(contId);
+    when(mockCleanupEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockCleanupEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    ut.handle(mockCleanupEvent);
+    completeLaunchBarrier.await();
+    ut.waitForPoolToIdle();
+    ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+    verify(mockEventHandler,atLeast(2)).handle(arg.capture());
+    boolean containerCleaned=false;
+    for (int i=0; i < arg.getAllValues().size(); i++) {
+      LOG.info(arg.getAllValues().get(i).toString());
+      Event currentEvent=arg.getAllValues().get(i);
+      if (currentEvent.getType() == TaskAttemptEventType.TA_CONTAINER_CLEANED) {
+        containerCleaned=true;
+      }
+    }
+    assert (containerCleaned);
+  }
+  finally {
+    ut.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=5000) public void testMyShutdown() throws Exception {
+  LOG.info("in test Shutdown");
+  AppContext mockContext=mock(AppContext.class);
+  @SuppressWarnings("rawtypes") EventHandler mockEventHandler=mock(EventHandler.class);
+  when(mockContext.getEventHandler()).thenReturn(mockEventHandler);
+  ContainerManagementProtocol mockCM=mock(ContainerManagementProtocol.class);
+  ContainerLauncherImplUnderTest ut=new ContainerLauncherImplUnderTest(mockContext,mockCM);
+  Configuration conf=new Configuration();
+  ut.init(conf);
+  ut.start();
+  try {
+    ContainerId contId=makeContainerId(0l,0,0,1);
+    TaskAttemptId taskAttemptId=makeTaskAttemptId(0l,0,0,TaskType.MAP,0);
+    String cmAddress="127.0.0.1:8000";
+    StartContainersResponse startResp=recordFactory.newRecordInstance(StartContainersResponse.class);
+    startResp.setAllServicesMetaData(serviceResponse);
+    LOG.info("inserting launch event");
+    ContainerRemoteLaunchEvent mockLaunchEvent=mock(ContainerRemoteLaunchEvent.class);
+    when(mockLaunchEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_LAUNCH);
+    when(mockLaunchEvent.getContainerID()).thenReturn(contId);
+    when(mockLaunchEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockLaunchEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    when(mockCM.startContainers(any(StartContainersRequest.class))).thenReturn(startResp);
+    when(mockLaunchEvent.getContainerToken()).thenReturn(createNewContainerToken(contId,cmAddress));
+    ut.handle(mockLaunchEvent);
+    ut.waitForPoolToIdle();
+    verify(mockCM).startContainers(any(StartContainersRequest.class));
+  }
+  finally {
+    ut.stop();
+    verify(mockCM).stopContainers(any(StopContainersRequest.class));
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=5000) public void testHandle() throws Exception {
+  LOG.info("STARTING testHandle");
+  AppContext mockContext=mock(AppContext.class);
+  @SuppressWarnings("rawtypes") EventHandler mockEventHandler=mock(EventHandler.class);
+  when(mockContext.getEventHandler()).thenReturn(mockEventHandler);
+  String cmAddress="127.0.0.1:8000";
+  ContainerManagementProtocol mockCM=mock(ContainerManagementProtocol.class);
+  ContainerLauncherImplUnderTest ut=new ContainerLauncherImplUnderTest(mockContext,mockCM);
+  Configuration conf=new Configuration();
+  ut.init(conf);
+  ut.start();
+  try {
+    ContainerId contId=makeContainerId(0l,0,0,1);
+    TaskAttemptId taskAttemptId=makeTaskAttemptId(0l,0,0,TaskType.MAP,0);
+    StartContainersResponse startResp=recordFactory.newRecordInstance(StartContainersResponse.class);
+    startResp.setAllServicesMetaData(serviceResponse);
+    LOG.info("inserting launch event");
+    ContainerRemoteLaunchEvent mockLaunchEvent=mock(ContainerRemoteLaunchEvent.class);
+    when(mockLaunchEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_LAUNCH);
+    when(mockLaunchEvent.getContainerID()).thenReturn(contId);
+    when(mockLaunchEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockLaunchEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    when(mockCM.startContainers(any(StartContainersRequest.class))).thenReturn(startResp);
+    when(mockLaunchEvent.getContainerToken()).thenReturn(createNewContainerToken(contId,cmAddress));
+    ut.handle(mockLaunchEvent);
+    ut.waitForPoolToIdle();
+    verify(mockCM).startContainers(any(StartContainersRequest.class));
+    LOG.info("inserting cleanup event");
+    ContainerLauncherEvent mockCleanupEvent=mock(ContainerLauncherEvent.class);
+    when(mockCleanupEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_CLEANUP);
+    when(mockCleanupEvent.getContainerID()).thenReturn(contId);
+    when(mockCleanupEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockCleanupEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    ut.handle(mockCleanupEvent);
+    ut.waitForPoolToIdle();
+    verify(mockCM).stopContainers(any(StopContainersRequest.class));
+  }
+  finally {
+    ut.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=5000) public void testOutOfOrder() throws Exception {
+  LOG.info("STARTING testOutOfOrder");
+  AppContext mockContext=mock(AppContext.class);
+  @SuppressWarnings("rawtypes") EventHandler mockEventHandler=mock(EventHandler.class);
+  when(mockContext.getEventHandler()).thenReturn(mockEventHandler);
+  ContainerManagementProtocol mockCM=mock(ContainerManagementProtocol.class);
+  ContainerLauncherImplUnderTest ut=new ContainerLauncherImplUnderTest(mockContext,mockCM);
+  Configuration conf=new Configuration();
+  ut.init(conf);
+  ut.start();
+  try {
+    ContainerId contId=makeContainerId(0l,0,0,1);
+    TaskAttemptId taskAttemptId=makeTaskAttemptId(0l,0,0,TaskType.MAP,0);
+    String cmAddress="127.0.0.1:8000";
+    StartContainersResponse startResp=recordFactory.newRecordInstance(StartContainersResponse.class);
+    startResp.setAllServicesMetaData(serviceResponse);
+    LOG.info("inserting cleanup event");
+    ContainerLauncherEvent mockCleanupEvent=mock(ContainerLauncherEvent.class);
+    when(mockCleanupEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_CLEANUP);
+    when(mockCleanupEvent.getContainerID()).thenReturn(contId);
+    when(mockCleanupEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockCleanupEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    ut.handle(mockCleanupEvent);
+    ut.waitForPoolToIdle();
+    verify(mockCM,never()).stopContainers(any(StopContainersRequest.class));
+    LOG.info("inserting launch event");
+    ContainerRemoteLaunchEvent mockLaunchEvent=mock(ContainerRemoteLaunchEvent.class);
+    when(mockLaunchEvent.getType()).thenReturn(EventType.CONTAINER_REMOTE_LAUNCH);
+    when(mockLaunchEvent.getContainerID()).thenReturn(contId);
+    when(mockLaunchEvent.getTaskAttemptID()).thenReturn(taskAttemptId);
+    when(mockLaunchEvent.getContainerMgrAddress()).thenReturn(cmAddress);
+    when(mockCM.startContainers(any(StartContainersRequest.class))).thenReturn(startResp);
+    when(mockLaunchEvent.getContainerToken()).thenReturn(createNewContainerToken(contId,cmAddress));
+    ut.handle(mockLaunchEvent);
+    ut.waitForPoolToIdle();
+    verify(mockCM,never()).startContainers(any(StartContainersRequest.class));
+  }
+  finally {
+    ut.stop();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,115 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.SystemKeyspaceTest (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(5)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNonLocalToken() throws UnknownHostException {
+  BytesToken token=new BytesToken(ByteBufferUtil.bytes("token3"));
+  InetAddress address=InetAddress.getByName("127.0.0.2");
+  SystemKeyspace.updateTokens(address,Collections.<Token>singletonList(token));
+  assert SystemKeyspace.loadTokens().get(address).contains(token);
+  SystemKeyspace.removeEndpoint(address);
+  assert !SystemKeyspace.loadTokens().containsValue(token);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLocalTokens(){
+  Collection<Token> current=SystemKeyspace.loadTokens().asMap().get(FBUtilities.getLocalAddress());
+  if (current != null && !current.isEmpty())   SystemKeyspace.updateTokens(current);
+  List<Token> tokens=new ArrayList<Token>(){
+{
+      for (int i=0; i < 9; i++)       add(new BytesToken(ByteBufferUtil.bytes(String.format("token%d",i))));
+    }
+  }
+;
+  SystemKeyspace.updateTokens(tokens);
+  int count=0;
+  for (  Token tok : SystemKeyspace.getSavedTokens())   assert tokens.get(count++).equals(tok);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void snapshotSystemKeyspaceIfUpgrading() throws IOException {
+  for (  ColumnFamilyStore cfs : Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStores())   cfs.clearUnsafe();
+  Keyspace.clearSnapshot(null,SystemKeyspace.NAME);
+  int baseline=getDeferredDeletionCount();
+  SystemKeyspace.snapshotOnVersionChange();
+  assertDeletedOrDeferred(baseline);
+  setupReleaseVersion(getOlderVersionString());
+  Keyspace.clearSnapshot(null,SystemKeyspace.NAME);
+  assertDeletedOrDeferred(baseline);
+  SystemKeyspace.snapshotOnVersionChange();
+  assertEquals(SystemKeyspace.metadata().tables.size(),getSystemSnapshotFiles().size());
+  Keyspace.clearSnapshot(null,SystemKeyspace.NAME);
+  setupReleaseVersion(FBUtilities.getReleaseVersionString());
+  SystemKeyspace.snapshotOnVersionChange();
+  assertDeletedOrDeferred(baseline + 10);
+  Keyspace.clearSnapshot(null,SystemKeyspace.NAME);
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMigrateEmptyDataDirs() throws IOException {
+  File dataDir=Paths.get(DatabaseDescriptor.getAllDataFileLocations()[0]).toFile();
+  if (new File(dataDir,"Emptykeyspace1").exists())   FileUtils.deleteDirectory(new File(dataDir,"Emptykeyspace1"));
+  assertTrue(new File(dataDir,"Emptykeyspace1").mkdirs());
+  assertEquals(0,numLegacyFiles());
+  SystemKeyspace.migrateDataDirs();
+  assertEquals(0,numLegacyFiles());
+  assertTrue(new File(dataDir,"Emptykeyspace1/table1").mkdirs());
+  assertEquals(0,numLegacyFiles());
+  SystemKeyspace.migrateDataDirs();
+  assertEquals(0,numLegacyFiles());
+  assertTrue(new File(dataDir,"Emptykeyspace1/wrong_file").createNewFile());
+  assertEquals(0,numLegacyFiles());
+  SystemKeyspace.migrateDataDirs();
+  assertEquals(0,numLegacyFiles());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testMigrateDataDirs_2_1() throws IOException {
+  testMigrateDataDirs("2.1");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLocalHostID(){
+  UUID firstId=SystemKeyspace.getLocalHostId();
+  UUID secondId=SystemKeyspace.getLocalHostId();
+  assert firstId.equals(secondId) : String.format("%s != %s%n",firstId.toString(),secondId.toString());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testMigrateDataDirs_2_2() throws IOException {
+  testMigrateDataDirs("2.2");
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

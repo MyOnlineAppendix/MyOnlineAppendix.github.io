@@ -1,0 +1,114 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.test.RecoveryTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify that if a server goes down that clients will reconnect
+ * automatically after the server is restarted. Note that this requires the
+ * server to restart within the connection timeout period.
+ * Also note that the client latches are used to eliminate any chance
+ * of spurrious connectionloss exceptions on the read ops. Specifically
+ * a sync operation will throw this exception if the server goes down
+ * (as recognized by the client) during the operation. If the operation
+ * occurs after the server is down, but before the client recognizes
+ * that the server is down (ping) then the op will throw connectionloss.
+ */
+@Test public void testRecovery() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  int oldSnapCount=SyncRequestProcessor.getSnapCount();
+  SyncRequestProcessor.setSnapCount(1000);
+  try {
+    final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+    ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+    f.startup(zks);
+    LOG.info("starting up the the server, waiting");
+    Assert.assertTrue("waiting for server up",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+    startSignal=new CountDownLatch(1);
+    ZooKeeper zk=new ZooKeeper(HOSTPORT,CONNECTION_TIMEOUT,this);
+    startSignal.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS);
+    Assert.assertTrue("count == 0",startSignal.getCount() == 0);
+    String path;
+    LOG.info("starting creating nodes");
+    for (int i=0; i < 10; i++) {
+      path="/" + i;
+      zk.create(path,(path + "!").getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+      for (int j=0; j < 10; j++) {
+        String subpath=path + "/" + j;
+        zk.create(subpath,(subpath + "!").getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+        for (int k=0; k < 20; k++) {
+          String subsubpath=subpath + "/" + k;
+          zk.create(subsubpath,(subsubpath + "!").getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+        }
+      }
+    }
+    f.shutdown();
+    zks.shutdown();
+    Assert.assertTrue("waiting for server down",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+    zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+    f=ServerCnxnFactory.createFactory(PORT,-1);
+    startSignal=new CountDownLatch(1);
+    f.startup(zks);
+    Assert.assertTrue("waiting for server up",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+    startSignal.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS);
+    Assert.assertTrue("count == 0",startSignal.getCount() == 0);
+    Stat stat=new Stat();
+    for (int i=0; i < 10; i++) {
+      path="/" + i;
+      LOG.info("Checking " + path);
+      Assert.assertEquals(new String(zk.getData(path,false,stat)),path + "!");
+      for (int j=0; j < 10; j++) {
+        String subpath=path + "/" + j;
+        Assert.assertEquals(new String(zk.getData(subpath,false,stat)),subpath + "!");
+        for (int k=0; k < 20; k++) {
+          String subsubpath=subpath + "/" + k;
+          Assert.assertEquals(new String(zk.getData(subsubpath,false,stat)),subsubpath + "!");
+        }
+      }
+    }
+    f.shutdown();
+    zks.shutdown();
+    Assert.assertTrue("waiting for server down",ClientBase.waitForServerDown(HOSTPORT,ClientBase.CONNECTION_TIMEOUT));
+    zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+    f=ServerCnxnFactory.createFactory(PORT,-1);
+    startSignal=new CountDownLatch(1);
+    f.startup(zks);
+    Assert.assertTrue("waiting for server up",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+    startSignal.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS);
+    Assert.assertTrue("count == 0",startSignal.getCount() == 0);
+    stat=new Stat();
+    LOG.info("Check 2");
+    for (int i=0; i < 10; i++) {
+      path="/" + i;
+      Assert.assertEquals(new String(zk.getData(path,false,stat)),path + "!");
+      for (int j=0; j < 10; j++) {
+        String subpath=path + "/" + j;
+        Assert.assertEquals(new String(zk.getData(subpath,false,stat)),subpath + "!");
+        for (int k=0; k < 20; k++) {
+          String subsubpath=subpath + "/" + k;
+          Assert.assertEquals(new String(zk.getData(subsubpath,false,stat)),subsubpath + "!");
+        }
+      }
+    }
+    zk.close();
+    f.shutdown();
+    zks.shutdown();
+    Assert.assertTrue("waiting for server down",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+  }
+  finally {
+    SyncRequestProcessor.setSnapCount(oldSnapCount);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

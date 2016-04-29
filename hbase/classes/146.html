@@ -1,0 +1,123 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.coprocessor.TestCoprocessorInterface (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-11 type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSharedData() throws IOException {
+  TableName tableName=TableName.valueOf(name.getMethodName());
+  byte[][] families={fam1,fam2,fam3};
+  Configuration hc=initSplit();
+  Region region=initHRegion(tableName,name.getMethodName(),hc,new Class<?>[]{},families);
+  for (int i=0; i < 3; i++) {
+    HBaseTestCase.addContent(region,fam3);
+    region.flush(true);
+  }
+  region.compact(false);
+  byte[] splitRow=((HRegion)region).checkSplit();
+  assertNotNull(splitRow);
+  Region[] regions=split(region,splitRow);
+  for (int i=0; i < regions.length; i++) {
+    regions[i]=reopenRegion(regions[i],CoprocessorImpl.class,CoprocessorII.class);
+  }
+  Coprocessor c=regions[0].getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+  Coprocessor c2=regions[0].getCoprocessorHost().findCoprocessor(CoprocessorII.class.getName());
+  Object o=((CoprocessorImpl)c).getSharedData().get("test1");
+  Object o2=((CoprocessorII)c2).getSharedData().get("test2");
+  assertNotNull(o);
+  assertNotNull(o2);
+  assertFalse(((CoprocessorImpl)c).getSharedData() == ((CoprocessorII)c2).getSharedData());
+  for (int i=1; i < regions.length; i++) {
+    c=regions[i].getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+    c2=regions[i].getCoprocessorHost().findCoprocessor(CoprocessorII.class.getName());
+    assertTrue(((CoprocessorImpl)c).getSharedData().get("test1") == o);
+    assertTrue(((CoprocessorII)c2).getSharedData().get("test2") == o2);
+  }
+  for (int i=0; i < regions.length; i++) {
+    try {
+      byte[] r=regions[i].getRegionInfo().getStartKey();
+      if (r == null || r.length <= 0) {
+        r=new byte[]{0};
+      }
+      Get g=new Get(r);
+      regions[i].get(g);
+      fail();
+    }
+ catch (    org.apache.hadoop.hbase.DoNotRetryIOException xc) {
+    }
+    assertNull(regions[i].getCoprocessorHost().findCoprocessor(CoprocessorII.class.getName()));
+  }
+  c=regions[0].getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+  assertTrue(((CoprocessorImpl)c).getSharedData().get("test1") == o);
+  c=c2=null;
+  System.gc();
+  region=reopenRegion(regions[0],CoprocessorImpl.class,CoprocessorII.class);
+  c=region.getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+  assertTrue(((CoprocessorImpl)c).getSharedData().get("test1") == o);
+  c2=region.getCoprocessorHost().findCoprocessor(CoprocessorII.class.getName());
+  Object o3=((CoprocessorII)c2).getSharedData().get("test2");
+  assertFalse(o3 == o2);
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCoprocessorInterface() throws IOException {
+  TableName tableName=TableName.valueOf(name.getMethodName());
+  byte[][] families={fam1,fam2,fam3};
+  Configuration hc=initSplit();
+  Region region=initHRegion(tableName,name.getMethodName(),hc,new Class<?>[]{CoprocessorImpl.class},families);
+  for (int i=0; i < 3; i++) {
+    HBaseTestCase.addContent(region,fam3);
+    region.flush(true);
+  }
+  region.compact(false);
+  byte[] splitRow=((HRegion)region).checkSplit();
+  assertNotNull(splitRow);
+  Region[] regions=split(region,splitRow);
+  for (int i=0; i < regions.length; i++) {
+    regions[i]=reopenRegion(regions[i],CoprocessorImpl.class);
+  }
+  HBaseTestingUtility.closeRegionAndWAL(region);
+  Coprocessor c=region.getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+  Scan s=new Scan();
+  RegionScanner scanner=regions[0].getCoprocessorHost().postScannerOpen(s,regions[0].getScanner(s));
+  assertTrue(scanner instanceof CustomScanner);
+  scanner.next(new ArrayList<Cell>());
+  assertTrue("Coprocessor not started",((CoprocessorImpl)c).wasStarted());
+  assertTrue("Coprocessor not stopped",((CoprocessorImpl)c).wasStopped());
+  assertTrue(((CoprocessorImpl)c).wasOpened());
+  assertTrue(((CoprocessorImpl)c).wasClosed());
+  assertTrue(((CoprocessorImpl)c).wasFlushed());
+  assertTrue(((CoprocessorImpl)c).wasCompacted());
+  assertTrue(((CoprocessorImpl)c).wasSplit());
+  for (int i=0; i < regions.length; i++) {
+    HBaseTestingUtility.closeRegionAndWAL(regions[i]);
+    c=region.getCoprocessorHost().findCoprocessor(CoprocessorImpl.class.getName());
+    assertTrue("Coprocessor not started",((CoprocessorImpl)c).wasStarted());
+    assertTrue("Coprocessor not stopped",((CoprocessorImpl)c).wasStopped());
+    assertTrue(((CoprocessorImpl)c).wasOpened());
+    assertTrue(((CoprocessorImpl)c).wasClosed());
+    assertTrue(((CoprocessorImpl)c).wasCompacted());
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

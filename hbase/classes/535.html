@@ -1,0 +1,263 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestSplitTransaction (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRollback() throws IOException {
+  final int rowcount=TEST_UTIL.loadRegion(this.parent,CF);
+  assertTrue(rowcount > 0);
+  int parentRowCount=countRows(this.parent);
+  assertEquals(rowcount,parentRowCount);
+  HRegion spiedRegion=spy(this.parent);
+  SplitTransactionImpl st=prepareGOOD_SPLIT_ROW(spiedRegion);
+  SplitTransactionImpl spiedUponSt=spy(st);
+  doNothing().when(spiedUponSt).assertReferenceFileCount(anyInt(),eq(parent.getRegionFileSystem().getSplitsDir(st.getFirstDaughter())));
+  when(spiedRegion.createDaughterRegionFromSplits(spiedUponSt.getSecondDaughter())).thenThrow(new MockedFailedDaughterCreation());
+  boolean expectedException=false;
+  Server mockServer=Mockito.mock(Server.class);
+  when(mockServer.getConfiguration()).thenReturn(TEST_UTIL.getConfiguration());
+  try {
+    spiedUponSt.execute(mockServer,null);
+  }
+ catch (  MockedFailedDaughterCreation e) {
+    expectedException=true;
+  }
+  assertTrue(expectedException);
+  assertTrue(spiedUponSt.rollback(null,null));
+  int parentRowCount2=countRows(this.parent);
+  assertEquals(parentRowCount,parentRowCount2);
+  assertTrue(!this.fs.exists(HRegion.getRegionDir(this.testdir,st.getFirstDaughter())));
+  assertTrue(!this.fs.exists(HRegion.getRegionDir(this.testdir,st.getSecondDaughter())));
+  assertTrue(!this.parent.lock.writeLock().isHeldByCurrentThread());
+  assertTrue(st.prepare());
+  PairOfSameType<Region> daughters=st.execute(mockServer,null);
+  int daughtersRowCount=0;
+  for (  Region openRegion : daughters) {
+    try {
+      int count=countRows(openRegion);
+      assertTrue(count > 0 && count != rowcount);
+      daughtersRowCount+=count;
+    }
+  finally {
+      HBaseTestingUtility.closeRegionAndWAL(openRegion);
+    }
+  }
+  assertEquals(rowcount,daughtersRowCount);
+  assertTrue(!this.parent.lock.writeLock().isHeldByCurrentThread());
+  assertTrue("Rollback hooks should be called.",wasRollBackHookCalled());
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test straight prepare works.  Tries to split on {@link #GOOD_SPLIT_ROW}
+ * @throws IOException
+ */
+@Test public void testPrepare() throws IOException {
+  prepareGOOD_SPLIT_ROW();
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCountReferencesFailsSplit() throws IOException {
+  final int rowcount=TEST_UTIL.loadRegion(this.parent,CF);
+  assertTrue(rowcount > 0);
+  int parentRowCount=countRows(this.parent);
+  assertEquals(rowcount,parentRowCount);
+  HRegion spiedRegion=spy(this.parent);
+  SplitTransactionImpl st=prepareGOOD_SPLIT_ROW(spiedRegion);
+  SplitTransactionImpl spiedUponSt=spy(st);
+  doThrow(new IOException("Failing split. Expected reference file count isn't equal.")).when(spiedUponSt).assertReferenceFileCount(anyInt(),eq(new Path(this.parent.getRegionFileSystem().getTableDir(),st.getSecondDaughter().getEncodedName())));
+  boolean expectedException=false;
+  Server mockServer=Mockito.mock(Server.class);
+  when(mockServer.getConfiguration()).thenReturn(TEST_UTIL.getConfiguration());
+  try {
+    spiedUponSt.execute(mockServer,null);
+  }
+ catch (  IOException e) {
+    expectedException=true;
+  }
+  assertTrue(expectedException);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testWholesomeSplit() throws IOException {
+  final int rowcount=TEST_UTIL.loadRegion(this.parent,CF,true);
+  assertTrue(rowcount > 0);
+  int parentRowCount=countRows(this.parent);
+  assertEquals(rowcount,parentRowCount);
+  CacheConfig cacheConf=new CacheConfig(TEST_UTIL.getConfiguration());
+  ((LruBlockCache)cacheConf.getBlockCache()).clearCache();
+  SplitTransactionImpl st=prepareGOOD_SPLIT_ROW();
+  Server mockServer=Mockito.mock(Server.class);
+  when(mockServer.getConfiguration()).thenReturn(TEST_UTIL.getConfiguration());
+  PairOfSameType<Region> daughters=st.execute(mockServer,null);
+  assertTrue(this.fs.exists(this.parent.getRegionFileSystem().getSplitsDir()));
+  assertTrue(this.parent.isClosed());
+  assertEquals(0,this.fs.listStatus(this.parent.getRegionFileSystem().getSplitsDir()).length);
+  assertTrue(Bytes.equals(parent.getRegionInfo().getStartKey(),daughters.getFirst().getRegionInfo().getStartKey()));
+  assertTrue(Bytes.equals(GOOD_SPLIT_ROW,daughters.getFirst().getRegionInfo().getEndKey()));
+  assertTrue(Bytes.equals(daughters.getSecond().getRegionInfo().getStartKey(),GOOD_SPLIT_ROW));
+  assertTrue(Bytes.equals(parent.getRegionInfo().getEndKey(),daughters.getSecond().getRegionInfo().getEndKey()));
+  int daughtersRowCount=0;
+  for (  Region openRegion : daughters) {
+    try {
+      int count=countRows(openRegion);
+      assertTrue(count > 0 && count != rowcount);
+      daughtersRowCount+=count;
+    }
+  finally {
+      HBaseTestingUtility.closeRegionAndWAL(openRegion);
+    }
+  }
+  assertEquals(rowcount,daughtersRowCount);
+  assertTrue(!this.parent.lock.writeLock().isHeldByCurrentThread());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Pass a reference store
+ */
+@Test public void testPrepareWithRegionsWithReference() throws IOException {
+  HStore storeMock=Mockito.mock(HStore.class);
+  when(storeMock.hasReferences()).thenReturn(true);
+  when(storeMock.getFamily()).thenReturn(new HColumnDescriptor("cf"));
+  when(storeMock.close()).thenReturn(ImmutableList.<StoreFile>of());
+  this.parent.stores.put(Bytes.toBytes(""),storeMock);
+  SplitTransactionImpl st=new SplitTransactionImpl(this.parent,GOOD_SPLIT_ROW);
+  assertFalse("a region should not be splittable if it has instances of store file references",st.prepare());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testPrepareWithClosedRegion() throws IOException {
+  this.parent.close();
+  SplitTransactionImpl st=new SplitTransactionImpl(this.parent,GOOD_SPLIT_ROW);
+  assertFalse(st.prepare());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Pass an unreasonable split row.
+ */
+@Test public void testPrepareWithBadSplitRow() throws IOException {
+  SplitTransactionImpl st=new SplitTransactionImpl(this.parent,STARTROW);
+  assertFalse(st.prepare());
+  st=new SplitTransactionImpl(this.parent,HConstants.EMPTY_BYTE_ARRAY);
+  assertFalse(st.prepare());
+  st=new SplitTransactionImpl(this.parent,new byte[]{'A','A','A'});
+  assertFalse(st.prepare());
+  st=new SplitTransactionImpl(this.parent,ENDROW);
+  assertFalse(st.prepare());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown() throws IOException {
+  if (this.parent != null && !this.parent.isClosed())   this.parent.close();
+  Path regionDir=this.parent.getRegionFileSystem().getRegionDir();
+  if (this.fs.exists(regionDir) && !this.fs.delete(regionDir,true)) {
+    throw new IOException("Failed delete of " + regionDir);
+  }
+  if (this.wals != null) {
+    this.wals.close();
+  }
+  this.fs.delete(this.testdir,true);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFailAfterPONR() throws IOException, KeeperException {
+  final int rowcount=TEST_UTIL.loadRegion(this.parent,CF);
+  assertTrue(rowcount > 0);
+  int parentRowCount=countRows(this.parent);
+  assertEquals(rowcount,parentRowCount);
+  SplitTransactionImpl st=prepareGOOD_SPLIT_ROW();
+  SplitTransactionImpl spiedUponSt=spy(st);
+  Mockito.doThrow(new MockedFailedDaughterOpen()).when(spiedUponSt).openDaughterRegion((Server)Mockito.anyObject(),(HRegion)Mockito.anyObject());
+  boolean expectedException=false;
+  Server mockServer=Mockito.mock(Server.class);
+  when(mockServer.getConfiguration()).thenReturn(TEST_UTIL.getConfiguration());
+  try {
+    spiedUponSt.execute(mockServer,null);
+  }
+ catch (  IOException e) {
+    if (e.getCause() != null && e.getCause() instanceof MockedFailedDaughterOpen) {
+      expectedException=true;
+    }
+  }
+  assertTrue(expectedException);
+  assertFalse(spiedUponSt.rollback(null,null));
+  Path tableDir=this.parent.getRegionFileSystem().getTableDir();
+  Path daughterADir=new Path(tableDir,spiedUponSt.getFirstDaughter().getEncodedName());
+  Path daughterBDir=new Path(tableDir,spiedUponSt.getSecondDaughter().getEncodedName());
+  assertTrue(TEST_UTIL.getTestFileSystem().exists(daughterADir));
+  assertTrue(TEST_UTIL.getTestFileSystem().exists(daughterBDir));
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  this.fs=FileSystem.get(TEST_UTIL.getConfiguration());
+  TEST_UTIL.getConfiguration().set(CoprocessorHost.REGION_COPROCESSOR_CONF_KEY,CustomObserver.class.getName());
+  this.fs.delete(this.testdir,true);
+  final Configuration walConf=new Configuration(TEST_UTIL.getConfiguration());
+  FSUtils.setRootDir(walConf,this.testdir);
+  this.wals=new WALFactory(walConf,null,this.getClass().getName());
+  this.parent=createRegion(this.testdir,this.wals);
+  RegionCoprocessorHost host=new RegionCoprocessorHost(this.parent,null,TEST_UTIL.getConfiguration());
+  this.parent.setCoprocessorHost(host);
+  TEST_UTIL.getConfiguration().setBoolean("hbase.testing.nocluster",true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

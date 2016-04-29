@@ -1,0 +1,237 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.compaction.CompactionsPurgeTest (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCompactionPurgeTombstonedRow() throws ExecutionException, InterruptedException {
+  CompactionManager.instance.disableAutoCompaction();
+  String keyspaceName=KEYSPACE1;
+  String cfName="Standard1";
+  Keyspace keyspace=Keyspace.open(keyspaceName);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  String key="key3";
+  for (int i=0; i < 10; i++) {
+    RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,i,key);
+    builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  Mutation rm=new Mutation(KEYSPACE1,dk(key));
+  rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata,dk(key),4,FBUtilities.nowInSeconds()));
+  rm.applyUnsafe();
+  ImmutableBTreePartition partition=Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key).build());
+  assertFalse(partition.partitionLevelDeletion().isLive());
+  cfs.forceBlockingFlush();
+  Util.compactAll(cfs,Integer.MAX_VALUE).get();
+  assertFalse(Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key).build()).isEmpty());
+  for (int i=0; i < 5; i++) {
+    RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,i,key);
+    builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  partition=Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key).build());
+  assertEquals(10,partition.rowCount());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * verify that we don't drop tombstones during a minor compaction that might still be relevant
+ */
+@Test public void testMinTimestampPurge(){
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE2);
+  String cfName="Standard1";
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  String key3="key3";
+  new RowUpdateBuilder(cfs.metadata,8,key3).clustering("c1").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  new RowUpdateBuilder(cfs.metadata,8,key3).clustering("c2").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  cfs.forceBlockingFlush();
+  RowUpdateBuilder.deleteRow(cfs.metadata,10,key3,"c1").applyUnsafe();
+  cfs.forceBlockingFlush();
+  Collection<SSTableReader> sstablesIncomplete=cfs.getLiveSSTables();
+  RowUpdateBuilder.deleteRow(cfs.metadata,9,key3,"c2").applyUnsafe();
+  cfs.forceBlockingFlush();
+  cfs.getCompactionStrategyManager().getUserDefinedTask(sstablesIncomplete,Integer.MAX_VALUE).execute(null);
+  ImmutableBTreePartition partition=Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key3).build());
+  assertEquals(2,partition.rowCount());
+  for (  Row row : partition)   assertFalse(row.hasLiveData(FBUtilities.nowInSeconds()));
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMinorCompactionPurge(){
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE2);
+  String cfName="Standard1";
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  for (int k=1; k <= 2; ++k) {
+    String key="key" + k;
+    for (int i=0; i < 10; i++) {
+      RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,0,key);
+      builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+    }
+    cfs.forceBlockingFlush();
+    for (int i=0; i < 10; i++) {
+      RowUpdateBuilder.deleteRow(cfs.metadata,1,key,String.valueOf(i)).applyUnsafe();
+    }
+    cfs.forceBlockingFlush();
+  }
+  DecoratedKey key1=Util.dk("key1");
+  DecoratedKey key2=Util.dk("key2");
+  cfs.forceBlockingFlush();
+  Collection<SSTableReader> sstablesIncomplete=cfs.getLiveSSTables();
+  RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,2,"key1");
+  builder.clustering(String.valueOf(5)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  cfs.forceBlockingFlush();
+  cfs.getCompactionStrategyManager().getUserDefinedTask(sstablesIncomplete,Integer.MAX_VALUE).execute(null);
+  Util.assertEmpty(Util.cmd(cfs,key2).build());
+  ImmutableBTreePartition partition=Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key1).build());
+  assertEquals(1,partition.rowCount());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRowTombstoneObservedBeforePurging(){
+  String keyspace="cql_keyspace";
+  String table="table1";
+  ColumnFamilyStore cfs=Keyspace.open(keyspace).getColumnFamilyStore(table);
+  cfs.disableAutoCompaction();
+  QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v1, v2) VALUES (%d, '%s', %d)",keyspace,table,1,"foo",1));
+  cfs.forceBlockingFlush();
+  UntypedResultSet result=QueryProcessor.executeInternal(String.format("SELECT * FROM %s.%s WHERE k = %d",keyspace,table,1));
+  assertEquals(1,result.size());
+  QueryProcessor.executeInternal(String.format("DELETE FROM %s.%s WHERE k = %d",keyspace,table,1));
+  cfs.forceBlockingFlush();
+  assertEquals(2,cfs.getLiveSSTables().size());
+  result=QueryProcessor.executeInternal(String.format("SELECT * FROM %s.%s WHERE k = %d",keyspace,table,1));
+  assertEquals(0,result.size());
+  FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs,(int)(System.currentTimeMillis() / 1000) - 10000,false));
+  assertEquals(1,cfs.getLiveSSTables().size());
+  result=QueryProcessor.executeInternal(String.format("SELECT * FROM %s.%s WHERE k = %d",keyspace,table,1));
+  assertEquals(0,result.size());
+  QueryProcessor.executeInternal(String.format("INSERT INTO %s.%s (k, v1, v2) VALUES (%d, '%s', %d)",keyspace,table,1,"foo",1));
+  cfs.forceBlockingFlush();
+  assertEquals(2,cfs.getLiveSSTables().size());
+  result=QueryProcessor.executeInternal(String.format("SELECT * FROM %s.%s WHERE k = %d",keyspace,table,1));
+  assertEquals(1,result.size());
+  QueryProcessor.executeInternal(String.format("DELETE FROM %s.%s WHERE k = %d",keyspace,table,1));
+  cfs.forceBlockingFlush();
+  FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs,(int)(System.currentTimeMillis() / 1000) + 10000,false));
+  assertEquals(0,cfs.getLiveSSTables().size());
+  result=QueryProcessor.executeInternal(String.format("SELECT * FROM %s.%s WHERE k = %d",keyspace,table,1));
+  assertEquals(0,result.size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMajorCompactionPurge(){
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  String cfName="Standard1";
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  String key="key1";
+  for (int i=0; i < 10; i++) {
+    RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,0,key);
+    builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  cfs.forceBlockingFlush();
+  for (int i=0; i < 10; i++) {
+    RowUpdateBuilder.deleteRow(cfs.metadata,1,key,String.valueOf(i)).applyUnsafe();
+  }
+  cfs.forceBlockingFlush();
+  RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,2,key);
+  builder.clustering(String.valueOf(5)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  cfs.forceBlockingFlush();
+  FBUtilities.waitOnFutures(CompactionManager.instance.submitMaximal(cfs,Integer.MAX_VALUE,false));
+  cfs.invalidateCachedPartition(dk(key));
+  ImmutableBTreePartition partition=Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key).build());
+  assertEquals(1,partition.rowCount());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testCompactionPurgeCachedRow() throws ExecutionException, InterruptedException {
+  CompactionManager.instance.disableAutoCompaction();
+  String keyspaceName=KEYSPACE_CACHED;
+  String cfName=CF_CACHED;
+  Keyspace keyspace=Keyspace.open(keyspaceName);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  String key="key3";
+  for (int i=0; i < 10; i++) {
+    RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,0,key);
+    builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  Mutation rm=new Mutation(KEYSPACE_CACHED,dk(key));
+  rm.add(PartitionUpdate.fullPartitionDelete(cfs.metadata,dk(key),1,FBUtilities.nowInSeconds()));
+  rm.applyUnsafe();
+  new RowUpdateBuilder(cfs.metadata,0,"key4").clustering("c").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  assertFalse(Util.getOnlyPartitionUnfiltered(Util.cmd(cfs,key).build()).isEmpty());
+  cfs.forceBlockingFlush();
+  Util.compactAll(cfs,Integer.MAX_VALUE).get();
+  Util.assertEmpty(Util.cmd(cfs,key).build());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCompactionPurgeOneFile() throws ExecutionException, InterruptedException {
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  String cfName="Standard2";
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfName);
+  String key="key1";
+  for (int i=0; i < 5; i++) {
+    RowUpdateBuilder builder=new RowUpdateBuilder(cfs.metadata,0,key);
+    builder.clustering(String.valueOf(i)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  for (int i=0; i < 5; i++) {
+    RowUpdateBuilder.deleteRow(cfs.metadata,1,key,String.valueOf(i)).applyUnsafe();
+  }
+  cfs.forceBlockingFlush();
+  assertEquals(String.valueOf(cfs.getLiveSSTables()),1,cfs.getLiveSSTables().size());
+  Util.compactAll(cfs,Integer.MAX_VALUE).get();
+  assertTrue(cfs.getLiveSSTables().isEmpty());
+  Util.assertEmpty(Util.cmd(cfs,key).build());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

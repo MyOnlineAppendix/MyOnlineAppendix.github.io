@@ -1,0 +1,66 @@
+<h3 style="margin:0px">Class: org.apache.cxf.systest.ws.rm.AbstractServerPersistenceTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testRecovery() throws Exception {
+  SpringBusFactory bf=new SpringBusFactory();
+  bus=bf.createBus();
+  BusFactory.setDefaultBus(bus);
+  LOG.fine("Created bus " + bus + " with default cfg");
+  ControlService cs=new ControlService();
+  Control control=cs.getControlPort();
+  ConnectionHelper.setKeepAliveConnection(control,false,true);
+  updateAddressPort(control,getPort());
+  assertTrue("Failed to start greeter",control.startGreeter(SERVER_LOSS_CFG));
+  LOG.fine("Started greeter server.");
+  System.setProperty("db.name",getPrefix() + "-recovery");
+  greeterBus=new SpringBusFactory().createBus(CFG);
+  System.clearProperty("db.name");
+  LOG.fine("Created bus " + greeterBus + " with cfg : "+ CFG);
+  BusFactory.setDefaultBus(greeterBus);
+  greeterBus.getExtension(RMManager.class).getConfiguration().setBaseRetransmissionInterval(new Long(60000));
+  GreeterService gs=new GreeterService();
+  Greeter greeter=gs.getGreeterPort();
+  updateAddressPort(greeter,getPort());
+  LOG.fine("Created greeter client.");
+  ConnectionHelper.setKeepAliveConnection(greeter,false,true);
+  Client c=ClientProxy.getClient(greeter);
+  HTTPConduit hc=(HTTPConduit)(c.getConduit());
+  HTTPClientPolicy cp=hc.getClient();
+  cp.setDecoupledEndpoint("http://localhost:" + getDecoupledPort() + "/decoupled_endpoint");
+  out=new OutMessageRecorder();
+  in=new InMessageRecorder();
+  greeterBus.getOutInterceptors().add(out);
+  greeterBus.getInInterceptors().add(in);
+  LOG.fine("Configured greeter client.");
+  Response<GreetMeResponse> responses[]=cast(new Response[4]);
+  responses[0]=greeter.greetMeAsync("one");
+  responses[1]=greeter.greetMeAsync("two");
+  responses[2]=greeter.greetMeAsync("three");
+  verifyMissingResponse(responses);
+  control.stopGreeter(SERVER_LOSS_CFG);
+  LOG.fine("Stopped greeter server");
+  out.getOutboundMessages().clear();
+  in.getInboundMessages().clear();
+  control.startGreeter(CFG);
+  String nl=System.getProperty("line.separator");
+  LOG.fine("Restarted greeter server" + nl + nl);
+  verifyServerRecovery(responses);
+  responses[3]=greeter.greetMeAsync("four");
+  verifyRetransmissionQueue();
+  verifyAcknowledgementRange(1,4);
+  out.getOutboundMessages().clear();
+  in.getInboundMessages().clear();
+  greeterBus.shutdown(true);
+  control.stopGreeter(CFG);
+  bus.shutdown(true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

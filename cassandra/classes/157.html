@@ -1,0 +1,162 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.lifecycle.LifecycleTransactionTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void restoreIncrementalBackup(){
+  DatabaseDescriptor.setIncrementalBackupsEnabled(incrementalBackups);
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUpdates(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  Tracker tracker=new Tracker(null,false);
+  SSTableReader[] readers=readersArray(0,3,cfs);
+  SSTableReader[] readers2=readersArray(0,4,cfs);
+  SSTableReader[] readers3=readersArray(0,4,cfs);
+  tracker.addInitialSSTables(copyOf(readers));
+  LifecycleTransaction txn=tracker.tryModify(copyOf(readers),OperationType.UNKNOWN);
+  txn.update(readers2[0],true);
+  txn.obsolete(readers[1]);
+  Assert.assertTrue(txn.isObsolete(readers[1]));
+  Assert.assertFalse(txn.isObsolete(readers[0]));
+  testBadUpdate(txn,readers2[0],true);
+  testBadUpdate(txn,readers2[1],true);
+  testBadUpdate(txn,readers3[0],true);
+  testBadUpdate(txn,readers2[2],false);
+  testBadUpdate(txn,readers2[3],true);
+  testBadObsolete(txn,readers[1]);
+  testBadObsolete(txn,readers2[0]);
+  txn.update(readers2[3],false);
+  Assert.assertEquals(3,tracker.getView().compacting.size());
+  txn.checkpoint();
+  Assert.assertTrue(txn.isObsolete(readers[1]));
+  Assert.assertFalse(txn.isObsolete(readers[0]));
+  Assert.assertEquals(4,tracker.getView().compacting.size());
+  Assert.assertEquals(3,tracker.getView().sstables.size());
+  Assert.assertEquals(3,size(txn.current()));
+  Assert.assertTrue(all(of(readers2[0],readers[2],readers2[3]),idIn(tracker.getView().sstablesMap)));
+  Assert.assertTrue(all(txn.current(),idIn(tracker.getView().sstablesMap)));
+  testBadObsolete(txn,readers[1]);
+  testBadObsolete(txn,readers2[2]);
+  testBadObsolete(txn,readers2[3]);
+  testBadUpdate(txn,readers3[1],true);
+  testBadUpdate(txn,readers2[0],true);
+  txn.update(readers3[0],true);
+  txn.checkpoint();
+  Assert.assertEquals(4,tracker.getView().compacting.size());
+  Assert.assertEquals(3,tracker.getView().sstables.size());
+  Assert.assertEquals(3,size(txn.current()));
+  Assert.assertTrue(all(of(readers3[0],readers[2],readers2[3]),idIn(tracker.getView().sstablesMap)));
+  Assert.assertTrue(all(txn.current(),idIn(tracker.getView().sstablesMap)));
+  testBadObsolete(txn,readers2[0]);
+  txn.obsoleteOriginals();
+  txn.checkpoint();
+  Assert.assertEquals(1,tracker.getView().sstables.size());
+  txn.obsoleteOriginals();
+  txn.checkpoint();
+  Assert.assertEquals(1,tracker.getView().sstables.size());
+  Assert.assertEquals(4,tracker.getView().compacting.size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSplit(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  Tracker tracker=new Tracker(null,false);
+  List<SSTableReader> readers=readers(0,4,cfs);
+  tracker.addInitialSSTables(readers);
+  LifecycleTransaction txn=tracker.tryModify(readers,OperationType.UNKNOWN);
+  txn.cancel(readers.get(3));
+  LifecycleTransaction txn2=txn.split(readers.subList(0,1));
+  Assert.assertEquals(2,txn.originals().size());
+  Assert.assertTrue(all(readers.subList(1,3),in(txn.originals())));
+  Assert.assertEquals(1,txn2.originals().size());
+  Assert.assertTrue(all(readers.subList(0,1),in(txn2.originals())));
+  txn.update(readers(1,2,cfs).get(0),true);
+  boolean failed=false;
+  try {
+    txn.split(readers.subList(2,3));
+  }
+ catch (  Throwable t) {
+    failed=true;
+  }
+  Assert.assertTrue(failed);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void disableIncrementalBackup(){
+  incrementalBackups=DatabaseDescriptor.isIncrementalBackupsEnabled();
+  DatabaseDescriptor.setIncrementalBackupsEnabled(false);
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCancellation(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  Tracker tracker=new Tracker(null,false);
+  List<SSTableReader> readers=readers(0,3,cfs);
+  tracker.addInitialSSTables(readers);
+  LifecycleTransaction txn=tracker.tryModify(readers,OperationType.UNKNOWN);
+  SSTableReader cancel=readers.get(0);
+  SSTableReader update=readers(1,2,cfs).get(0);
+  SSTableReader fresh=readers(3,4,cfs).get(0);
+  SSTableReader notPresent=readers(4,5,cfs).get(0);
+  txn.cancel(cancel);
+  txn.update(update,true);
+  txn.update(fresh,false);
+  testBadCancel(txn,cancel);
+  testBadCancel(txn,update);
+  testBadCancel(txn,fresh);
+  testBadCancel(txn,notPresent);
+  Assert.assertEquals(2,txn.originals().size());
+  Assert.assertEquals(2,tracker.getView().compacting.size());
+  Assert.assertTrue(all(readers.subList(1,3),idIn(tracker.getView().compacting)));
+  txn.checkpoint();
+  testBadCancel(txn,cancel);
+  testBadCancel(txn,update);
+  testBadCancel(txn,fresh);
+  testBadCancel(txn,notPresent);
+  Assert.assertEquals(2,txn.originals().size());
+  Assert.assertEquals(3,tracker.getView().compacting.size());
+  Assert.assertEquals(3,size(txn.current()));
+  Assert.assertTrue(all(concat(readers.subList(1,3),of(fresh)),idIn(tracker.getView().compacting)));
+  txn.cancel(readers.get(2));
+  Assert.assertEquals(1,txn.originals().size());
+  Assert.assertEquals(2,tracker.getView().compacting.size());
+  Assert.assertEquals(2,size(txn.current()));
+  Assert.assertTrue(all(of(readers.get(1),fresh),idIn(tracker.getView().compacting)));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,109 @@
+<h3 style="margin:0px">Class: org.apache.ace.log.listener.LogTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test whether after unsetting the Log, no new log entries are added, but that they are added to the cache instead
+ * (test the latter by flushing the cache).
+ */
+@Test(groups={UNIT}) public void testUnsettingLog() throws Exception {
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 0 : "MockLog is not empty on start of test";
+  m_logProxy.setLog(m_mockLog);
+  Dictionary<String,Object> props=new Hashtable<>();
+  props.put("test","value");
+  m_logProxy.log(1,props);
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 1 : "MockLog should have 1 log entry";
+  m_logProxy.setLog(null);
+  Dictionary<String,Object> props2=new Hashtable<>();
+  props2.put("test2","value2");
+  m_logProxy.log(2,props2);
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 1 : "MockLog should still have 1 log entry";
+  m_logProxy.setLog(m_mockLog);
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 2 : "MockLog should have 2 log entries";
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test whether logging to the cache and setting a new Log causes the log entries to be flushed to this new Log.
+ */
+@Test(groups={UNIT}) public void testLogCacheFlush() throws Exception {
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 0 : "MockLog is not empty on start of test";
+  Dictionary<String,Object> props=new Hashtable<>();
+  String test="test";
+  String value="value";
+  props.put(test,value);
+  m_logProxy.log(1,props);
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 0 : "MockLog is not empty, but should be as the log should be in the cache";
+  m_logProxy.setLog(m_mockLog);
+  assert ((MockLog)m_mockLog).getLogEntries().size() == 1 : "Log should contain 1 entry";
+  assert ((MockLog.LogEntry)((MockLog)m_mockLog).getLogEntries().get(0)).getProperties().get(test).equals(value) : "The property should be 'test:value'";
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Basic functionality of the ListenerImpl is covered, the rest of the situations will probably be covered by integration
+ * tests. Note: test the deployment event INSTALL only when a BundleContext is available
+ */
+@SuppressWarnings("unchecked") @Test(groups={UNIT}) public void testEventConverting() throws Exception {
+  ListenerImpl listeners=new ListenerImpl(null,m_logProxy);
+  listeners.startInternal();
+  m_logProxy.setLog(m_mockLog);
+  final String symbolicName="org.apache.ace.auditlog.listener.testbundle.a";
+  final long bundleId=123;
+  final String bundleVersion="1.2.3";
+  final String bundleLocation="/home/apache/ace/testbundlea.jar";
+  Bundle testBundleA=TestUtils.createMockObjectAdapter(Bundle.class,new Object(){
+    @SuppressWarnings("all") public long getBundleId(){
+      return bundleId;
+    }
+    @SuppressWarnings("all") public String getSymbolicName(){
+      return symbolicName;
+    }
+    @SuppressWarnings("all") public Dictionary getHeaders(){
+      Dictionary dict=new Properties();
+      dict.put(Constants.BUNDLE_VERSION,bundleVersion);
+      return dict;
+    }
+    @SuppressWarnings("all") public String getLocation(){
+      return bundleLocation;
+    }
+  }
+);
+  BundleEvent bundleEvent=new BundleEvent(BundleEvent.INSTALLED,testBundleA);
+  FrameworkEvent frameworkEvent=new FrameworkEvent(FrameworkEvent.INFO,testBundleA,new IllegalStateException());
+  listeners.bundleChanged(bundleEvent);
+  listeners.frameworkEvent(frameworkEvent);
+  listeners.stopInternal();
+  List<LogEntry> logEntries=((MockLog)m_mockLog).getLogEntries();
+  assert logEntries.size() == 2 : "2 log entries should be logged";
+  LogEntry bundleEntry=(LogEntry)logEntries.get(0);
+  assert bundleEntry.getType() == AuditEvent.BUNDLE_INSTALLED : "state BUNDLE_INSTALLED (" + AuditEvent.BUNDLE_INSTALLED + ") should be in log but '"+ bundleEntry.getType()+ "' is in log instead";
+  Dictionary<String,?> bundleProps=bundleEntry.getProperties();
+  assert bundleProps.size() == 4 : "4 properties should be stored, but found: " + bundleProps.size();
+  assert bundleProps.get(AuditEvent.KEY_ID).equals(Long.toString(bundleId)) : "id should be " + bundleId + " but is: "+ bundleProps.get(AuditEvent.KEY_ID);
+  assert bundleProps.get(AuditEvent.KEY_NAME).equals(symbolicName) : "symbolicName should be " + symbolicName + " but is "+ bundleProps.get(AuditEvent.KEY_NAME);
+  assert bundleProps.get(AuditEvent.KEY_VERSION).equals(bundleVersion) : "version should be " + bundleVersion + " but is "+ bundleProps.get(AuditEvent.KEY_VERSION);
+  assert bundleProps.get(AuditEvent.KEY_LOCATION).equals(bundleLocation) : "location should be " + bundleLocation + " but is "+ bundleProps.get(AuditEvent.KEY_LOCATION);
+  LogEntry frameworkEntry=(LogEntry)logEntries.get(1);
+  assert frameworkEntry.getType() == AuditEvent.FRAMEWORK_INFO : "state FRAMEWORK_INFO (" + AuditEvent.FRAMEWORK_INFO + ") should be in log but '"+ frameworkEntry.getType()+ "' is in log instead";
+  Dictionary<String,?> frameworkProps=frameworkEntry.getProperties();
+  assert frameworkProps.size() == 2 : "2 properties should be stored, but found: " + frameworkProps.size();
+  assert frameworkProps.get(AuditEvent.KEY_ID).equals(Long.toString(bundleId)) : "id should be " + bundleId + " but is: "+ frameworkProps.get(AuditEvent.KEY_ID);
+  assert frameworkProps.get(AuditEvent.KEY_TYPE).equals(IllegalStateException.class.getName()) : "exceptionType should be " + IllegalStateException.class.getName() + " but is: "+ frameworkProps.get(AuditEvent.KEY_TYPE);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

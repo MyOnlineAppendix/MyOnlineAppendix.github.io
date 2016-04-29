@@ -1,0 +1,484 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.api.TreeTest (14 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  repository=new Oak(store).with(new OpenSecurityProvider()).with(new CompositeConflictHandler(ImmutableList.of(new ChildOrderConflictHandler(){
+    /** 
+ * Allow deleting changed node.
+ * See {@link TreeTest#removeWithConcurrentOrderBefore()}
+ */
+    @Override public Resolution deleteChangedNode(    NodeBuilder parent,    String name,    NodeState theirs){
+      return Resolution.OURS;
+    }
+  }
+,new AnnotatingConflictHandler()))).with(new ConflictValidatorProvider()).createContentRepository();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeAllRemoved() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/").addChild("c");
+    t1.addChild("node1").orderBefore(null);
+    t1.addChild("node2");
+    t1.addChild("node3");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/c");
+      t1.remove();
+      r1.getTree("/").addChild("c");
+      r1.commit();
+      assertSequence(t1.getChildren());
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren());
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void orderBefore() throws Exception {
+  ContentSession s=repository.login(null,null);
+  try {
+    Root r=s.getLatestRoot();
+    Tree t=r.getTree("/");
+    t.addChild("node1");
+    t.addChild("node2");
+    t.addChild("node3");
+    r.commit();
+    t.getChild("node1").orderBefore("node2");
+    t.getChild("node3").orderBefore(null);
+    assertSequence(t.getChildren(),"node1","node2","node3");
+    r.commit();
+    assertSequence(t.getChildren(),"node1","node2","node3");
+    t.getChild("node3").orderBefore("node2");
+    assertSequence(t.getChildren(),"node1","node3","node2");
+    r.commit();
+    assertSequence(t.getChildren(),"node1","node3","node2");
+    t.getChild("node1").orderBefore(null);
+    assertSequence(t.getChildren(),"node3","node2","node1");
+    r.commit();
+    assertSequence(t.getChildren(),"node3","node2","node1");
+    assertTrue(t.getProperty(":childOrder") == null);
+    assertEquals("must not have any properties",0,t.getPropertyCount());
+  }
+  finally {
+    s.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeWithRemove() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    t1.addChild("node3");
+    t1.addChild("node4");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").orderBefore(null);
+      t1.getChild("node4").remove();
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1","node3");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1","node3");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node3","node1");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBefore() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    t1.addChild("node3");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").orderBefore(null);
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1","node3");
+      t2.getChild("node3").orderBefore("node1");
+      t2.getChild("node2").orderBefore(null);
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1","node3");
+      t2.getChild("node3").orderBefore("node1");
+      t2.getChild("node2").orderBefore(null);
+      r2.commit();
+      assertSequence(t2.getChildren(),"node3","node1","node2");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentAddChildMakeOrderable() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1=r1.getTree("/");
+      t1.addChild("node3").orderBefore(null);
+      r1.commit();
+      List<String> names=Lists.newArrayList();
+      for (      Tree t : r1.getTree("/").getChildren()) {
+        names.add(t.getName());
+      }
+      t2.addChild("node4").orderBefore(null);
+      r2.commit();
+      names.add("node4");
+      t1=s1.getLatestRoot().getTree("/");
+      assertSequence(t1.getChildren(),names.toArray(new String[names.size()]));
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void concurrentAddChild() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    t1.addChild("node3");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1=r1.getTree("/");
+      t1.addChild("node4");
+      r1.commit();
+      t2.addChild("node5");
+      r2.commit();
+      r1=s1.getLatestRoot();
+      t1=r1.getTree("/");
+      Set<String> names=Sets.newHashSet();
+      for (      Tree t : t1.getChildren()) {
+        names.add(t.getName());
+      }
+      assertEquals(Sets.newHashSet("node1","node2","node3","node4","node5"),names);
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentAddChildOrderable() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1").orderBefore(null);
+    t1.addChild("node2");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1=r1.getTree("/");
+      t1.addChild("node3");
+      r1.commit();
+      t2.addChild("node4");
+      r2.commit();
+      t1=s1.getLatestRoot().getTree("/");
+      assertSequence(t1.getChildren(),"node1","node2","node3","node4");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeRemoved() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    t1.addChild("node3");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").remove();
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeWithRemoveOtherSession() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1").orderBefore(null);
+    t1.addChild("node2");
+    t1.addChild("node3");
+    t1.addChild("node4");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").orderBefore(null);
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1","node4","node3");
+      t2.getChild("node3").orderBefore("node1");
+      t2.getChild("node4").remove();
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1","node3");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node3","node1");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void removeWithConcurrentOrderBefore() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/").addChild("c");
+    t1.addChild("node1").orderBefore(null);
+    t1.addChild("node2");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/c");
+      t1=r1.getTree("/c");
+      t1.getChild("node2").orderBefore("node1");
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1");
+      t2.remove();
+      r2.commit();
+      assertFalse(r2.getTree("/").hasChild("c"));
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown(){
+  repository=null;
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeWithAdd() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1");
+    t1.addChild("node2");
+    t1.addChild("node3");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").orderBefore(null);
+      t1.addChild("node4");
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1","node3","node4");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1","node3","node4");
+      t2.getChild("node3").orderBefore("node1");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node3","node1","node4");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void concurrentOrderBeforeTargetRemoved() throws Exception {
+  ContentSession s1=repository.login(null,null);
+  try {
+    Root r1=s1.getLatestRoot();
+    Tree t1=r1.getTree("/");
+    t1.addChild("node1").orderBefore(null);
+    t1.addChild("node2");
+    t1.addChild("node3");
+    t1.addChild("node4");
+    r1.commit();
+    ContentSession s2=repository.login(null,null);
+    try {
+      Root r2=s2.getLatestRoot();
+      Tree t2=r2.getTree("/");
+      t1.getChild("node2").orderBefore("node1");
+      t1.getChild("node3").remove();
+      r1.commit();
+      assertSequence(t1.getChildren(),"node2","node1","node4");
+      t2.getChild("node4").orderBefore("node3");
+      r2.commit();
+      assertSequence(t2.getChildren(),"node2","node1","node4");
+    }
+  finally {
+      s2.close();
+    }
+  }
+  finally {
+    s1.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,145 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.throttle.TestCompactionWithThroughputController (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-8 type-5 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the tuning task of {@link PressureAwareCompactionThroughputController}
+ */
+@Test public void testThroughputTuning() throws Exception {
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.set(StoreEngine.STORE_ENGINE_CLASS_KEY,DefaultStoreEngine.class.getName());
+  conf.setLong(PressureAwareCompactionThroughputController.HBASE_HSTORE_COMPACTION_MAX_THROUGHPUT_HIGHER_BOUND,20L * 1024 * 1024);
+  conf.setLong(PressureAwareCompactionThroughputController.HBASE_HSTORE_COMPACTION_MAX_THROUGHPUT_LOWER_BOUND,10L * 1024 * 1024);
+  conf.setInt(CompactionConfiguration.HBASE_HSTORE_COMPACTION_MIN_KEY,4);
+  conf.setInt(HStore.BLOCKING_STOREFILES_KEY,6);
+  conf.set(CompactionThroughputControllerFactory.HBASE_THROUGHPUT_CONTROLLER_KEY,PressureAwareCompactionThroughputController.class.getName());
+  conf.setInt(PressureAwareCompactionThroughputController.HBASE_HSTORE_COMPACTION_THROUGHPUT_TUNE_PERIOD,1000);
+  TEST_UTIL.startMiniCluster(1);
+  Connection conn=ConnectionFactory.createConnection(conf);
+  try {
+    HTableDescriptor htd=new HTableDescriptor(tableName);
+    htd.addFamily(new HColumnDescriptor(family));
+    htd.setCompactionEnabled(false);
+    TEST_UTIL.getHBaseAdmin().createTable(htd);
+    TEST_UTIL.waitTableAvailable(tableName);
+    HRegionServer regionServer=TEST_UTIL.getRSForFirstRegionInTable(tableName);
+    PressureAwareCompactionThroughputController throughputController=(PressureAwareCompactionThroughputController)regionServer.compactSplitThread.getCompactionThroughputController();
+    assertEquals(10L * 1024 * 1024,throughputController.getMaxThroughput(),EPSILON);
+    Table table=conn.getTable(tableName);
+    for (int i=0; i < 5; i++) {
+      byte[] value=new byte[0];
+      table.put(new Put(Bytes.toBytes(i)).addColumn(family,qualifier,value));
+      TEST_UTIL.flush(tableName);
+    }
+    Thread.sleep(2000);
+    assertEquals(15L * 1024 * 1024,throughputController.getMaxThroughput(),EPSILON);
+    byte[] value1=new byte[0];
+    table.put(new Put(Bytes.toBytes(5)).addColumn(family,qualifier,value1));
+    TEST_UTIL.flush(tableName);
+    Thread.sleep(2000);
+    assertEquals(20L * 1024 * 1024,throughputController.getMaxThroughput(),EPSILON);
+    byte[] value=new byte[0];
+    table.put(new Put(Bytes.toBytes(6)).addColumn(family,qualifier,value));
+    TEST_UTIL.flush(tableName);
+    Thread.sleep(2000);
+    assertEquals(Double.MAX_VALUE,throughputController.getMaxThroughput(),EPSILON);
+    conf.set(CompactionThroughputControllerFactory.HBASE_THROUGHPUT_CONTROLLER_KEY,NoLimitThroughputController.class.getName());
+    regionServer.compactSplitThread.onConfigurationChange(conf);
+    assertTrue(throughputController.isStopped());
+    assertTrue(regionServer.compactSplitThread.getCompactionThroughputController() instanceof NoLimitThroughputController);
+  }
+  finally {
+    conn.close();
+    TEST_UTIL.shutdownMiniCluster();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testCompaction() throws Exception {
+  long limitTime=testCompactionWithThroughputLimit();
+  long noLimitTime=testCompactionWithoutThroughputLimit();
+  LOG.info("With 1M/s limit, compaction use " + limitTime + "ms; without limit, compaction use "+ noLimitTime+ "ms");
+  assertTrue(limitTime > noLimitTime * 2);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test the logic that we calculate compaction pressure for a striped store.
+ */
+@Test public void testGetCompactionPressureForStripedStore() throws Exception {
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.set(StoreEngine.STORE_ENGINE_CLASS_KEY,StripeStoreEngine.class.getName());
+  conf.setBoolean(StripeStoreConfig.FLUSH_TO_L0_KEY,false);
+  conf.setInt(StripeStoreConfig.INITIAL_STRIPE_COUNT_KEY,2);
+  conf.setInt(StripeStoreConfig.MIN_FILES_KEY,4);
+  conf.setInt(HStore.BLOCKING_STOREFILES_KEY,12);
+  TEST_UTIL.startMiniCluster(1);
+  Connection conn=ConnectionFactory.createConnection(conf);
+  try {
+    HTableDescriptor htd=new HTableDescriptor(tableName);
+    htd.addFamily(new HColumnDescriptor(family));
+    htd.setCompactionEnabled(false);
+    TEST_UTIL.getHBaseAdmin().createTable(htd);
+    TEST_UTIL.waitTableAvailable(tableName);
+    HStore store=(HStore)getStoreWithName(tableName);
+    assertEquals(0,store.getStorefilesCount());
+    assertEquals(0.0,store.getCompactionPressure(),EPSILON);
+    Table table=conn.getTable(tableName);
+    for (int i=0; i < 4; i++) {
+      byte[] value1=new byte[0];
+      table.put(new Put(Bytes.toBytes(i)).addColumn(family,qualifier,value1));
+      byte[] value=new byte[0];
+      table.put(new Put(Bytes.toBytes(100 + i)).addColumn(family,qualifier,value));
+      TEST_UTIL.flush(tableName);
+    }
+    assertEquals(8,store.getStorefilesCount());
+    assertEquals(0.0,store.getCompactionPressure(),EPSILON);
+    byte[] value5=new byte[0];
+    table.put(new Put(Bytes.toBytes(4)).addColumn(family,qualifier,value5));
+    byte[] value4=new byte[0];
+    table.put(new Put(Bytes.toBytes(104)).addColumn(family,qualifier,value4));
+    TEST_UTIL.flush(tableName);
+    assertEquals(10,store.getStorefilesCount());
+    assertEquals(0.5,store.getCompactionPressure(),EPSILON);
+    byte[] value3=new byte[0];
+    table.put(new Put(Bytes.toBytes(5)).addColumn(family,qualifier,value3));
+    byte[] value2=new byte[0];
+    table.put(new Put(Bytes.toBytes(105)).addColumn(family,qualifier,value2));
+    TEST_UTIL.flush(tableName);
+    assertEquals(12,store.getStorefilesCount());
+    assertEquals(1.0,store.getCompactionPressure(),EPSILON);
+    byte[] value1=new byte[0];
+    table.put(new Put(Bytes.toBytes(6)).addColumn(family,qualifier,value1));
+    byte[] value=new byte[0];
+    table.put(new Put(Bytes.toBytes(106)).addColumn(family,qualifier,value));
+    TEST_UTIL.flush(tableName);
+    assertEquals(14,store.getStorefilesCount());
+    assertEquals(2.0,store.getCompactionPressure(),EPSILON);
+  }
+  finally {
+    conn.close();
+    TEST_UTIL.shutdownMiniCluster();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

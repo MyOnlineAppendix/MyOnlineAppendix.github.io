@@ -1,0 +1,211 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestColumnSeeking (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testReseeking() throws IOException {
+  String family="Family";
+  byte[] familyBytes=Bytes.toBytes("Family");
+  TableName table=TableName.valueOf(name.getMethodName());
+  HTableDescriptor htd=new HTableDescriptor(table);
+  HColumnDescriptor hcd=new HColumnDescriptor(family);
+  hcd.setMaxVersions(3);
+  htd.addFamily(hcd);
+  HRegionInfo info=new HRegionInfo(table,null,null,false);
+  Region region=TEST_UTIL.createLocalHRegion(info,htd);
+  List<String> rows=generateRandomWords(10,"row");
+  List<String> allColumns=generateRandomWords(100,"column");
+  long maxTimestamp=2;
+  double selectPercent=0.5;
+  int numberOfTests=5;
+  double flushPercentage=0.2;
+  double minorPercentage=0.2;
+  double majorPercentage=0.2;
+  double putPercentage=0.2;
+  HashMap<String,KeyValue> allKVMap=new HashMap<String,KeyValue>();
+  HashMap<String,KeyValue>[] kvMaps=new HashMap[numberOfTests];
+  ArrayList<String>[] columnLists=new ArrayList[numberOfTests];
+  String valueString="Value";
+  for (int i=0; i < numberOfTests; i++) {
+    kvMaps[i]=new HashMap<String,KeyValue>();
+    columnLists[i]=new ArrayList<String>();
+    for (    String column : allColumns) {
+      if (Math.random() < selectPercent) {
+        columnLists[i].add(column);
+      }
+    }
+  }
+  for (  String row : rows) {
+    Put p=new Put(Bytes.toBytes(row));
+    p.setDurability(Durability.SKIP_WAL);
+    for (    String column : allColumns) {
+      for (long timestamp=1; timestamp <= maxTimestamp; timestamp++) {
+        KeyValue kv=KeyValueTestUtil.create(row,family,column,timestamp,valueString);
+        if (Math.random() < putPercentage) {
+          p.add(kv);
+          allKVMap.put(kv.getKeyString(),kv);
+          for (int i=0; i < numberOfTests; i++) {
+            if (columnLists[i].contains(column)) {
+              kvMaps[i].put(kv.getKeyString(),kv);
+            }
+          }
+        }
+      }
+    }
+    region.put(p);
+    if (Math.random() < flushPercentage) {
+      LOG.info("Flushing... ");
+      region.flush(true);
+    }
+    if (Math.random() < minorPercentage) {
+      LOG.info("Minor compacting... ");
+      region.compact(false);
+    }
+    if (Math.random() < majorPercentage) {
+      LOG.info("Major compacting... ");
+      region.compact(true);
+    }
+  }
+  for (int i=0; i < numberOfTests + 1; i++) {
+    Collection<KeyValue> kvSet;
+    Scan scan=new Scan();
+    scan.setMaxVersions();
+    if (i < numberOfTests) {
+      if (columnLists[i].size() == 0)       continue;
+      kvSet=kvMaps[i].values();
+      for (      String column : columnLists[i]) {
+        scan.addColumn(familyBytes,Bytes.toBytes(column));
+      }
+      LOG.info("ExplicitColumns scanner");
+      LOG.info("Columns: " + columnLists[i].size() + "  Keys: "+ kvSet.size());
+    }
+ else {
+      kvSet=allKVMap.values();
+      LOG.info("Wildcard scanner");
+      LOG.info("Columns: " + allColumns.size() + "  Keys: "+ kvSet.size());
+    }
+    InternalScanner scanner=region.getScanner(scan);
+    List<Cell> results=new ArrayList<Cell>();
+    while (scanner.next(results))     ;
+    assertEquals(kvSet.size(),results.size());
+    assertTrue(KeyValueTestUtil.containsIgnoreMvccVersion(results,kvSet));
+  }
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testDuplicateVersions() throws IOException {
+  String family="Family";
+  byte[] familyBytes=Bytes.toBytes("Family");
+  TableName table=TableName.valueOf(name.getMethodName());
+  HColumnDescriptor hcd=new HColumnDescriptor(familyBytes).setMaxVersions(1000);
+  hcd.setMaxVersions(3);
+  HTableDescriptor htd=new HTableDescriptor(table);
+  htd.addFamily(hcd);
+  HRegionInfo info=new HRegionInfo(table,null,null,false);
+  Region region=TEST_UTIL.createLocalHRegion(info,htd);
+  try {
+    List<String> rows=generateRandomWords(10,"row");
+    List<String> allColumns=generateRandomWords(10,"column");
+    List<String> values=generateRandomWords(100,"value");
+    long maxTimestamp=2;
+    double selectPercent=0.5;
+    int numberOfTests=5;
+    double flushPercentage=0.2;
+    double minorPercentage=0.2;
+    double majorPercentage=0.2;
+    double putPercentage=0.2;
+    HashMap<String,KeyValue> allKVMap=new HashMap<String,KeyValue>();
+    HashMap<String,KeyValue>[] kvMaps=new HashMap[numberOfTests];
+    ArrayList<String>[] columnLists=new ArrayList[numberOfTests];
+    for (int i=0; i < numberOfTests; i++) {
+      kvMaps[i]=new HashMap<String,KeyValue>();
+      columnLists[i]=new ArrayList<String>();
+      for (      String column : allColumns) {
+        if (Math.random() < selectPercent) {
+          columnLists[i].add(column);
+        }
+      }
+    }
+    for (    String value : values) {
+      for (      String row : rows) {
+        Put p=new Put(Bytes.toBytes(row));
+        p.setDurability(Durability.SKIP_WAL);
+        for (        String column : allColumns) {
+          for (long timestamp=1; timestamp <= maxTimestamp; timestamp++) {
+            KeyValue kv=KeyValueTestUtil.create(row,family,column,timestamp,value);
+            if (Math.random() < putPercentage) {
+              p.add(kv);
+              allKVMap.put(kv.getKeyString(),kv);
+              for (int i=0; i < numberOfTests; i++) {
+                if (columnLists[i].contains(column)) {
+                  kvMaps[i].put(kv.getKeyString(),kv);
+                }
+              }
+            }
+          }
+        }
+        region.put(p);
+        if (Math.random() < flushPercentage) {
+          LOG.info("Flushing... ");
+          region.flush(true);
+        }
+        if (Math.random() < minorPercentage) {
+          LOG.info("Minor compacting... ");
+          region.compact(false);
+        }
+        if (Math.random() < majorPercentage) {
+          LOG.info("Major compacting... ");
+          region.compact(true);
+        }
+      }
+    }
+    for (int i=0; i < numberOfTests + 1; i++) {
+      Collection<KeyValue> kvSet;
+      Scan scan=new Scan();
+      scan.setMaxVersions();
+      if (i < numberOfTests) {
+        if (columnLists[i].size() == 0)         continue;
+        kvSet=kvMaps[i].values();
+        for (        String column : columnLists[i]) {
+          scan.addColumn(familyBytes,Bytes.toBytes(column));
+        }
+        LOG.info("ExplicitColumns scanner");
+        LOG.info("Columns: " + columnLists[i].size() + "  Keys: "+ kvSet.size());
+      }
+ else {
+        kvSet=allKVMap.values();
+        LOG.info("Wildcard scanner");
+        LOG.info("Columns: " + allColumns.size() + "  Keys: "+ kvSet.size());
+      }
+      InternalScanner scanner=region.getScanner(scan);
+      List<Cell> results=new ArrayList<Cell>();
+      while (scanner.next(results))       ;
+      assertEquals(kvSet.size(),results.size());
+      assertTrue(KeyValueTestUtil.containsIgnoreMvccVersion(results,kvSet));
+    }
+  }
+  finally {
+    HBaseTestingUtility.closeRegionAndWAL(region);
+  }
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

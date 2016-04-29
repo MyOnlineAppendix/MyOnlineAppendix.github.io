@@ -1,0 +1,89 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.core.integration.InterruptedQueryTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testQuery() throws Exception {
+  if (Constants.WINDOWS) {
+    return;
+  }
+  for (int i=0; i < 100; i++) {
+    session.getRootNode().addNode("node" + i,"nt:unstructured");
+  }
+  session.save();
+  final QueryManager qm=session.getWorkspace().getQueryManager();
+  final AtomicBoolean stop=new AtomicBoolean(false);
+  final List<Exception> exceptions=Collections.synchronizedList(new ArrayList<Exception>());
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      while (!stop.get() && exceptions.isEmpty()) {
+        try {
+          String stmt="//*[@jcr:primaryType='nt:unstructured']";
+          qm.createQuery(stmt,Query.XPATH).execute();
+        }
+ catch (        RepositoryException e) {
+          if (Constants.SUN_OS) {
+            Throwable t=e;
+            while (t.getCause() != null) {
+              t=t.getCause();
+            }
+            if (!(t instanceof InterruptedIOException)) {
+              exceptions.add(e);
+            }
+          }
+ else {
+            exceptions.add(e);
+          }
+        }
+      }
+    }
+  }
+);
+  t.start();
+  for (int i=0; i < 200 && t.isAlive(); i++) {
+    t.interrupt();
+    Thread.sleep((long)(100.0 * Math.random()));
+  }
+  stop.set(true);
+  t.join();
+  if (!exceptions.isEmpty()) {
+    throw exceptions.get(0);
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  if (session != null) {
+    session.logout();
+  }
+  if (repo != null) {
+    repo.shutdown();
+  }
+  deleteAll();
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  if (Constants.WINDOWS) {
+    return;
+  }
+  deleteAll();
+  FileUtils.copyInputStreamToFile(getClass().getResourceAsStream("repository-with-SimpleFSDirectory.xml"),new File(getTestDir(),"repository.xml"));
+  repo=RepositoryImpl.create(RepositoryConfig.create(getTestDir()));
+  session=repo.login(new SimpleCredentials("admin","admin".toCharArray()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

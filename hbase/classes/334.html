@@ -1,0 +1,266 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestCatalogJanitor (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that if a store file with the same name is present as those already backed up cause the
+ * already archived files to be timestamped backup
+ */
+@Test public void testDuplicateHFileResolution() throws Exception {
+  String table="table";
+  HBaseTestingUtility htu=new HBaseTestingUtility();
+  setRootDirAndCleanIt(htu,"testCleanParent");
+  Server server=new MockServer(htu);
+  MasterServices services=new MockMasterServices(server);
+  CatalogJanitor janitor=new CatalogJanitor(server,services);
+  HTableDescriptor htd=new HTableDescriptor(TableName.valueOf(table));
+  htd.addFamily(new HColumnDescriptor("f"));
+  HRegionInfo parent=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("eee"));
+  HRegionInfo splita=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("ccc"));
+  HRegionInfo splitb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ccc"),Bytes.toBytes("eee"));
+  Result r=createResult(parent,splita,splitb);
+  FileSystem fs=FileSystem.get(htu.getConfiguration());
+  Path rootdir=services.getMasterFileSystem().getRootDir();
+  FSUtils.setRootDir(fs.getConf(),rootdir);
+  Path tabledir=FSUtils.getTableDir(rootdir,parent.getTable());
+  Path storedir=HStore.getStoreHomedir(tabledir,parent,htd.getColumnFamilies()[0].getName());
+  System.out.println("Old root:" + rootdir);
+  System.out.println("Old table:" + tabledir);
+  System.out.println("Old store:" + storedir);
+  Path storeArchive=HFileArchiveUtil.getStoreArchivePath(services.getConfiguration(),parent,tabledir,htd.getColumnFamilies()[0].getName());
+  System.out.println("Old archive:" + storeArchive);
+  addMockStoreFiles(2,services,storedir);
+  FileStatus[] storeFiles=fs.listStatus(storedir);
+  assertTrue(janitor.cleanParent(parent,r));
+  FileStatus[] archivedStoreFiles=fs.listStatus(storeArchive);
+  assertArchiveEqualToOriginal(storeFiles,archivedStoreFiles,fs);
+  addMockStoreFiles(2,services,storedir);
+  assertTrue(janitor.cleanParent(parent,r));
+  archivedStoreFiles=fs.listStatus(storeArchive);
+  assertArchiveEqualToOriginal(storeFiles,archivedStoreFiles,fs,true);
+  services.stop("Test finished");
+  server.stop("shutdown");
+  janitor.cancel(true);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testCleanParent() throws IOException, InterruptedException {
+  HBaseTestingUtility htu=new HBaseTestingUtility();
+  setRootDirAndCleanIt(htu,"testCleanParent");
+  Server server=new MockServer(htu);
+  try {
+    MasterServices services=new MockMasterServices(server);
+    CatalogJanitor janitor=new CatalogJanitor(server,services);
+    HTableDescriptor htd=new HTableDescriptor(TableName.valueOf("table"));
+    htd.addFamily(new HColumnDescriptor("f"));
+    HRegionInfo parent=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("eee"));
+    HRegionInfo splita=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("ccc"));
+    HRegionInfo splitb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ccc"),Bytes.toBytes("eee"));
+    Result r=createResult(parent,splita,splitb);
+    Path rootdir=services.getMasterFileSystem().getRootDir();
+    Path tabledir=FSUtils.getTableDir(rootdir,htd.getTableName());
+    Path storedir=HStore.getStoreHomedir(tabledir,splita,htd.getColumnFamilies()[0].getName());
+    Reference ref=Reference.createTopReference(Bytes.toBytes("ccc"));
+    long now=System.currentTimeMillis();
+    Path p=new Path(storedir,Long.toString(now) + "." + parent.getEncodedName());
+    FileSystem fs=services.getMasterFileSystem().getFileSystem();
+    Path path=ref.write(fs,p);
+    assertTrue(fs.exists(path));
+    assertFalse(janitor.cleanParent(parent,r));
+    assertTrue(fs.delete(p,true));
+    assertTrue(janitor.cleanParent(parent,r));
+  }
+  finally {
+    server.stop("shutdown");
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Make sure parent gets cleaned up even if daughter is cleaned up before it.
+ * @throws IOException
+ * @throws InterruptedException
+ */
+@Test public void testParentCleanedEvenIfDaughterGoneFirst() throws IOException, InterruptedException {
+  parentWithSpecifiedEndKeyCleanedEvenIfDaughterGoneFirst("testParentCleanedEvenIfDaughterGoneFirst",Bytes.toBytes("eee"));
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * CatalogJanitor.scan() should not clean parent regions if their own
+ * parents are still referencing them. This ensures that grandfather regions
+ * do not point to deleted parent regions.
+ */
+@Test public void testScanDoesNotCleanRegionsWithExistingParents() throws Exception {
+  HBaseTestingUtility htu=new HBaseTestingUtility();
+  setRootDirAndCleanIt(htu,"testScanDoesNotCleanRegionsWithExistingParents");
+  Server server=new MockServer(htu);
+  MasterServices services=new MockMasterServices(server);
+  final HTableDescriptor htd=createHTableDescriptor();
+  HRegionInfo parent=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),new byte[0],true);
+  Thread.sleep(1001);
+  HRegionInfo splita=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("ccc"),true);
+  Thread.sleep(1001);
+  HRegionInfo splitaa=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("bbb"),false);
+  HRegionInfo splitab=new HRegionInfo(htd.getTableName(),Bytes.toBytes("bbb"),Bytes.toBytes("ccc"),false);
+  HRegionInfo splitb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ccc"),new byte[0]);
+  Thread.sleep(1001);
+  final Map<HRegionInfo,Result> splitParents=new TreeMap<HRegionInfo,Result>(new SplitParentFirstComparator());
+  splitParents.put(parent,createResult(parent,splita,splitb));
+  splita.setOffline(true);
+  splitParents.put(splita,createResult(splita,splitaa,splitab));
+  final Map<HRegionInfo,Result> mergedRegions=new TreeMap<HRegionInfo,Result>();
+  CatalogJanitor janitor=spy(new CatalogJanitor(server,services));
+  doReturn(new Triple<Integer,Map<HRegionInfo,Result>,Map<HRegionInfo,Result>>(10,mergedRegions,splitParents)).when(janitor).getMergedRegionsAndSplitParents();
+  Path splitaRef=createReferences(services,htd,parent,splita,Bytes.toBytes("ccc"),false);
+  assertEquals(0,janitor.scan());
+  FileSystem fs=FileSystem.get(htu.getConfiguration());
+  assertTrue(fs.delete(splitaRef,true));
+  assertEquals(2,janitor.scan());
+  services.stop("test finished");
+  janitor.cancel(true);
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that we correctly archive all the storefiles when a region is deleted
+ * @throws Exception
+ */
+@Test public void testSplitParentFirstComparator(){
+  SplitParentFirstComparator comp=new SplitParentFirstComparator();
+  final HTableDescriptor htd=createHTableDescriptor();
+  HRegionInfo rootRegion=new HRegionInfo(htd.getTableName(),HConstants.EMPTY_START_ROW,HConstants.EMPTY_END_ROW,true);
+  HRegionInfo firstRegion=new HRegionInfo(htd.getTableName(),HConstants.EMPTY_START_ROW,Bytes.toBytes("bbb"),true);
+  HRegionInfo lastRegion=new HRegionInfo(htd.getTableName(),Bytes.toBytes("bbb"),HConstants.EMPTY_END_ROW,true);
+  assertTrue(comp.compare(rootRegion,rootRegion) == 0);
+  assertTrue(comp.compare(firstRegion,firstRegion) == 0);
+  assertTrue(comp.compare(lastRegion,lastRegion) == 0);
+  assertTrue(comp.compare(rootRegion,firstRegion) < 0);
+  assertTrue(comp.compare(rootRegion,lastRegion) < 0);
+  assertTrue(comp.compare(firstRegion,lastRegion) < 0);
+  HRegionInfo firstRegiona=new HRegionInfo(htd.getTableName(),HConstants.EMPTY_START_ROW,Bytes.toBytes("aaa"),true);
+  HRegionInfo firstRegionb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("bbb"),true);
+  HRegionInfo lastRegiona=new HRegionInfo(htd.getTableName(),Bytes.toBytes("bbb"),Bytes.toBytes("ddd"),true);
+  HRegionInfo lastRegionb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ddd"),HConstants.EMPTY_END_ROW,true);
+  assertTrue(comp.compare(firstRegiona,firstRegiona) == 0);
+  assertTrue(comp.compare(firstRegionb,firstRegionb) == 0);
+  assertTrue(comp.compare(rootRegion,firstRegiona) < 0);
+  assertTrue(comp.compare(rootRegion,firstRegionb) < 0);
+  assertTrue(comp.compare(firstRegion,firstRegiona) < 0);
+  assertTrue(comp.compare(firstRegion,firstRegionb) < 0);
+  assertTrue(comp.compare(firstRegiona,firstRegionb) < 0);
+  assertTrue(comp.compare(lastRegiona,lastRegiona) == 0);
+  assertTrue(comp.compare(lastRegionb,lastRegionb) == 0);
+  assertTrue(comp.compare(rootRegion,lastRegiona) < 0);
+  assertTrue(comp.compare(rootRegion,lastRegionb) < 0);
+  assertTrue(comp.compare(lastRegion,lastRegiona) < 0);
+  assertTrue(comp.compare(lastRegion,lastRegionb) < 0);
+  assertTrue(comp.compare(lastRegiona,lastRegionb) < 0);
+  assertTrue(comp.compare(firstRegiona,lastRegiona) < 0);
+  assertTrue(comp.compare(firstRegiona,lastRegionb) < 0);
+  assertTrue(comp.compare(firstRegionb,lastRegiona) < 0);
+  assertTrue(comp.compare(firstRegionb,lastRegionb) < 0);
+  HRegionInfo lastRegionaa=new HRegionInfo(htd.getTableName(),Bytes.toBytes("bbb"),Bytes.toBytes("ccc"),false);
+  HRegionInfo lastRegionab=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ccc"),Bytes.toBytes("ddd"),false);
+  assertTrue(comp.compare(lastRegiona,lastRegionaa) < 0);
+  assertTrue(comp.compare(lastRegiona,lastRegionab) < 0);
+  assertTrue(comp.compare(lastRegionaa,lastRegionab) < 0);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testArchiveOldRegion() throws Exception {
+  String table="table";
+  HBaseTestingUtility htu=new HBaseTestingUtility();
+  setRootDirAndCleanIt(htu,"testCleanParent");
+  Server server=new MockServer(htu);
+  MasterServices services=new MockMasterServices(server);
+  CatalogJanitor janitor=new CatalogJanitor(server,services);
+  HTableDescriptor htd=new HTableDescriptor(TableName.valueOf(table));
+  htd.addFamily(new HColumnDescriptor("f"));
+  HRegionInfo parent=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("eee"));
+  HRegionInfo splita=new HRegionInfo(htd.getTableName(),Bytes.toBytes("aaa"),Bytes.toBytes("ccc"));
+  HRegionInfo splitb=new HRegionInfo(htd.getTableName(),Bytes.toBytes("ccc"),Bytes.toBytes("eee"));
+  Result parentMetaRow=createResult(parent,splita,splitb);
+  FileSystem fs=FileSystem.get(htu.getConfiguration());
+  Path rootdir=services.getMasterFileSystem().getRootDir();
+  FSUtils.setRootDir(fs.getConf(),rootdir);
+  Path tabledir=FSUtils.getTableDir(rootdir,htd.getTableName());
+  Path storedir=HStore.getStoreHomedir(tabledir,parent,htd.getColumnFamilies()[0].getName());
+  Path storeArchive=HFileArchiveUtil.getStoreArchivePath(services.getConfiguration(),parent,tabledir,htd.getColumnFamilies()[0].getName());
+  LOG.debug("Table dir:" + tabledir);
+  LOG.debug("Store dir:" + storedir);
+  LOG.debug("Store archive dir:" + storeArchive);
+  FileStatus[] mockFiles=addMockStoreFiles(2,services,storedir);
+  FileStatus[] storeFiles=fs.listStatus(storedir);
+  int index=0;
+  for (  FileStatus file : storeFiles) {
+    LOG.debug("Have store file:" + file.getPath());
+    assertEquals("Got unexpected store file",mockFiles[index].getPath(),storeFiles[index].getPath());
+    index++;
+  }
+  assertTrue(janitor.cleanParent(parent,parentMetaRow));
+  LOG.debug("Finished cleanup of parent region");
+  FileStatus[] archivedStoreFiles=fs.listStatus(storeArchive);
+  logFiles("archived files",storeFiles);
+  logFiles("archived files",archivedStoreFiles);
+  assertArchiveEqualToOriginal(storeFiles,archivedStoreFiles,fs);
+  FSUtils.delete(fs,rootdir,true);
+  services.stop("Test finished");
+  server.stop("Test finished");
+  janitor.cancel(true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Make sure last parent with empty end key gets cleaned up even if daughter is cleaned up before it.
+ * @throws IOException
+ * @throws InterruptedException
+ */
+@Test public void testLastParentCleanedEvenIfDaughterGoneFirst() throws IOException, InterruptedException {
+  parentWithSpecifiedEndKeyCleanedEvenIfDaughterGoneFirst("testLastParentCleanedEvenIfDaughterGoneFirst",new byte[0]);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

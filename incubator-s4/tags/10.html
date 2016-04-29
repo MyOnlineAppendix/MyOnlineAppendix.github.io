@@ -1,0 +1,75 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAPIUtilityVerifier</h3><kbd>Verifies values of objects/variables related to API calls (Java or TPL) </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.s4.core.ft.CheckpointingTest </h4><pre class="type-10 type-2 type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCheckpointStorage() throws Exception {
+  final ZooKeeper zk=CoreTestUtils.createZkClient();
+  final CountDownLatch signalValue1Set=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/value1Set",signalValue1Set,zk);
+  final CountDownLatch signalCheckpointed=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/checkpointed",signalCheckpointed,zk);
+  Injector injector=Guice.createInjector(new MockCommModule(),new MockCoreModuleWithFileBaseCheckpointingBackend());
+  TestApp app=injector.getInstance(TestApp.class);
+  app.init();
+  app.start();
+  Event event=new Event();
+  event.put("command",String.class,"setValue1");
+  event.put("value",String.class,"message1");
+  app.testStream.receiveEvent(new EventMessage("","stream1",app.getSerDeser().serialize(event)));
+  signalValue1Set.await();
+  StatefulTestPE pe=(StatefulTestPE)app.getPE("statefulPE1").getInstanceForKey("X");
+  Assert.assertEquals("message1",pe.getValue1());
+  Assert.assertEquals("",pe.getValue2());
+  event=new Event();
+  event.put("command",String.class,"checkpoint");
+  app.testStream.receiveEvent(new EventMessage("","stream1",app.getSerDeser().serialize(event)));
+  Assert.assertTrue(signalCheckpointed.await(10,TimeUnit.SECONDS));
+  Thread.sleep(1000);
+  CheckpointId safeKeeperId=new CheckpointId(pe);
+  File expected=new File(System.getProperty("user.dir") + File.separator + "tmp"+ File.separator+ "storage"+ File.separator+ safeKeeperId.getPrototypeId()+ File.separator+ Base64.encodeBase64URLSafeString(safeKeeperId.getStringRepresentation().getBytes()));
+  Assert.assertTrue(expected.exists());
+  StatefulTestPE refPE=new StatefulTestPE();
+  refPE.onCreate();
+  refPE.setValue1("message1");
+  Field idField=ProcessingElement.class.getDeclaredField("id");
+  idField.setAccessible(true);
+  idField.set(refPE,"X");
+  byte[] refBytes=app.getSerDeser().serialize(refPE);
+  Assert.assertTrue(Arrays.equals(refBytes,Files.toByteArray(expected)));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.overloadgen.OverloadDispatcherTest </h4><pre class="type-10 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testNoMatchingMethod() throws Exception {
+  PrintStream stdout=System.out;
+  try {
+    ByteArrayOutputStream tmpOut=new ByteArrayOutputStream();
+    System.setOut(new PrintStream(tmpOut));
+    OverloadDispatcherGenerator gen=new OverloadDispatcherGenerator(B.class);
+    OverloadDispatcher dispatcher=(OverloadDispatcher)gen.generate().newInstance();
+    B b=new B();
+    dispatcher.dispatchEvent(b,new Event1());
+    String output=tmpOut.toString().trim();
+    Assert.assertTrue(Pattern.compile("^.+OverloadDispatcher\\d+ - Cannot dispatch event " + "of type \\[" + Event1.class.getName() + "\\] to PE of type \\["+ B.class.getName()+ "\\] : no matching onEvent method found$",Pattern.DOTALL).matcher(output).matches());
+  }
+  finally {
+    System.setOut(stdout);
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

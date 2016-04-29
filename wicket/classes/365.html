@@ -1,0 +1,119 @@
+<h3 style="margin:0px">Class: org.apache.wicket.protocol.http.StoredResponsesMapTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * <a href="https://issues.apache.org/jira/browse/WICKET-3736">WICKET-3736</a>
+ * Tries to simulate heavy load on the {@link StoredResponsesMap} by putting many entries and
+ * removing randomly them.
+ * The test is disabled by default because it is slow (~ 30secs). Enable it when we have
+ * categorized tests ({@link Category}) and run slow ones only at Apache CI servers
+ * @throws InterruptedException
+ */
+@Test public void heavyLoad() throws InterruptedException {
+  final int numberOfThreads=100;
+  final int iterations=1000;
+  final CountDownLatch startLatch=new CountDownLatch(numberOfThreads);
+  final CountDownLatch endLatch=new CountDownLatch(numberOfThreads);
+  final SecureRandom rnd=new SecureRandom();
+  final StoredResponsesMap map=new StoredResponsesMap(1000,Duration.seconds(60));
+  final List<String> keys=new CopyOnWriteArrayList<String>();
+  final Runnable r=new Runnable(){
+    @Override public void run(){
+      startLatch.countDown();
+      try {
+        startLatch.await();
+      }
+ catch (      InterruptedException e) {
+        throw new RuntimeException(e);
+      }
+      for (int i=0; i < iterations; i++) {
+        String key="abc" + (rnd.nextDouble() * iterations);
+        keys.add(key);
+        map.put(key,new BufferedWebResponse(null));
+        int randomMax=keys.size() - 1;
+        int toRemove=randomMax == 0 ? 0 : rnd.nextInt(randomMax);
+        String key2=keys.get(toRemove);
+        map.remove(key2);
+      }
+      endLatch.countDown();
+    }
+  }
+;
+  for (int t=0; t < numberOfThreads; t++) {
+    new Thread(r).start();
+  }
+  endLatch.await();
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-6 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifies that getting a value which is expired will return <code>null</code>.
+ * @throws Exception
+ */
+@Test public void getExpiredValue() throws Exception {
+  Time start=Time.now();
+  Duration timeout=Duration.milliseconds(50);
+  StoredResponsesMap map=new StoredResponsesMap(1000,timeout);
+  assertEquals(0,map.size());
+  map.put("1",new BufferedWebResponse(null));
+  assertEquals(1,map.size());
+  TimeUnit.MILLISECONDS.sleep(timeout.getMilliseconds() * 2);
+  assertTrue("The timeout has passed.",Time.now().subtract(start).compareTo(timeout) == 1);
+  Object value=map.get("1");
+  assertNull(value);
+}
+
+</code></pre>
+
+<pre class="type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies that exceptions are thrown during the test case execution
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Verifies that {@link StoredResponsesMap} can have only {@link BufferedWebResponse} values
+ */
+@Test(expected=IllegalArgumentException.class) public void cannotPutArbitraryValue(){
+  StoredResponsesMap map=new StoredResponsesMap(1000,Duration.days(1));
+  map.put("1",new Object());
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifies that {@link StoredResponsesMap} will expire the oldest entry if it is older than 2
+ * seconds
+ * @throws Exception
+ */
+@Test public void entriesLife2Seconds() throws Exception {
+  StoredResponsesMap map=new StoredResponsesMap(1000,Duration.seconds(2));
+  assertEquals(0,map.size());
+  map.put("1",new BufferedWebResponse(null));
+  assertEquals(1,map.size());
+  TimeUnit.SECONDS.sleep(3);
+  map.put("2",new BufferedWebResponse(null));
+  assertEquals(1,map.size());
+  assertTrue(map.containsKey("2"));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,373 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBooleanVerifier</h3><kbd>Verifies boolean conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.s4.core.ft.CheckpointingTest </h4><pre class="type-10 type-2 type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCheckpointStorage() throws Exception {
+  final ZooKeeper zk=CoreTestUtils.createZkClient();
+  final CountDownLatch signalValue1Set=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/value1Set",signalValue1Set,zk);
+  final CountDownLatch signalCheckpointed=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/checkpointed",signalCheckpointed,zk);
+  Injector injector=Guice.createInjector(new MockCommModule(),new MockCoreModuleWithFileBaseCheckpointingBackend());
+  TestApp app=injector.getInstance(TestApp.class);
+  app.init();
+  app.start();
+  Event event=new Event();
+  event.put("command",String.class,"setValue1");
+  event.put("value",String.class,"message1");
+  app.testStream.receiveEvent(new EventMessage("","stream1",app.getSerDeser().serialize(event)));
+  signalValue1Set.await();
+  StatefulTestPE pe=(StatefulTestPE)app.getPE("statefulPE1").getInstanceForKey("X");
+  Assert.assertEquals("message1",pe.getValue1());
+  Assert.assertEquals("",pe.getValue2());
+  event=new Event();
+  event.put("command",String.class,"checkpoint");
+  app.testStream.receiveEvent(new EventMessage("","stream1",app.getSerDeser().serialize(event)));
+  Assert.assertTrue(signalCheckpointed.await(10,TimeUnit.SECONDS));
+  Thread.sleep(1000);
+  CheckpointId safeKeeperId=new CheckpointId(pe);
+  File expected=new File(System.getProperty("user.dir") + File.separator + "tmp"+ File.separator+ "storage"+ File.separator+ safeKeeperId.getPrototypeId()+ File.separator+ Base64.encodeBase64URLSafeString(safeKeeperId.getStringRepresentation().getBytes()));
+  Assert.assertTrue(expected.exists());
+  StatefulTestPE refPE=new StatefulTestPE();
+  refPE.onCreate();
+  refPE.setValue1("message1");
+  Field idField=ProcessingElement.class.getDeclaredField("id");
+  idField.setAccessible(true);
+  idField.set(refPE,"X");
+  byte[] refBytes=app.getSerDeser().serialize(refPE);
+  Assert.assertTrue(Arrays.equals(refBytes,Files.toByteArray(expected)));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.ft.FTWordCountTest </h4><pre class="type-2 type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCheckpointAndRecovery() throws Exception {
+  Injector injector=CoreTestUtils.createInjectorWithNonFailFastZKClients();
+  TCPEmitter emitter=injector.getInstance(TCPEmitter.class);
+  final ZooKeeper zk=CoreTestUtils.createZkClient();
+  restartNode();
+  CountDownLatch signalTextProcessed=new CountDownLatch(1);
+  CommTestUtils.watchAndSignalCreation("/results",signalTextProcessed,zk);
+  for (int i=1; i <= WordCountTest.SENTENCE_1_TOTAL_WORDS; i++) {
+    zk.create("/continue_" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL);
+  }
+  CountDownLatch signalSentence1Processed=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/classifierIteration_" + WordCountTest.SENTENCE_1_TOTAL_WORDS,signalSentence1Processed,zk);
+  injectSentence(injector,emitter,WordCountTest.SENTENCE_1);
+  signalSentence1Processed.await(10,TimeUnit.SECONDS);
+  Thread.sleep(1000);
+  forkedS4App.destroy();
+  restartNode();
+  for (int i=WordCountTest.SENTENCE_1_TOTAL_WORDS + 1; i <= WordCountTest.SENTENCE_1_TOTAL_WORDS + WordCountTest.SENTENCE_2_TOTAL_WORDS; i++) {
+    zk.create("/continue_" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL);
+  }
+  CountDownLatch sentence2Processed=new CountDownLatch(1);
+  CoreTestUtils.watchAndSignalCreation("/classifierIteration_" + (WordCountTest.SENTENCE_1_TOTAL_WORDS + WordCountTest.SENTENCE_2_TOTAL_WORDS),sentence2Processed,zk);
+  injectSentence(injector,emitter,WordCountTest.SENTENCE_2);
+  sentence2Processed.await(10,TimeUnit.SECONDS);
+  Thread.sleep(1000);
+  forkedS4App.destroy();
+  restartNode();
+  for (int i=WordCountTest.SENTENCE_1_TOTAL_WORDS + WordCountTest.SENTENCE_2_TOTAL_WORDS + 1; i <= WordCountTest.TOTAL_WORDS; i++) {
+    zk.create("/continue_" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL);
+  }
+  injectSentence(injector,emitter,WordCountTest.SENTENCE_3);
+  Assert.assertTrue(signalTextProcessed.await(10,TimeUnit.SECONDS));
+  String results=new String(zk.getData("/results",false,null));
+  Assert.assertEquals("be=2;da=2;doobie=5;not=1;or=1;to=2;",results);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.overloadgen.OverloadDispatcherTest </h4><pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testGenericEvent() throws Exception {
+  OverloadDispatcherGenerator gen=new OverloadDispatcherGenerator(D.class);
+  OverloadDispatcher dispatcher=(OverloadDispatcher)gen.generate().newInstance();
+  D d=new D();
+  dispatcher.dispatchEvent(d,new Event2());
+  Assert.assertTrue(d.processedGenericEvent);
+  dispatcher.dispatchEvent(d,new Event1());
+  Assert.assertTrue(d.processedEvent1);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testNoMatchingMethod() throws Exception {
+  PrintStream stdout=System.out;
+  try {
+    ByteArrayOutputStream tmpOut=new ByteArrayOutputStream();
+    System.setOut(new PrintStream(tmpOut));
+    OverloadDispatcherGenerator gen=new OverloadDispatcherGenerator(B.class);
+    OverloadDispatcher dispatcher=(OverloadDispatcher)gen.generate().newInstance();
+    B b=new B();
+    dispatcher.dispatchEvent(b,new Event1());
+    String output=tmpOut.toString().trim();
+    Assert.assertTrue(Pattern.compile("^.+OverloadDispatcher\\d+ - Cannot dispatch event " + "of type \\[" + Event1.class.getName() + "\\] to PE of type \\["+ B.class.getName()+ "\\] : no matching onEvent method found$",Pattern.DOTALL).matcher(output).matches());
+  }
+  finally {
+    System.setOut(stdout);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDispatchWithEventHierarchies() throws Exception {
+  OverloadDispatcherGenerator gen=new OverloadDispatcherGenerator(A.class);
+  OverloadDispatcher dispatcher=(OverloadDispatcher)gen.generate().newInstance();
+  A a=new A();
+  dispatcher.dispatchEvent(a,new Event1());
+  Assert.assertEquals(Event1.class,a.processedEventClass);
+  dispatcher.dispatchEvent(a,new Event1a());
+  Assert.assertEquals(Event1a.class,a.processedEventClass);
+  dispatcher.dispatchEvent(a,new Event2());
+  Assert.assertEquals(Event2.class,a.processedEventClass);
+  dispatcher.dispatchTrigger(a,new Event2());
+  Assert.assertEquals(Event2.class,a.processedTriggerEventClass);
+  Assert.assertTrue(a.processedTriggerThroughGenericMethod);
+  dispatcher.dispatchTrigger(a,new Event1());
+  Assert.assertEquals(Event1.class,a.processedTriggerEventClass);
+  Assert.assertFalse(a.processedTriggerThroughGenericMethod);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDispatchWithSingleMethod() throws Exception {
+  OverloadDispatcherGenerator gen=new OverloadDispatcherGenerator(C.class);
+  OverloadDispatcher dispatcher=(OverloadDispatcher)gen.generate().newInstance();
+  C c=new C();
+  dispatcher.dispatchEvent(c,new Event2());
+  Assert.assertFalse(c.processedEvent1Class);
+  dispatcher.dispatchEvent(c,new Event1());
+  Assert.assertTrue(c.processedEvent1Class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.timers.MultithreadingTest </h4><pre class="type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testSynchronization() throws IOException, InterruptedException {
+  Injector injector=Guice.createInjector(new MockCommModule(),new MockCoreModule());
+  TestApp app=injector.getInstance(TestApp.class);
+  app.count=2;
+  app.init();
+  app.start();
+  app.testStream.receiveEvent(new EventMessage(APP_NAME,STREAM_NAME,app.getSerDeser().serialize(new Event())));
+  assertFalse("The timer wasn't synchronized with the event",app.latch.await(2,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.triggers.CountTriggerTest </h4><pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testEventCountBasedTrigger() throws Exception {
+  triggerType=TriggerType.COUNT_BASED;
+  Assert.assertTrue(createTriggerAppAndSendEvent().await(5,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.triggers.NoTriggerTest </h4><pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testNoTrigger() throws Exception {
+  triggerType=TriggerType.NONE;
+  Assert.assertFalse(createTriggerAppAndSendEvent().await(5,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.triggers.TimeTriggerTest </h4><pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testTimeBasedTrigger() throws Exception {
+  triggerType=TriggerType.TIME_BASED;
+  Assert.assertTrue(createTriggerAppAndSendEvent().await(5,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.core.windowing.WindowingPETest </h4><pre class="type-12 type-13 type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test(){
+  ch.qos.logback.classic.Logger root=(ch.qos.logback.classic.Logger)LoggerFactory.getLogger(Logger.ROOT_LOGGER_NAME);
+  root.setLevel(Level.DEBUG);
+  Injector injector=Guice.createInjector(new MockCommModule(),new MockCoreModule());
+  TestTimeWindowedApp app=injector.getInstance(TestTimeWindowedApp.class);
+  app.init();
+  app.start();
+  for (int i=0; i < NB_EVENTS; i++) {
+    Event e=new Event();
+    e.put("value",Integer.class,i);
+    app.stream1.receiveEvent(new EventMessage(APP_NAME,STREAM_NAME,app.getSerDeser().serialize(e)));
+  }
+  try {
+    Assert.assertTrue(signalAllEventsProcessed.await(30,TimeUnit.SECONDS));
+  }
+ catch (  InterruptedException e) {
+    Assert.fail();
+  }
+  Assert.assertEquals(NB_EVENTS,allValues.size());
+  for (int i=0; i < NB_EVENTS; i++) {
+    Assert.assertEquals((Integer)i,allValues.get(i));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.deploy.TestAutomaticDeployment </h4><pre class="type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZkTriggeredDeploymentFromHttp() throws Exception {
+  initializeS4Node();
+  Assert.assertFalse(zkClient.exists(AppConstants.INITIALIZED_ZNODE_1));
+  File tmpDir=Files.createTempDir();
+  File s4rToDeploy=new File(tmpDir,String.valueOf(System.currentTimeMillis()));
+  Assert.assertTrue(ByteStreams.copy(Files.newInputStreamSupplier(new File(tmpAppsDir.getAbsolutePath() + "/simple-deployable-app-1-0.0.0-SNAPSHOT.s4r")),Files.newOutputStreamSupplier(s4rToDeploy)) > 0);
+  InetSocketAddress addr=new InetSocketAddress(8080);
+  httpServer=HttpServer.create(addr,0);
+  httpServer.createContext("/s4",new MyHandler(tmpDir));
+  httpServer.setExecutor(Executors.newCachedThreadPool());
+  httpServer.start();
+  assertDeployment("http://localhost:8080/s4/" + s4rToDeploy.getName());
+  ZkClient client2=new ZkClient("localhost:" + CommTestUtils.ZK_PORT);
+  Assert.assertEquals("Salut!",client2.readData("/resourceData"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testZkTriggeredDeploymentFromFileSystem() throws Exception {
+  initializeS4Node();
+  Assert.assertFalse(zkClient.exists(AppConstants.INITIALIZED_ZNODE_1));
+  File s4rToDeploy=File.createTempFile("testapp" + System.currentTimeMillis(),"s4r");
+  Assert.assertTrue(ByteStreams.copy(Files.newInputStreamSupplier(new File(tmpAppsDir.getAbsolutePath() + "/simple-deployable-app-1-0.0.0-SNAPSHOT.s4r")),Files.newOutputStreamSupplier(s4rToDeploy)) > 0);
+  final String uri=s4rToDeploy.toURI().toString();
+  assertDeployment(uri);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.deploy.prodcon.TestProducerConsumer </h4><pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testInitialDeploymentFromFileSystem() throws Exception {
+  File producerS4R=new File(tmpAppsDir,"producer-app-0.0.0-SNAPSHOT.s4r");
+  String uriProducer=producerS4R.toURI().toString();
+  File consumerS4R=new File(tmpAppsDir,"consumer-app-0.0.0-SNAPSHOT.s4r");
+  String uriConsumer=consumerS4R.toURI().toString();
+  initializeS4Node();
+  CountDownLatch signalConsumptionComplete=new CountDownLatch(1);
+  CommTestUtils.watchAndSignalCreation("/AllTicksReceived",signalConsumptionComplete,CommTestUtils.createZkClient());
+  boolean consumerStreamReady=true;
+  try {
+    zkClient.getChildren("/s4/streams/tickStream/consumers");
+  }
+ catch (  ZkNoNodeException e) {
+    consumerStreamReady=false;
+  }
+  Assert.assertFalse(consumerStreamReady);
+  final CountDownLatch signalConsumerReady=new CountDownLatch(1);
+  zkClient.subscribeChildChanges("/s4/streams/tickStream/consumers",new IZkChildListener(){
+    @Override public void handleChildChange(    String parentPath,    List<String> currentChilds) throws Exception {
+      if (currentChilds.size() == 1) {
+        signalConsumerReady.countDown();
+      }
+    }
+  }
+);
+  ZNRecord record2=new ZNRecord(String.valueOf(System.currentTimeMillis()));
+  record2.putSimpleField(DistributedDeploymentManager.S4R_URI,uriConsumer);
+  zkClient.create("/s4/clusters/" + CONSUMER_CLUSTER + "/app/s4App",record2,CreateMode.PERSISTENT);
+  Assert.assertTrue(signalConsumerReady.await(20,TimeUnit.SECONDS));
+  ZNRecord record1=new ZNRecord(String.valueOf(System.currentTimeMillis()));
+  record1.putSimpleField(DistributedDeploymentManager.S4R_URI,uriProducer);
+  zkClient.create("/s4/clusters/" + PRODUCER_CLUSTER + "/app/s4App",record1,CreateMode.PERSISTENT);
+  Assert.assertTrue(signalConsumptionComplete.await(30,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.s4.wordcount.WordCountTest </h4><pre class="type-2 type-11 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * A simple word count application:
+ * sentences words word counts Adapter ------------> WordSplitterPE -----------> WordCounterPE ------------->
+ * WordClassifierPE key = "sentence" key = word key="classifier" (should be *)
+ * The test consists in checking that words are correctly counted.
+ */
+@Test public void testSimple() throws Exception {
+  final ZooKeeper zk=CommTestUtils.createZkClient();
+  Main.main(new String[]{"-cluster=cluster1","-appClass=" + WordCountApp.class.getName(),"-extraModulesClasses=" + WordCountModule.class.getName()});
+  CountDownLatch signalTextProcessed=new CountDownLatch(1);
+  CommTestUtils.watchAndSignalCreation("/results",signalTextProcessed,zk);
+  for (int i=1; i <= SENTENCE_1_TOTAL_WORDS + SENTENCE_2_TOTAL_WORDS + 1; i++) {
+    zk.create("/continue_" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL);
+  }
+  injectSentence(SENTENCE_1);
+  injectSentence(SENTENCE_2);
+  injectSentence(SENTENCE_3);
+  Assert.assertTrue(signalTextProcessed.await(10,TimeUnit.SECONDS));
+  String results=new String(zk.getData("/results",false,null));
+  Assert.assertEquals("be=2;da=2;doobie=5;not=1;or=1;to=2;",results);
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

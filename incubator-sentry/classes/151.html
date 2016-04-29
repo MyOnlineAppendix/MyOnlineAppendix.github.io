@@ -1,0 +1,69 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hive.TestPrivilegeAtTransform (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-12 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Steps:
+ * 1. admin create database, create table, load data into it
+ * 2. all@server can issue transforms command
+ * 3. all@database cannot issue transform command
+ * 4. insert@table select@table cannot issue transform command
+ * 5. select@view cannot issue transform command
+ * 6. transform@server can issue the transform command
+ * 7. non-admin user with URI privilege on transform can execute query
+ */
+@Test public void testTransform1() throws Exception {
+  policyFile.addPermissionsToRole("all_db1","server=server1->db=" + DB1).addPermissionsToRole("transform_uri","server=server1->uri=file:///bin/cat").addRolesToGroup(USERGROUP1,"all_db1").addRolesToGroup(USERGROUP2,"all_db1","transform_uri").setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  String tableName1="tb_1";
+  String query="select TRANSFORM(a.under_col, a.value) " + "USING '/bin/cat' AS (tunder_col, tvalue) FROM " + DB1 + "."+ tableName1+ " a";
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS " + DB1 + " CASCADE");
+  statement.execute("CREATE DATABASE " + DB1);
+  statement.execute("DROP TABLE IF EXISTS " + DB1 + "."+ tableName1);
+  statement.execute("create table " + DB1 + "."+ tableName1+ " (under_col int, value string)");
+  statement.execute("load data local inpath '" + dataFile.getPath() + "' into table "+ DB1+ "."+ tableName1);
+  assertTrue(query,statement.execute(query));
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  context.assertAuthzException(statement,query);
+  policyFile.addPermissionsToRole("select_tb1","server=server1->db=" + DB1 + "->table=tb_1->action=select").addPermissionsToRole("insert_tb1","server=server1->db=" + DB1 + "->table=tb_1->action=insert").addRolesToGroup(USERGROUP1,"select_tb1","insert_tb1");
+  writePolicyFile(policyFile);
+  context.assertAuthzException(statement,query);
+  policyFile.addPermissionsToRole("all_server1","server=server1").addRolesToGroup(USERGROUP1,"all_server1");
+  writePolicyFile(policyFile);
+  assertTrue(query,statement.execute(query));
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  assertTrue(query,statement.execute(query));
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before public void setup() throws Exception {
+  dataDir=context.getDataDir();
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  policyFile=PolicyFile.setAdminOnServer1(ADMINGROUP);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,96 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.test.AsyncLedgerOpsTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-11 type-8 type-3 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testAsyncCreateClose() throws IOException, BKException {
+  try {
+    ControlObj ctx=new ControlObj();
+synchronized (ctx) {
+      LOG.info("Going to create ledger asynchronously");
+      bkc.asyncCreateLedger(3,2,digestType,ledgerPassword,this,ctx);
+      ctx.wait();
+    }
+    LedgerHandle lh=ctx.getLh();
+    ledgerId=lh.getId();
+    LOG.info("Ledger ID: " + lh.getId());
+    for (int i=0; i < numEntriesToWrite; i++) {
+      ByteBuffer entry=ByteBuffer.allocate(4);
+      entry.putInt(rng.nextInt(maxInt));
+      entry.position(0);
+      entries.add(entry.array());
+      entriesSize.add(entry.array().length);
+      lh.asyncAddEntry(entry.array(),this,sync);
+    }
+synchronized (sync) {
+      while (sync.counter < numEntriesToWrite) {
+        LOG.debug("Entries counter = " + sync.counter);
+        sync.wait();
+      }
+    }
+    LOG.info("*** WRITE COMPLETE ***");
+synchronized (ctx) {
+      lh.asyncClose(this,ctx);
+      ctx.wait();
+    }
+synchronized (ctx) {
+      bkc.asyncOpenLedger(ledgerId,digestType,ledgerPassword,this,ctx);
+      ctx.wait();
+    }
+    lh=ctx.getLh();
+    LOG.debug("Number of entries written: " + lh.getLastAddConfirmed());
+    assertTrue("Verifying number of entries written",lh.getLastAddConfirmed() == (numEntriesToWrite - 1));
+    lh.asyncReadEntries(0,numEntriesToWrite - 1,this,sync);
+synchronized (sync) {
+      while (sync.value == false) {
+        sync.wait();
+      }
+    }
+    LOG.debug("*** READ COMPLETE ***");
+    int i=0;
+    while (ls.hasMoreElements()) {
+      ByteBuffer origbb=ByteBuffer.wrap(entries.get(i));
+      Integer origEntry=origbb.getInt();
+      byte[] entry=ls.nextElement().getEntry();
+      ByteBuffer result=ByteBuffer.wrap(entry);
+      LOG.debug("Length of result: " + result.capacity());
+      LOG.debug("Original entry: " + origEntry);
+      Integer retrEntry=result.getInt();
+      LOG.debug("Retrieved entry: " + retrEntry);
+      assertTrue("Checking entry " + i + " for equality",origEntry.equals(retrEntry));
+      assertTrue("Checking entry " + i + " for size",entry.length == entriesSize.get(i).intValue());
+      i++;
+    }
+    assertTrue("Checking number of read entries",i == numEntriesToWrite);
+    lh.close();
+  }
+ catch (  InterruptedException e) {
+    LOG.error("Interrupted",e);
+    fail("InterruptedException");
+  }
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before @Override public void setUp() throws Exception {
+  super.setUp();
+  rng=new Random(System.currentTimeMillis());
+  entries=new ArrayList<byte[]>();
+  entriesSize=new ArrayList<Integer>();
+  sync=new SyncObj();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

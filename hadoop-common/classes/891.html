@@ -1,0 +1,144 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.v2.app.TestMRClientService (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-1 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  MRAppWithClientService app=new MRAppWithClientService(1,0,false);
+  Configuration conf=new Configuration();
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("Num tasks not correct",1,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task task=it.next();
+  app.waitForState(task,TaskState.RUNNING);
+  TaskAttempt attempt=task.getAttempts().values().iterator().next();
+  app.waitForState(attempt,TaskAttemptState.RUNNING);
+  String diagnostic1="Diagnostic1";
+  String diagnostic2="Diagnostic2";
+  app.getContext().getEventHandler().handle(new TaskAttemptDiagnosticsUpdateEvent(attempt.getID(),diagnostic1));
+  TaskAttemptStatus taskAttemptStatus=new TaskAttemptStatus();
+  taskAttemptStatus.id=attempt.getID();
+  taskAttemptStatus.progress=0.5f;
+  taskAttemptStatus.stateString="RUNNING";
+  taskAttemptStatus.taskState=TaskAttemptState.RUNNING;
+  taskAttemptStatus.phase=Phase.MAP;
+  app.getContext().getEventHandler().handle(new TaskAttemptStatusUpdateEvent(attempt.getID(),taskAttemptStatus));
+  YarnRPC rpc=YarnRPC.create(conf);
+  MRClientProtocol proxy=(MRClientProtocol)rpc.getProxy(MRClientProtocol.class,app.clientService.getBindAddress(),conf);
+  GetCountersRequest gcRequest=recordFactory.newRecordInstance(GetCountersRequest.class);
+  gcRequest.setJobId(job.getID());
+  Assert.assertNotNull("Counters is null",proxy.getCounters(gcRequest).getCounters());
+  GetJobReportRequest gjrRequest=recordFactory.newRecordInstance(GetJobReportRequest.class);
+  gjrRequest.setJobId(job.getID());
+  JobReport jr=proxy.getJobReport(gjrRequest).getJobReport();
+  verifyJobReport(jr);
+  GetTaskAttemptCompletionEventsRequest gtaceRequest=recordFactory.newRecordInstance(GetTaskAttemptCompletionEventsRequest.class);
+  gtaceRequest.setJobId(job.getID());
+  gtaceRequest.setFromEventId(0);
+  gtaceRequest.setMaxEvents(10);
+  Assert.assertNotNull("TaskCompletionEvents is null",proxy.getTaskAttemptCompletionEvents(gtaceRequest).getCompletionEventList());
+  GetDiagnosticsRequest gdRequest=recordFactory.newRecordInstance(GetDiagnosticsRequest.class);
+  gdRequest.setTaskAttemptId(attempt.getID());
+  Assert.assertNotNull("Diagnostics is null",proxy.getDiagnostics(gdRequest).getDiagnosticsList());
+  GetTaskAttemptReportRequest gtarRequest=recordFactory.newRecordInstance(GetTaskAttemptReportRequest.class);
+  gtarRequest.setTaskAttemptId(attempt.getID());
+  TaskAttemptReport tar=proxy.getTaskAttemptReport(gtarRequest).getTaskAttemptReport();
+  verifyTaskAttemptReport(tar);
+  GetTaskReportRequest gtrRequest=recordFactory.newRecordInstance(GetTaskReportRequest.class);
+  gtrRequest.setTaskId(task.getID());
+  Assert.assertNotNull("TaskReport is null",proxy.getTaskReport(gtrRequest).getTaskReport());
+  GetTaskReportsRequest gtreportsRequest=recordFactory.newRecordInstance(GetTaskReportsRequest.class);
+  gtreportsRequest.setJobId(job.getID());
+  gtreportsRequest.setTaskType(TaskType.MAP);
+  Assert.assertNotNull("TaskReports for map is null",proxy.getTaskReports(gtreportsRequest).getTaskReportList());
+  gtreportsRequest=recordFactory.newRecordInstance(GetTaskReportsRequest.class);
+  gtreportsRequest.setJobId(job.getID());
+  gtreportsRequest.setTaskType(TaskType.REDUCE);
+  Assert.assertNotNull("TaskReports for reduce is null",proxy.getTaskReports(gtreportsRequest).getTaskReportList());
+  List<String> diag=proxy.getDiagnostics(gdRequest).getDiagnosticsList();
+  Assert.assertEquals("Num diagnostics not correct",1,diag.size());
+  Assert.assertEquals("Diag 1 not correct",diagnostic1,diag.get(0).toString());
+  TaskReport taskReport=proxy.getTaskReport(gtrRequest).getTaskReport();
+  Assert.assertEquals("Num diagnostics not correct",1,taskReport.getDiagnosticsCount());
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(job,JobState.SUCCEEDED);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testViewAclOnlyCannotModify() throws Exception {
+  final MRAppWithClientService app=new MRAppWithClientService(1,0,false);
+  final Configuration conf=new Configuration();
+  conf.setBoolean(MRConfig.MR_ACLS_ENABLED,true);
+  conf.set(MRJobConfig.JOB_ACL_VIEW_JOB,"viewonlyuser");
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("Num tasks not correct",1,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task task=it.next();
+  app.waitForState(task,TaskState.RUNNING);
+  TaskAttempt attempt=task.getAttempts().values().iterator().next();
+  app.waitForState(attempt,TaskAttemptState.RUNNING);
+  UserGroupInformation viewOnlyUser=UserGroupInformation.createUserForTesting("viewonlyuser",new String[]{});
+  Assert.assertTrue("viewonlyuser cannot view job",job.checkAccess(viewOnlyUser,JobACL.VIEW_JOB));
+  Assert.assertFalse("viewonlyuser can modify job",job.checkAccess(viewOnlyUser,JobACL.MODIFY_JOB));
+  MRClientProtocol client=viewOnlyUser.doAs(new PrivilegedExceptionAction<MRClientProtocol>(){
+    @Override public MRClientProtocol run() throws Exception {
+      YarnRPC rpc=YarnRPC.create(conf);
+      return (MRClientProtocol)rpc.getProxy(MRClientProtocol.class,app.clientService.getBindAddress(),conf);
+    }
+  }
+);
+  KillJobRequest killJobRequest=recordFactory.newRecordInstance(KillJobRequest.class);
+  killJobRequest.setJobId(app.getJobId());
+  try {
+    client.killJob(killJobRequest);
+    fail("viewonlyuser killed job");
+  }
+ catch (  AccessControlException e) {
+  }
+  KillTaskRequest killTaskRequest=recordFactory.newRecordInstance(KillTaskRequest.class);
+  killTaskRequest.setTaskId(task.getID());
+  try {
+    client.killTask(killTaskRequest);
+    fail("viewonlyuser killed task");
+  }
+ catch (  AccessControlException e) {
+  }
+  KillTaskAttemptRequest killTaskAttemptRequest=recordFactory.newRecordInstance(KillTaskAttemptRequest.class);
+  killTaskAttemptRequest.setTaskAttemptId(attempt.getID());
+  try {
+    client.killTaskAttempt(killTaskAttemptRequest);
+    fail("viewonlyuser killed task attempt");
+  }
+ catch (  AccessControlException e) {
+  }
+  FailTaskAttemptRequest failTaskAttemptRequest=recordFactory.newRecordInstance(FailTaskAttemptRequest.class);
+  failTaskAttemptRequest.setTaskAttemptId(attempt.getID());
+  try {
+    client.failTaskAttempt(failTaskAttemptRequest);
+    fail("viewonlyuser killed task attempt");
+  }
+ catch (  AccessControlException e) {
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

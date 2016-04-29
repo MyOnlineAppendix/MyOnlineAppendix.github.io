@@ -1,0 +1,476 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.client.TestMultiParallel (14 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(6)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=300000) public void testNonceCollision() throws Exception {
+  LOG.info("test=testNonceCollision");
+  final Connection connection=ConnectionFactory.createConnection(UTIL.getConfiguration());
+  Table table=connection.getTable(TEST_TABLE);
+  Put put=new Put(ONE_ROW);
+  put.addColumn(BYTES_FAMILY,QUALIFIER,Bytes.toBytes(0L));
+  NonceGenerator cnm=new PerClientRandomNonceGenerator(){
+    long lastNonce=-1;
+    @Override public synchronized long newNonce(){
+      long nonce=0;
+      if (lastNonce == -1) {
+        lastNonce=nonce=super.newNonce();
+      }
+ else {
+        nonce=lastNonce;
+        lastNonce=-1L;
+      }
+      return nonce;
+    }
+  }
+;
+  NonceGenerator oldCnm=ConnectionUtils.injectNonceGeneratorForTesting((ClusterConnection)connection,cnm);
+  try {
+    Increment inc=new Increment(ONE_ROW);
+    inc.addColumn(BYTES_FAMILY,QUALIFIER,1L);
+    table.increment(inc);
+    inc=new Increment(ONE_ROW);
+    inc.addColumn(BYTES_FAMILY,QUALIFIER,1L);
+    try {
+      table.increment(inc);
+      fail("Should have thrown an exception");
+    }
+ catch (    OperationConflictException ex) {
+    }
+    Get get=new Get(ONE_ROW);
+    get.addColumn(BYTES_FAMILY,QUALIFIER);
+    Result result=table.get(get);
+    validateResult(result,QUALIFIER,Bytes.toBytes(1L));
+    int numRequests=40;
+    final CountDownLatch startedLatch=new CountDownLatch(numRequests);
+    final CountDownLatch startLatch=new CountDownLatch(1);
+    final CountDownLatch doneLatch=new CountDownLatch(numRequests);
+    for (int i=0; i < numRequests; ++i) {
+      Runnable r=new Runnable(){
+        @Override public void run(){
+          Table table=null;
+          try {
+            table=connection.getTable(TEST_TABLE);
+          }
+ catch (          IOException e) {
+            fail("Not expected");
+          }
+          Increment inc=new Increment(ONE_ROW);
+          inc.addColumn(BYTES_FAMILY,QUALIFIER,1L);
+          startedLatch.countDown();
+          try {
+            startLatch.await();
+          }
+ catch (          InterruptedException e) {
+            fail("Not expected");
+          }
+          try {
+            table.increment(inc);
+          }
+ catch (          OperationConflictException ex) {
+          }
+catch (          IOException ioEx) {
+            fail("Not expected");
+          }
+          doneLatch.countDown();
+        }
+      }
+;
+      Threads.setDaemonThreadRunning(new Thread(r));
+    }
+    startedLatch.await();
+    startLatch.countDown();
+    doneLatch.await();
+    get=new Get(ONE_ROW);
+    get.addColumn(BYTES_FAMILY,QUALIFIER);
+    result=table.get(get);
+    validateResult(result,QUALIFIER,Bytes.toBytes((numRequests / 2) + 1L));
+    table.close();
+  }
+  finally {
+    ConnectionImplementation.injectNonceGeneratorForTesting((ClusterConnection)connection,oldCnm);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testBatchWithPut() throws Exception {
+  LOG.info("test=testBatchWithPut");
+  Table table=CONNECTION.getTable(TEST_TABLE);
+  List<Put> puts=constructPutRequests();
+  Object[] results=new Object[puts.size()];
+  table.batch(puts,results);
+  validateSizeAndEmpty(results,KEYS.length);
+  if (true) {
+    int liveRScount=UTIL.getMiniHBaseCluster().getLiveRegionServerThreads().size();
+    assert liveRScount > 0;
+    JVMClusterUtil.RegionServerThread liveRS=UTIL.getMiniHBaseCluster().getLiveRegionServerThreads().get(0);
+    liveRS.getRegionServer().abort("Aborting for tests",new Exception("testBatchWithPut"));
+    puts=constructPutRequests();
+    try {
+      results=new Object[puts.size()];
+      table.batch(puts,results);
+    }
+ catch (    RetriesExhaustedWithDetailsException ree) {
+      LOG.info(ree.getExhaustiveDescription());
+      table.close();
+      throw ree;
+    }
+    validateSizeAndEmpty(results,KEYS.length);
+  }
+  validateLoadedData(table);
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws Exception {
+  LOG.info("before");
+  if (UTIL.ensureSomeRegionServersAvailable(slaves)) {
+    UTIL.getMiniHBaseCluster().getMaster().balance();
+    UTIL.waitFor(15 * 1000,UTIL.predicateNoRegionsInTransition());
+  }
+  LOG.info("before done");
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testFlushCommitsNoAbort() throws Exception {
+  LOG.info("test=testFlushCommitsNoAbort");
+  doTestFlushCommits(false);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=300000) public void testBatchWithDelete() throws Exception {
+  LOG.info("test=testBatchWithDelete");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Put> puts=constructPutRequests();
+  Object[] results=new Object[puts.size()];
+  table.batch(puts,results);
+  validateSizeAndEmpty(results,KEYS.length);
+  List<Row> deletes=new ArrayList<Row>();
+  for (int i=0; i < KEYS.length; i++) {
+    Delete delete=new Delete(KEYS[i]);
+    delete.addFamily(BYTES_FAMILY);
+    deletes.add(delete);
+  }
+  results=new Object[deletes.size()];
+  table.batch(deletes,results);
+  validateSizeAndEmpty(results,KEYS.length);
+  for (  byte[] k : KEYS) {
+    Get get=new Get(k);
+    get.addColumn(BYTES_FAMILY,QUALIFIER);
+    Assert.assertFalse(table.exists(get));
+  }
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testBatchWithManyColsInOneRowGetAndPut() throws Exception {
+  LOG.info("test=testBatchWithManyColsInOneRowGetAndPut");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Row> puts=new ArrayList<Row>();
+  for (int i=0; i < 100; i++) {
+    Put put=new Put(ONE_ROW);
+    byte[] qual=Bytes.toBytes("column" + i);
+    put.addColumn(BYTES_FAMILY,qual,VALUE);
+    puts.add(put);
+  }
+  Object[] results=new Object[puts.size()];
+  table.batch(puts,results);
+  validateSizeAndEmpty(results,100);
+  List<Row> gets=new ArrayList<Row>();
+  for (int i=0; i < 100; i++) {
+    Get get=new Get(ONE_ROW);
+    byte[] qual=Bytes.toBytes("column" + i);
+    get.addColumn(BYTES_FAMILY,qual);
+    gets.add(get);
+  }
+  Object[] multiRes=new Object[gets.size()];
+  table.batch(gets,multiRes);
+  int idx=0;
+  for (  Object r : multiRes) {
+    byte[] qual=Bytes.toBytes("column" + idx);
+    validateResult(r,qual,VALUE);
+    idx++;
+  }
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testBatchWithMixedActions() throws Exception {
+  LOG.info("test=testBatchWithMixedActions");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Put> puts=constructPutRequests();
+  Object[] results=new Object[puts.size()];
+  table.batch(puts,results);
+  validateSizeAndEmpty(results,KEYS.length);
+  List<Row> actions=new ArrayList<Row>();
+  byte[] qual2=Bytes.toBytes("qual2");
+  byte[] val2=Bytes.toBytes("putvalue2");
+  Get get=new Get(KEYS[10]);
+  get.addColumn(BYTES_FAMILY,QUALIFIER);
+  actions.add(get);
+  get=new Get(KEYS[11]);
+  get.addColumn(BYTES_FAMILY,QUALIFIER);
+  actions.add(get);
+  Put put=new Put(KEYS[10]);
+  put.addColumn(BYTES_FAMILY,qual2,val2);
+  actions.add(put);
+  Delete delete=new Delete(KEYS[20]);
+  delete.addFamily(BYTES_FAMILY);
+  actions.add(delete);
+  get=new Get(KEYS[30]);
+  get.addColumn(BYTES_FAMILY,QUALIFIER);
+  actions.add(get);
+  put=new Put(KEYS[40]);
+  put.addColumn(BYTES_FAMILY,qual2,val2);
+  actions.add(put);
+  results=new Object[actions.size()];
+  table.batch(actions,results);
+  validateResult(results[0]);
+  validateResult(results[1]);
+  validateEmpty(results[2]);
+  validateEmpty(results[3]);
+  validateResult(results[4]);
+  validateEmpty(results[5]);
+  get=new Get(KEYS[40]);
+  get.addColumn(BYTES_FAMILY,qual2);
+  Result r=table.get(get);
+  validateResult(r,qual2,val2);
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=300000) public void testBatchWithGet() throws Exception {
+  LOG.info("test=testBatchWithGet");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Put> puts=constructPutRequests();
+  table.batch(puts,null);
+  List<Row> gets=new ArrayList<Row>();
+  for (  byte[] k : KEYS) {
+    Get get=new Get(k);
+    get.addColumn(BYTES_FAMILY,QUALIFIER);
+    gets.add(get);
+  }
+  Result[] multiRes=new Result[gets.size()];
+  table.batch(gets,multiRes);
+  List<Result> singleRes=new ArrayList<Result>();
+  for (  Row get : gets) {
+    singleRes.add(table.get((Get)get));
+  }
+  Assert.assertEquals(singleRes.size(),multiRes.length);
+  for (int i=0; i < singleRes.size(); i++) {
+    Assert.assertTrue(singleRes.get(i).containsColumn(BYTES_FAMILY,QUALIFIER));
+    Cell[] singleKvs=singleRes.get(i).rawCells();
+    Cell[] multiKvs=multiRes[i].rawCells();
+    for (int j=0; j < singleKvs.length; j++) {
+      Assert.assertEquals(singleKvs[j],multiKvs[j]);
+      Assert.assertEquals(0,Bytes.compareTo(CellUtil.cloneValue(singleKvs[j]),CellUtil.cloneValue(multiKvs[j])));
+    }
+  }
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-11 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBadFam() throws Exception {
+  LOG.info("test=testBadFam");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Row> actions=new ArrayList<Row>();
+  Put p=new Put(Bytes.toBytes("row1"));
+  p.addColumn(Bytes.toBytes("bad_family"),Bytes.toBytes("qual"),Bytes.toBytes("value"));
+  actions.add(p);
+  p=new Put(Bytes.toBytes("row2"));
+  p.addColumn(BYTES_FAMILY,Bytes.toBytes("qual"),Bytes.toBytes("value"));
+  actions.add(p);
+  Object[] r=new Object[actions.size()];
+  try {
+    table.batch(actions,r);
+    fail();
+  }
+ catch (  RetriesExhaustedWithDetailsException ex) {
+    LOG.debug(ex);
+    assertFalse(ex.mayHaveClusterIssues());
+  }
+  assertEquals(2,r.length);
+  assertTrue(r[0] instanceof Throwable);
+  assertTrue(r[1] instanceof Result);
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This is for testing the active number of threads that were used while
+ * doing a batch operation. It inserts one row per region via the batch
+ * operation, and then checks the number of active threads.
+ * For HBASE-3553
+ * @throws IOException
+ * @throws InterruptedException
+ * @throws NoSuchFieldException
+ * @throws SecurityException
+ */
+@Test(timeout=300000) public void testActiveThreadsCount() throws Exception {
+  UTIL.getConfiguration().setLong("hbase.htable.threads.coresize",slaves + 1);
+  try (Connection connection=ConnectionFactory.createConnection(UTIL.getConfiguration())){
+    ThreadPoolExecutor executor=HTable.getDefaultExecutor(UTIL.getConfiguration());
+    try {
+      try (Table t=connection.getTable(TEST_TABLE,executor)){
+        List<Put> puts=constructPutRequests();
+        t.batch(puts,null);
+        HashSet<ServerName> regionservers=new HashSet<ServerName>();
+        try (RegionLocator locator=connection.getRegionLocator(TEST_TABLE)){
+          for (          Row r : puts) {
+            HRegionLocation location=locator.getRegionLocation(r.getRow());
+            regionservers.add(location.getServerName());
+          }
+        }
+         assertEquals(regionservers.size(),executor.getLargestPoolSize());
+      }
+     }
+  finally {
+      executor.shutdownNow();
+    }
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testBatchWithIncrementAndAppend() throws Exception {
+  LOG.info("test=testBatchWithIncrementAndAppend");
+  final byte[] QUAL1=Bytes.toBytes("qual1");
+  final byte[] QUAL2=Bytes.toBytes("qual2");
+  final byte[] QUAL3=Bytes.toBytes("qual3");
+  final byte[] QUAL4=Bytes.toBytes("qual4");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  Delete d=new Delete(ONE_ROW);
+  table.delete(d);
+  Put put=new Put(ONE_ROW);
+  put.addColumn(BYTES_FAMILY,QUAL1,Bytes.toBytes("abc"));
+  put.addColumn(BYTES_FAMILY,QUAL2,Bytes.toBytes(1L));
+  table.put(put);
+  Increment inc=new Increment(ONE_ROW);
+  inc.addColumn(BYTES_FAMILY,QUAL2,1);
+  inc.addColumn(BYTES_FAMILY,QUAL3,1);
+  Append a=new Append(ONE_ROW);
+  a.add(BYTES_FAMILY,QUAL1,Bytes.toBytes("def"));
+  a.add(BYTES_FAMILY,QUAL4,Bytes.toBytes("xyz"));
+  List<Row> actions=new ArrayList<Row>();
+  actions.add(inc);
+  actions.add(a);
+  Object[] multiRes=new Object[actions.size()];
+  table.batch(actions,multiRes);
+  validateResult(multiRes[1],QUAL1,Bytes.toBytes("abcdef"));
+  validateResult(multiRes[1],QUAL4,Bytes.toBytes("xyz"));
+  validateResult(multiRes[0],QUAL2,Bytes.toBytes(2L));
+  validateResult(multiRes[0],QUAL3,Bytes.toBytes(1L));
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=300000) public void testHTableDeleteWithList() throws Exception {
+  LOG.info("test=testHTableDeleteWithList");
+  Table table=UTIL.getConnection().getTable(TEST_TABLE);
+  List<Put> puts=constructPutRequests();
+  Object[] results=new Object[puts.size()];
+  table.batch(puts,results);
+  validateSizeAndEmpty(results,KEYS.length);
+  ArrayList<Delete> deletes=new ArrayList<Delete>();
+  for (int i=0; i < KEYS.length; i++) {
+    Delete delete=new Delete(KEYS[i]);
+    delete.addFamily(BYTES_FAMILY);
+    deletes.add(delete);
+  }
+  table.delete(deletes);
+  Assert.assertTrue(deletes.isEmpty());
+  for (  byte[] k : KEYS) {
+    Get get=new Get(k);
+    get.addColumn(BYTES_FAMILY,QUALIFIER);
+    Assert.assertFalse(table.exists(get));
+  }
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Only run one Multi test with a forced RegionServer abort. Otherwise, the
+ * unit tests will take an unnecessarily long time to run.
+ * @throws Exception
+ */
+@Test(timeout=360000) public void testFlushCommitsWithAbort() throws Exception {
+  LOG.info("test=testFlushCommitsWithAbort");
+  doTestFlushCommits(true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void afterClass() throws Exception {
+  CONNECTION.close();
+  UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,177 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.nodemanager.TestNodeManagerResync (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNMSentContainerStatusOnResync() throws Exception {
+  final ContainerStatus testCompleteContainer=TestNodeStatusUpdater.createContainerStatus(2,ContainerState.COMPLETE);
+  final Container container=TestNodeStatusUpdater.getMockContainer(testCompleteContainer);
+  NMContainerStatus report=createNMContainerStatus(2,ContainerState.COMPLETE);
+  when(container.getNMContainerStatus()).thenReturn(report);
+  NodeManager nm=new NodeManager(){
+    int registerCount=0;
+    @Override protected NodeStatusUpdater createNodeStatusUpdater(    Context context,    Dispatcher dispatcher,    NodeHealthCheckerService healthChecker){
+      return new TestNodeStatusUpdaterResync(context,dispatcher,healthChecker,metrics){
+        @Override protected ResourceTracker createResourceTracker(){
+          return new MockResourceTracker(){
+            @Override public RegisterNodeManagerResponse registerNodeManager(            RegisterNodeManagerRequest request) throws YarnException, IOException {
+              if (registerCount == 0) {
+                try {
+                  Assert.assertEquals(0,request.getNMContainerStatuses().size());
+                }
+ catch (                AssertionError error) {
+                  error.printStackTrace();
+                  assertionFailedInThread.set(true);
+                }
+                getNMContext().getContainers().put(testCompleteContainer.getContainerId(),container);
+              }
+ else {
+                List<NMContainerStatus> statuses=request.getNMContainerStatuses();
+                try {
+                  Assert.assertEquals(1,statuses.size());
+                  Assert.assertEquals(testCompleteContainer.getContainerId(),statuses.get(0).getContainerId());
+                }
+ catch (                AssertionError error) {
+                  error.printStackTrace();
+                  assertionFailedInThread.set(true);
+                }
+              }
+              registerCount++;
+              return super.registerNodeManager(request);
+            }
+            @Override public NodeHeartbeatResponse nodeHeartbeat(            NodeHeartbeatRequest request){
+              List<ContainerStatus> statuses=request.getNodeStatus().getContainersStatuses();
+              try {
+                Assert.assertEquals(1,statuses.size());
+                Assert.assertEquals(testCompleteContainer.getContainerId(),statuses.get(0).getContainerId());
+              }
+ catch (              AssertionError error) {
+                error.printStackTrace();
+                assertionFailedInThread.set(true);
+              }
+              return YarnServerBuilderUtils.newNodeHeartbeatResponse(1,NodeAction.RESYNC,null,null,null,null,1000L);
+            }
+          }
+;
+        }
+      }
+;
+    }
+  }
+;
+  YarnConfiguration conf=createNMConfig();
+  nm.init(conf);
+  nm.start();
+  try {
+    syncBarrier.await();
+  }
+ catch (  BrokenBarrierException e) {
+  }
+  Assert.assertFalse(assertionFailedInThread.get());
+  nm.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testKillContainersOnResync() throws IOException, InterruptedException, YarnException {
+  TestNodeManager1 nm=new TestNodeManager1(false);
+  testContainerPreservationOnResyncImpl(nm,false);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws UnsupportedFileSystemException {
+  localFS=FileContext.getLocalFSFileContext();
+  tmpDir.mkdirs();
+  logsDir.mkdirs();
+  remoteLogsDir.mkdirs();
+  nmLocalDir.mkdirs();
+  syncBarrier=new CyclicBarrier(2);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testPreserveContainersOnResyncKeepingContainers() throws IOException, InterruptedException, YarnException {
+  TestNodeManager1 nm=new TestNodeManager1(true);
+  testContainerPreservationOnResyncImpl(nm,true);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws IOException, InterruptedException {
+  localFS.delete(new Path(basedir.getPath()),true);
+  assertionFailedInThread.set(false);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testBlockNewContainerRequestsOnStartAndResync() throws IOException, InterruptedException, YarnException {
+  NodeManager nm=new TestNodeManager2();
+  YarnConfiguration conf=createNMConfig();
+  nm.init(conf);
+  nm.start();
+  ContainerId cId=TestNodeManagerShutdown.createContainerId();
+  TestNodeManagerShutdown.startContainer(nm,cId,localFS,tmpDir,processStartFile);
+  nm.getNMDispatcher().getEventHandler().handle(new NodeManagerEvent(NodeManagerEventType.RESYNC));
+  try {
+    syncBarrier.await();
+  }
+ catch (  BrokenBarrierException e) {
+  }
+  Assert.assertFalse(assertionFailedInThread.get());
+  nm.stop();
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@SuppressWarnings("unchecked") @Test(timeout=10000) public void testNMshutdownWhenResyncThrowException() throws IOException, InterruptedException, YarnException {
+  NodeManager nm=new TestNodeManager3();
+  YarnConfiguration conf=createNMConfig();
+  nm.init(conf);
+  nm.start();
+  Assert.assertEquals(1,((TestNodeManager3)nm).getNMRegistrationCount());
+  nm.getNMDispatcher().getEventHandler().handle(new NodeManagerEvent(NodeManagerEventType.RESYNC));
+synchronized (isNMShutdownCalled) {
+    while (isNMShutdownCalled.get() == false) {
+      try {
+        isNMShutdownCalled.wait();
+      }
+ catch (      InterruptedException e) {
+      }
+    }
+  }
+  Assert.assertTrue("NM shutdown not called.",isNMShutdownCalled.get());
+  nm.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

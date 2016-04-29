@@ -1,0 +1,512 @@
+<h3 style="margin:0px">Class: org.apache.directory.server.kerberos.protocol.TicketGrantingPolicyTest (14 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+/** 
+ * Creates a new instance of {@link TicketGrantingPolicyTest}.
+ */
+@Before public void setUp() throws IOException {
+  kdcServer=new KdcServer();
+  config=kdcServer.getConfig();
+  config.setBodyChecksumVerified(false);
+  store=new MapPrincipalStoreImpl();
+  handler=new KerberosProtocolHandler(kdcServer,store);
+  session=new KrbDummySession();
+  lockBox=new CipherTextHandler();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+/** 
+ * Shutdown the Kerberos server
+ */
+@After public void shutDown(){
+  kdcServer.stop();
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when renewable tickets are disallowed that requests for
+ * RENEWABLE-OK tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testRenewableOk() throws Exception {
+  config.setRenewableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.RENEWABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.RENEWABLE_OK);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + KerberosTime.WEEK);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when empty addresses are disallowed and forwarded tickets are requested
+ * that requests with no addresses fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testForwardedNoAddressesTicket() throws Exception {
+  config.setEmptyAddressesAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.FORWARDABLE);
+  HostAddress[] address={new HostAddress(InetAddress.getByAddress(new byte[4]))};
+  HostAddresses addresses=new HostAddresses(address);
+  encTicketPart.setClientAddresses(addresses);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.FORWARDED);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when postdated tickets are disallowed that requests for
+ * validation of invalid tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testValidateInvalidTicket() throws Exception {
+  config.setPostdatedAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.INVALID);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("hnelson"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.VALIDATE);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long currentTime=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(currentTime + KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when proxiable tickets are disallowed that requests for
+ * proxy tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testProxyTicket() throws Exception {
+  config.setProxiableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.PROXIABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.PROXY);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  HostAddress[] address={new HostAddress(InetAddress.getLocalHost())};
+  HostAddresses addresses=new HostAddresses(address);
+  kdcReqBody.setAddresses(addresses);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when proxiable tickets are disallowed that requests for
+ * proxiable tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testProxiableTicket() throws Exception {
+  config.setProxiableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.PROXIABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.PROXIABLE);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when postdated tickets are disallowed that requests for
+ * postdated tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testPostdated() throws Exception {
+  config.setPostdatedAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.MAY_POSTDATE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.POSTDATED);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when forwardable tickets are disallowed that requests for
+ * forwarded tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testForwardedTicket() throws Exception {
+  config.setForwardableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.FORWARDABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.FORWARDED);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when renewable tickets are disallowed that requests for
+ * renewable tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testRenewableTicket() throws Exception {
+  config.setRenewableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.RENEWABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.RENEWABLE);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KerberosTime requestedRenewTillTime=new KerberosTime(now + KerberosTime.WEEK / 2);
+  kdcReqBody.setRtime(requestedRenewTillTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when postdated tickets are disallowed that requests for
+ * ALLOW-POSTDATE tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testAllowPostdate() throws Exception {
+  config.setPostdatedAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.MAY_POSTDATE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.ALLOW_POSTDATE);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when forwardable tickets are disallowed that requests for
+ * forwardable tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testForwardableTicket() throws Exception {
+  config.setForwardableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.FORWARDABLE);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.FORWARDABLE);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when empty addresses are disallowed and proxy tickets are requested
+ * that requests with no addresses fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testProxyNoAddressesTicket() throws Exception {
+  config.setEmptyAddressesAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPart=getTicketArchetype(clientPrincipal);
+  encTicketPart.setFlag(TicketFlag.PROXIABLE);
+  HostAddress[] address={new HostAddress(InetAddress.getByAddress(new byte[4]))};
+  HostAddresses addresses=new HostAddresses(address);
+  encTicketPart.setClientAddresses(addresses);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPart,serverPrincipal,serverKey);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.PROXY);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests when renewable tickets are disallowed that requests for
+ * renewal of tickets fail with the correct error message.
+ * @throws Exception
+ */
+@Test public void testRenewTicket() throws Exception {
+  config.setRenewableAllowed(false);
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String serverPassword="randomKey";
+  Ticket tgt=getTgt(clientPrincipal,serverPrincipal,serverPassword);
+  KdcReqBody kdcReqBody=new KdcReqBody();
+  kdcReqBody.setSName(getPrincipalName("hnelson"));
+  kdcReqBody.setRealm("EXAMPLE.COM");
+  kdcReqBody.setEType(config.getEncryptionTypes());
+  kdcReqBody.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.RENEW);
+  kdcReqBody.setKdcOptions(kdcOptions);
+  long currentTime=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(currentTime + KerberosTime.DAY);
+  kdcReqBody.setTill(requestedEndTime);
+  KdcReq message=getKdcRequest(tgt,kdcReqBody);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC policy rejects request",ErrorType.KDC_ERR_POLICY,error.getErrorCode());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

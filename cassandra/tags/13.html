@@ -1,0 +1,2148 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.cassandra.batchlog.BatchlogManagerTest </h4><pre class="type-6 type-7 type-13 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test @SuppressWarnings("deprecation") public void testConversion() throws Exception {
+  long initialAllBatches=BatchlogManager.instance.countAllBatches();
+  long initialReplayedBatches=BatchlogManager.instance.getTotalBatchesReplayed();
+  CFMetaData cfm=Schema.instance.getCFMetaData(KEYSPACE1,CF_STANDARD4);
+  for (int i=0; i < 1400; i++) {
+    Mutation mutation=new RowUpdateBuilder(cfm,FBUtilities.timestampMicros(),ByteBufferUtil.bytes(i)).clustering("name" + i).add("val","val" + i).build();
+    long timestamp=i < 700 ? (System.currentTimeMillis() - BatchlogManager.getBatchlogTimeout()) : (System.currentTimeMillis() + BatchlogManager.getBatchlogTimeout());
+    Mutation batchMutation=LegacyBatchlogMigrator.getStoreMutation(Batch.createLocal(UUIDGen.getTimeUUID(timestamp,i),TimeUnit.MILLISECONDS.toMicros(timestamp),Collections.singleton(mutation)),MessagingService.VERSION_20);
+    assertTrue(LegacyBatchlogMigrator.isLegacyBatchlogMutation(batchMutation));
+    LegacyBatchlogMigrator.handleLegacyMutation(batchMutation);
+  }
+  for (int i=1400; i < 1500; i++) {
+    Mutation mutation=new RowUpdateBuilder(cfm,FBUtilities.timestampMicros(),ByteBufferUtil.bytes(i)).clustering("name" + i).add("val","val" + i).build();
+    long timestamp=i < 1450 ? (System.currentTimeMillis() - BatchlogManager.getBatchlogTimeout()) : (System.currentTimeMillis() + BatchlogManager.getBatchlogTimeout());
+    BatchlogManager.store(Batch.createLocal(UUIDGen.getTimeUUID(timestamp,i),FBUtilities.timestampMicros(),Collections.singleton(mutation)));
+  }
+  Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES).forceBlockingFlush();
+  assertEquals(1500,BatchlogManager.instance.countAllBatches() - initialAllBatches);
+  assertEquals(0,BatchlogManager.instance.getTotalBatchesReplayed() - initialReplayedBatches);
+  UntypedResultSet result=executeInternal(String.format("SELECT count(*) FROM \"%s\".\"%s\"",SystemKeyspace.NAME,SystemKeyspace.LEGACY_BATCHLOG));
+  assertNotNull(result);
+  assertEquals("Count in blog legacy",0,result.one().getLong("count"));
+  result=executeInternal(String.format("SELECT count(*) FROM \"%s\".\"%s\"",SystemKeyspace.NAME,SystemKeyspace.BATCHES));
+  assertNotNull(result);
+  assertEquals("Count in blog",1500,result.one().getLong("count"));
+  BatchlogManager.instance.performInitialReplay();
+  assertEquals(750,BatchlogManager.instance.countAllBatches() - initialAllBatches);
+  assertEquals(750,BatchlogManager.instance.getTotalBatchesReplayed() - initialReplayedBatches);
+  for (int i=0; i < 1500; i++) {
+    result=executeInternal(String.format("SELECT * FROM \"%s\".\"%s\" WHERE key = intAsBlob(%d)",KEYSPACE1,CF_STANDARD4,i));
+    assertNotNull(result);
+    if (i < 700 || i >= 1400 && i < 1450) {
+      assertEquals(ByteBufferUtil.bytes(i),result.one().getBytes("key"));
+      assertEquals("name" + i,result.one().getString("name"));
+      assertEquals("val" + i,result.one().getString("val"));
+    }
+ else {
+      assertTrue("Present at " + i,result.isEmpty());
+    }
+  }
+  result=executeInternal(String.format("SELECT count(*) FROM \"%s\".\"%s\"",KEYSPACE1,CF_STANDARD4));
+  assertNotNull(result);
+  assertEquals(750,result.one().getLong("count"));
+  result=executeInternal(String.format("SELECT count(*) FROM \"%s\".\"%s\"",SystemKeyspace.NAME,SystemKeyspace.BATCHES));
+  assertNotNull(result);
+  assertEquals("Count in blog after initial replay",750,result.one().getLong("count"));
+  result=executeInternal(String.format("SELECT count(*) FROM \"%s\".\"%s\"",SystemKeyspace.NAME,SystemKeyspace.LEGACY_BATCHLOG));
+  assertNotNull(result);
+  assertEquals("Count in blog legacy after initial replay ",0,result.one().getLong("count"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTruncatedReplay() throws InterruptedException, ExecutionException {
+  CFMetaData cf2=Schema.instance.getCFMetaData(KEYSPACE1,CF_STANDARD2);
+  CFMetaData cf3=Schema.instance.getCFMetaData(KEYSPACE1,CF_STANDARD3);
+  for (int i=0; i < 1000; i++) {
+    Mutation mutation1=new RowUpdateBuilder(cf2,FBUtilities.timestampMicros(),ByteBufferUtil.bytes(i)).clustering("name" + i).add("val","val" + i).build();
+    Mutation mutation2=new RowUpdateBuilder(cf3,FBUtilities.timestampMicros(),ByteBufferUtil.bytes(i)).clustering("name" + i).add("val","val" + i).build();
+    List<Mutation> mutations=Lists.newArrayList(mutation1,mutation2);
+    long timestamp=System.currentTimeMillis() - BatchlogManager.getBatchlogTimeout();
+    if (i == 500)     SystemKeyspace.saveTruncationRecord(Keyspace.open(KEYSPACE1).getColumnFamilyStore(CF_STANDARD2),timestamp,ReplayPosition.NONE);
+    if (i >= 500)     timestamp++;
+ else     timestamp--;
+    BatchlogManager.store(Batch.createLocal(UUIDGen.getTimeUUID(timestamp,i),FBUtilities.timestampMicros(),mutations));
+  }
+  Keyspace.open(SystemKeyspace.NAME).getColumnFamilyStore(SystemKeyspace.BATCHES).forceBlockingFlush();
+  BatchlogManager.instance.startBatchlogReplay().get();
+  for (int i=0; i < 1000; i++) {
+    UntypedResultSet result=executeInternal(String.format("SELECT * FROM \"%s\".\"%s\" WHERE key = intAsBlob(%d)",KEYSPACE1,CF_STANDARD2,i));
+    assertNotNull(result);
+    if (i >= 500) {
+      assertEquals(ByteBufferUtil.bytes(i),result.one().getBytes("key"));
+      assertEquals("name" + i,result.one().getString("name"));
+      assertEquals("val" + i,result.one().getString("val"));
+    }
+ else {
+      assertTrue(result.isEmpty());
+    }
+  }
+  for (int i=0; i < 1000; i++) {
+    UntypedResultSet result=executeInternal(String.format("SELECT * FROM \"%s\".\"%s\" WHERE key = intAsBlob(%d)",KEYSPACE1,CF_STANDARD3,i));
+    assertNotNull(result);
+    assertEquals(ByteBufferUtil.bytes(i),result.one().getBytes("key"));
+    assertEquals("name" + i,result.one().getString("name"));
+    assertEquals("val" + i,result.one().getString("val"));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.config.DatabaseDescriptorTest </h4><pre class="type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRpcInterface() throws Exception {
+  Config testConfig=DatabaseDescriptor.loadConfig();
+  testConfig.rpc_interface=suitableInterface.getName();
+  testConfig.rpc_address=null;
+  DatabaseDescriptor.applyAddressConfig(testConfig);
+  if (hasIPv4andIPv6) {
+    testConfig=DatabaseDescriptor.loadConfig();
+    testConfig.rpc_interface=suitableInterface.getName();
+    testConfig.rpc_address=null;
+    testConfig.rpc_interface_prefer_ipv6=true;
+    DatabaseDescriptor.applyAddressConfig(testConfig);
+    assertEquals(DatabaseDescriptor.getRpcAddress().getClass(),Inet6Address.class);
+    testConfig=DatabaseDescriptor.loadConfig();
+    testConfig.rpc_interface=suitableInterface.getName();
+    testConfig.rpc_address=null;
+    testConfig.rpc_interface_prefer_ipv6=false;
+    DatabaseDescriptor.applyAddressConfig(testConfig);
+    assertEquals(DatabaseDescriptor.getRpcAddress().getClass(),Inet4Address.class);
+  }
+ else {
+    assertEquals(DatabaseDescriptor.getRpcAddress(),suitableInterface.getInetAddresses().nextElement());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testListenInterface() throws Exception {
+  Config testConfig=DatabaseDescriptor.loadConfig();
+  testConfig.listen_interface=suitableInterface.getName();
+  testConfig.listen_address=null;
+  DatabaseDescriptor.applyAddressConfig(testConfig);
+  if (hasIPv4andIPv6) {
+    testConfig=DatabaseDescriptor.loadConfig();
+    testConfig.listen_interface=suitableInterface.getName();
+    testConfig.listen_address=null;
+    testConfig.listen_interface_prefer_ipv6=true;
+    DatabaseDescriptor.applyAddressConfig(testConfig);
+    assertEquals(DatabaseDescriptor.getListenAddress().getClass(),Inet6Address.class);
+    testConfig=DatabaseDescriptor.loadConfig();
+    testConfig.listen_interface=suitableInterface.getName();
+    testConfig.listen_address=null;
+    testConfig.listen_interface_prefer_ipv6=false;
+    DatabaseDescriptor.applyAddressConfig(testConfig);
+    assertEquals(DatabaseDescriptor.getListenAddress().getClass(),Inet4Address.class);
+  }
+ else {
+    assertEquals(DatabaseDescriptor.getRpcAddress(),suitableInterface.getInetAddresses().nextElement());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.cql3.ViewSchemaTest </h4><pre class="type-13 type-15 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testAllTypes() throws Throwable {
+  String myType=createType("CREATE TYPE %s (a int, b uuid, c set<text>)");
+  createTable("CREATE TABLE %s (" + "k int PRIMARY KEY, " + "asciival ascii, "+ "bigintval bigint, "+ "blobval blob, "+ "booleanval boolean, "+ "dateval date, "+ "decimalval decimal, "+ "doubleval double, "+ "floatval float, "+ "inetval inet, "+ "intval int, "+ "textval text, "+ "timeval time, "+ "timestampval timestamp, "+ "timeuuidval timeuuid, "+ "uuidval uuid,"+ "varcharval varchar, "+ "varintval varint, "+ "listval list<int>, "+ "frozenlistval frozen<list<int>>, "+ "setval set<uuid>, "+ "frozensetval frozen<set<uuid>>, "+ "mapval map<ascii, int>,"+ "frozenmapval frozen<map<ascii, int>>,"+ "tupleval frozen<tuple<int, ascii, uuid>>,"+ "udtval frozen<" + myType + ">)");
+  CFMetaData metadata=currentTableMetadata();
+  execute("USE " + keyspace());
+  executeNet(protocolVersion,"USE " + keyspace());
+  for (  ColumnDefinition def : new HashSet<>(metadata.allColumns())) {
+    try {
+      createView("mv_" + def.name,"CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL PRIMARY KEY ("+ def.name+ ",k)");
+      if (def.type.isMultiCell())       Assert.fail("MV on a multicell should fail " + def);
+      if (def.isPartitionKey())       Assert.fail("MV on partition key should fail " + def);
+    }
+ catch (    InvalidQueryException e) {
+      if (!def.type.isMultiCell() && !def.isPartitionKey())       Assert.fail("MV creation failed on " + def);
+    }
+  }
+  assertInvalidMessage("fromJson() cannot be used in the selection clause","SELECT fromJson(asciival) FROM %s",0,0);
+  String func1=createFunction(KEYSPACE,"int","CREATE FUNCTION %s (a int) CALLED ON NULL INPUT RETURNS text LANGUAGE java AS $$ return a.toString(); $$");
+  createFunctionOverload(func1,"int","CREATE FUNCTION %s (a text) CALLED ON NULL INPUT RETURNS text LANGUAGE java AS $$ return new String(a); $$");
+  updateView("INSERT INTO %s (k, asciival) VALUES (?, fromJson(?))",0,"\"ascii text\"");
+  assertRows(execute("SELECT k, asciival FROM %s WHERE k = ?",0),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, asciival) VALUES (?, fromJson(?))",0,"\"ascii \\\" text\"");
+  assertRows(execute("SELECT k, asciival FROM %s WHERE k = ?",0),row(0,"ascii \" text"));
+  assertRows(execute("SELECT asciival FROM %s WHERE k = fromJson(?)","0"),row("ascii \" text"));
+  assertRows(execute("SELECT k, udtval from mv_asciival WHERE asciival = ?","ascii text"));
+  assertRows(execute("SELECT k, udtval from mv_asciival WHERE asciival = ?","ascii \" text"),row(0,null));
+  updateView("UPDATE %s SET asciival = fromJson(?) WHERE k = fromJson(?)","\"ascii \\\" text\"","0");
+  assertRows(execute("SELECT k, udtval from mv_asciival WHERE asciival = ?","ascii \" text"),row(0,null));
+  updateView("DELETE FROM %s WHERE k = fromJson(?)","0");
+  assertRows(execute("SELECT k, asciival FROM %s WHERE k = ?",0));
+  assertRows(execute("SELECT k, udtval from mv_asciival WHERE asciival = ?","ascii \" text"));
+  updateView("INSERT INTO %s (k, asciival) VALUES (?, fromJson(?))",0,"\"ascii text\"");
+  assertRows(execute("SELECT k, udtval from mv_asciival WHERE asciival = ?","ascii text"),row(0,null));
+  updateView("INSERT INTO %s (k, bigintval) VALUES (?, fromJson(?))",0,"123123123123");
+  assertRows(execute("SELECT k, bigintval FROM %s WHERE k = ?",0),row(0,123123123123L));
+  assertRows(execute("SELECT k, asciival from mv_bigintval WHERE bigintval = ?",123123123123L),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, blobval) VALUES (?, fromJson(?))",0,"\"0x00000001\"");
+  assertRows(execute("SELECT k, blobval FROM %s WHERE k = ?",0),row(0,ByteBufferUtil.bytes(1)));
+  assertRows(execute("SELECT k, asciival from mv_blobval WHERE blobval = ?",ByteBufferUtil.bytes(1)),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, booleanval) VALUES (?, fromJson(?))",0,"true");
+  assertRows(execute("SELECT k, booleanval FROM %s WHERE k = ?",0),row(0,true));
+  assertRows(execute("SELECT k, asciival from mv_booleanval WHERE booleanval = ?",true),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, booleanval) VALUES (?, fromJson(?))",0,"false");
+  assertRows(execute("SELECT k, booleanval FROM %s WHERE k = ?",0),row(0,false));
+  assertRows(execute("SELECT k, asciival from mv_booleanval WHERE booleanval = ?",true));
+  assertRows(execute("SELECT k, asciival from mv_booleanval WHERE booleanval = ?",false),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, dateval) VALUES (?, fromJson(?))",0,"\"1987-03-23\"");
+  assertRows(execute("SELECT k, dateval FROM %s WHERE k = ?",0),row(0,SimpleDateSerializer.dateStringToDays("1987-03-23")));
+  assertRows(execute("SELECT k, asciival from mv_dateval WHERE dateval = fromJson(?)","\"1987-03-23\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, decimalval) VALUES (?, fromJson(?))",0,"123123.123123");
+  assertRows(execute("SELECT k, decimalval FROM %s WHERE k = ?",0),row(0,new BigDecimal("123123.123123")));
+  assertRows(execute("SELECT k, asciival from mv_decimalval WHERE decimalval = fromJson(?)","123123.123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, decimalval) VALUES (?, fromJson(?))",0,"123123");
+  assertRows(execute("SELECT k, decimalval FROM %s WHERE k = ?",0),row(0,new BigDecimal("123123")));
+  assertRows(execute("SELECT k, asciival from mv_decimalval WHERE decimalval = fromJson(?)","123123.123123"));
+  assertRows(execute("SELECT k, asciival from mv_decimalval WHERE decimalval = fromJson(?)","123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, decimalval) VALUES (?, fromJson(?))",0,"\"123123.123123\"");
+  assertRows(execute("SELECT k, decimalval FROM %s WHERE k = ?",0),row(0,new BigDecimal("123123.123123")));
+  updateView("INSERT INTO %s (k, decimalval) VALUES (?, fromJson(?))",0,"\"-1.23E-12\"");
+  assertRows(execute("SELECT k, decimalval FROM %s WHERE k = ?",0),row(0,new BigDecimal("-1.23E-12")));
+  assertRows(execute("SELECT k, asciival from mv_decimalval WHERE decimalval = fromJson(?)","\"-1.23E-12\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, doubleval) VALUES (?, fromJson(?))",0,"123123.123123");
+  assertRows(execute("SELECT k, doubleval FROM %s WHERE k = ?",0),row(0,123123.123123d));
+  assertRows(execute("SELECT k, asciival from mv_doubleval WHERE doubleval = fromJson(?)","123123.123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, doubleval) VALUES (?, fromJson(?))",0,"123123");
+  assertRows(execute("SELECT k, doubleval FROM %s WHERE k = ?",0),row(0,123123.0d));
+  assertRows(execute("SELECT k, asciival from mv_doubleval WHERE doubleval = fromJson(?)","123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, floatval) VALUES (?, fromJson(?))",0,"123123.123123");
+  assertRows(execute("SELECT k, floatval FROM %s WHERE k = ?",0),row(0,123123.123123f));
+  assertRows(execute("SELECT k, asciival from mv_floatval WHERE floatval = fromJson(?)","123123.123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, floatval) VALUES (?, fromJson(?))",0,"123123");
+  assertRows(execute("SELECT k, floatval FROM %s WHERE k = ?",0),row(0,123123.0f));
+  assertRows(execute("SELECT k, asciival from mv_floatval WHERE floatval = fromJson(?)","123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, inetval) VALUES (?, fromJson(?))",0,"\"127.0.0.1\"");
+  assertRows(execute("SELECT k, inetval FROM %s WHERE k = ?",0),row(0,InetAddress.getByName("127.0.0.1")));
+  assertRows(execute("SELECT k, asciival from mv_inetval WHERE inetval = fromJson(?)","\"127.0.0.1\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, inetval) VALUES (?, fromJson(?))",0,"\"::1\"");
+  assertRows(execute("SELECT k, inetval FROM %s WHERE k = ?",0),row(0,InetAddress.getByName("::1")));
+  assertRows(execute("SELECT k, asciival from mv_inetval WHERE inetval = fromJson(?)","\"127.0.0.1\""));
+  assertRows(execute("SELECT k, asciival from mv_inetval WHERE inetval = fromJson(?)","\"::1\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, intval) VALUES (?, fromJson(?))",0,"123123");
+  assertRows(execute("SELECT k, intval FROM %s WHERE k = ?",0),row(0,123123));
+  assertRows(execute("SELECT k, asciival from mv_intval WHERE intval = fromJson(?)","123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, textval) VALUES (?, fromJson(?))",0,"\"some \\\" text\"");
+  assertRows(execute("SELECT k, textval FROM %s WHERE k = ?",0),row(0,"some \" text"));
+  updateView("INSERT INTO %s (k, textval) VALUES (?, fromJson(?))",0,"\"\\u2013\"");
+  assertRows(execute("SELECT k, textval FROM %s WHERE k = ?",0),row(0,"\u2013"));
+  assertRows(execute("SELECT k, asciival from mv_textval WHERE textval = fromJson(?)","\"\\u2013\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, textval) VALUES (?, fromJson(?))",0,"\"abcd\"");
+  assertRows(execute("SELECT k, textval FROM %s WHERE k = ?",0),row(0,"abcd"));
+  assertRows(execute("SELECT k, asciival from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, timeval) VALUES (?, fromJson(?))",0,"\"07:35:07.000111222\"");
+  assertRows(execute("SELECT k, timeval FROM %s WHERE k = ?",0),row(0,TimeSerializer.timeStringToLong("07:35:07.000111222")));
+  assertRows(execute("SELECT k, asciival from mv_timeval WHERE timeval = fromJson(?)","\"07:35:07.000111222\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, timestampval) VALUES (?, fromJson(?))",0,"123123123123");
+  assertRows(execute("SELECT k, timestampval FROM %s WHERE k = ?",0),row(0,new Date(123123123123L)));
+  assertRows(execute("SELECT k, asciival from mv_timestampval WHERE timestampval = fromJson(?)","123123123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, timestampval) VALUES (?, fromJson(?))",0,"\"2014-01-01\"");
+  assertRows(execute("SELECT k, timestampval FROM %s WHERE k = ?",0),row(0,new SimpleDateFormat("y-M-d").parse("2014-01-01")));
+  assertRows(execute("SELECT k, asciival from mv_timestampval WHERE timestampval = fromJson(?)","\"2014-01-01\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, timeuuidval) VALUES (?, fromJson(?))",0,"\"6bddc89a-5644-11e4-97fc-56847afe9799\"");
+  assertRows(execute("SELECT k, timeuuidval FROM %s WHERE k = ?",0),row(0,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")));
+  updateView("INSERT INTO %s (k, timeuuidval) VALUES (?, fromJson(?))",0,"\"6BDDC89A-5644-11E4-97FC-56847AFE9799\"");
+  assertRows(execute("SELECT k, timeuuidval FROM %s WHERE k = ?",0),row(0,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")));
+  assertRows(execute("SELECT k, asciival from mv_timeuuidval WHERE timeuuidval = fromJson(?)","\"6BDDC89A-5644-11E4-97FC-56847AFE9799\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, uuidval) VALUES (?, fromJson(?))",0,"\"6bddc89a-5644-11e4-97fc-56847afe9799\"");
+  assertRows(execute("SELECT k, uuidval FROM %s WHERE k = ?",0),row(0,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")));
+  updateView("INSERT INTO %s (k, uuidval) VALUES (?, fromJson(?))",0,"\"6BDDC89A-5644-11E4-97FC-56847AFE9799\"");
+  assertRows(execute("SELECT k, uuidval FROM %s WHERE k = ?",0),row(0,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")));
+  assertRows(execute("SELECT k, asciival from mv_uuidval WHERE uuidval = fromJson(?)","\"6BDDC89A-5644-11E4-97FC-56847AFE9799\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, varintval) VALUES (?, fromJson(?))",0,"123123123123");
+  assertRows(execute("SELECT k, varintval FROM %s WHERE k = ?",0),row(0,new BigInteger("123123123123")));
+  assertRows(execute("SELECT k, asciival from mv_varintval WHERE varintval = fromJson(?)","123123123123"),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, varintval) VALUES (?, fromJson(?))",0,"\"1234567890123456789012345678901234567890\"");
+  assertRows(execute("SELECT k, varintval FROM %s WHERE k = ?",0),row(0,new BigInteger("1234567890123456789012345678901234567890")));
+  assertRows(execute("SELECT k, asciival from mv_varintval WHERE varintval = fromJson(?)","\"1234567890123456789012345678901234567890\""),row(0,"ascii text"));
+  updateView("INSERT INTO %s (k, listval) VALUES (?, fromJson(?))",0,"[1, 2, 3]");
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(1,2,3)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(1,2,3)));
+  updateView("INSERT INTO %s (k, listval) VALUES (?, fromJson(?))",0,"[1]");
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(1)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(1)));
+  updateView("UPDATE %s SET listval = listval + fromJson(?) WHERE k = ?","[2]",0);
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(1,2)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(1,2)));
+  updateView("UPDATE %s SET listval = fromJson(?) + listval WHERE k = ?","[0]",0);
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(0,1,2)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(0,1,2)));
+  updateView("UPDATE %s SET listval[1] = fromJson(?) WHERE k = ?","10",0);
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(0,10,2)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(0,10,2)));
+  updateView("DELETE listval[1] FROM %s WHERE k = ?",0);
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,list(0,2)));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(0,2)));
+  updateView("INSERT INTO %s (k, listval) VALUES (?, fromJson(?))",0,"[]");
+  assertRows(execute("SELECT k, listval FROM %s WHERE k = ?",0),row(0,null));
+  assertRows(execute("SELECT k, listval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,null));
+  updateView("INSERT INTO %s (k, frozenlistval) VALUES (?, fromJson(?))",0,"[1, 2, 3]");
+  assertRows(execute("SELECT k, frozenlistval FROM %s WHERE k = ?",0),row(0,list(1,2,3)));
+  assertRows(execute("SELECT k, frozenlistval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(1,2,3)));
+  assertRows(execute("SELECT k, textval from mv_frozenlistval where frozenlistval = fromJson(?)","[1, 2, 3]"),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, frozenlistval) VALUES (?, fromJson(?))",0,"[3, 2, 1]");
+  assertRows(execute("SELECT k, frozenlistval FROM %s WHERE k = ?",0),row(0,list(3,2,1)));
+  assertRows(execute("SELECT k, textval from mv_frozenlistval where frozenlistval = fromJson(?)","[1, 2, 3]"));
+  assertRows(execute("SELECT k, textval from mv_frozenlistval where frozenlistval = fromJson(?)","[3, 2, 1]"),row(0,"abcd"));
+  assertRows(execute("SELECT k, frozenlistval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list(3,2,1)));
+  updateView("INSERT INTO %s (k, frozenlistval) VALUES (?, fromJson(?))",0,"[]");
+  assertRows(execute("SELECT k, frozenlistval FROM %s WHERE k = ?",0),row(0,list()));
+  assertRows(execute("SELECT k, frozenlistval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,list()));
+  updateView("INSERT INTO %s (k, setval) VALUES (?, fromJson(?))",0,"[\"6bddc89a-5644-11e4-97fc-56847afe9798\", \"6bddc89a-5644-11e4-97fc-56847afe9799\"]");
+  assertRows(execute("SELECT k, setval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  assertRows(execute("SELECT k, setval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  updateView("INSERT INTO %s (k, setval) VALUES (?, fromJson(?))",0,"[\"6bddc89a-5644-11e4-97fc-56847afe9798\", \"6bddc89a-5644-11e4-97fc-56847afe9798\", \"6bddc89a-5644-11e4-97fc-56847afe9799\"]");
+  assertRows(execute("SELECT k, setval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  assertRows(execute("SELECT k, setval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  updateView("UPDATE %s SET setval = setval + fromJson(?) WHERE k = ?","[\"6bddc89a-5644-0000-97fc-56847afe9799\"]",0);
+  assertRows(execute("SELECT k, setval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-5644-0000-97fc-56847afe9799"),UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  assertRows(execute("SELECT k, setval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-5644-0000-97fc-56847afe9799"),UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  updateView("UPDATE %s SET setval = setval - fromJson(?) WHERE k = ?","[\"6bddc89a-5644-0000-97fc-56847afe9799\"]",0);
+  assertRows(execute("SELECT k, setval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  assertRows(execute("SELECT k, setval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  updateView("INSERT INTO %s (k, setval) VALUES (?, fromJson(?))",0,"[]");
+  assertRows(execute("SELECT k, setval FROM %s WHERE k = ?",0),row(0,null));
+  assertRows(execute("SELECT k, setval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,null));
+  updateView("INSERT INTO %s (k, frozensetval) VALUES (?, fromJson(?))",0,"[\"6bddc89a-5644-11e4-97fc-56847afe9798\", \"6bddc89a-5644-11e4-97fc-56847afe9799\"]");
+  assertRows(execute("SELECT k, frozensetval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  assertRows(execute("SELECT k, frozensetval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799")))));
+  updateView("INSERT INTO %s (k, frozensetval) VALUES (?, fromJson(?))",0,"[\"6bddc89a-0000-11e4-97fc-56847afe9799\", \"6bddc89a-5644-11e4-97fc-56847afe9798\"]");
+  assertRows(execute("SELECT k, frozensetval FROM %s WHERE k = ?",0),row(0,set(UUID.fromString("6bddc89a-0000-11e4-97fc-56847afe9799"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798")))));
+  assertRows(execute("SELECT k, frozensetval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,set(UUID.fromString("6bddc89a-0000-11e4-97fc-56847afe9799"),(UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9798")))));
+  updateView("INSERT INTO %s (k, mapval) VALUES (?, fromJson(?))",0,"{\"a\": 1, \"b\": 2}");
+  assertRows(execute("SELECT k, mapval FROM %s WHERE k = ?",0),row(0,map("a",1,"b",2)));
+  assertRows(execute("SELECT k, mapval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,map("a",1,"b",2)));
+  updateView("UPDATE %s SET mapval[?] = ?  WHERE k = ?","c",3,0);
+  assertRows(execute("SELECT k, mapval FROM %s WHERE k = ?",0),row(0,map("a",1,"b",2,"c",3)));
+  assertRows(execute("SELECT k, mapval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,map("a",1,"b",2,"c",3)));
+  updateView("UPDATE %s SET mapval[?] = ?  WHERE k = ?","b",10,0);
+  assertRows(execute("SELECT k, mapval FROM %s WHERE k = ?",0),row(0,map("a",1,"b",10,"c",3)));
+  assertRows(execute("SELECT k, mapval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,map("a",1,"b",10,"c",3)));
+  updateView("DELETE mapval[?] FROM %s WHERE k = ?","b",0);
+  assertRows(execute("SELECT k, mapval FROM %s WHERE k = ?",0),row(0,map("a",1,"c",3)));
+  assertRows(execute("SELECT k, mapval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,map("a",1,"c",3)));
+  updateView("INSERT INTO %s (k, mapval) VALUES (?, fromJson(?))",0,"{}");
+  assertRows(execute("SELECT k, mapval FROM %s WHERE k = ?",0),row(0,null));
+  assertRows(execute("SELECT k, mapval from mv_textval WHERE textval = fromJson(?)","\"abcd\""),row(0,null));
+  updateView("INSERT INTO %s (k, frozenmapval) VALUES (?, fromJson(?))",0,"{\"a\": 1, \"b\": 2}");
+  assertRows(execute("SELECT k, frozenmapval FROM %s WHERE k = ?",0),row(0,map("a",1,"b",2)));
+  assertRows(execute("SELECT k, textval FROM mv_frozenmapval WHERE frozenmapval = fromJson(?)","{\"a\": 1, \"b\": 2}"),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, frozenmapval) VALUES (?, fromJson(?))",0,"{\"b\": 2, \"a\": 3}");
+  assertRows(execute("SELECT k, frozenmapval FROM %s WHERE k = ?",0),row(0,map("a",3,"b",2)));
+  assertRows(execute("SELECT k, frozenmapval FROM %s WHERE k = ?",0),row(0,map("a",3,"b",2)));
+  updateView("INSERT INTO %s (k, tupleval) VALUES (?, fromJson(?))",0,"[1, \"foobar\", \"6bddc89a-5644-11e4-97fc-56847afe9799\"]");
+  assertRows(execute("SELECT k, tupleval FROM %s WHERE k = ?",0),row(0,tuple(1,"foobar",UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"))));
+  assertRows(execute("SELECT k, textval FROM mv_tupleval WHERE tupleval = ?",tuple(1,"foobar",UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"))),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, tupleval) VALUES (?, fromJson(?))",0,"[1, null, \"6bddc89a-5644-11e4-97fc-56847afe9799\"]");
+  assertRows(execute("SELECT k, tupleval FROM %s WHERE k = ?",0),row(0,tuple(1,null,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"))));
+  assertRows(execute("SELECT k, textval FROM mv_tupleval WHERE tupleval = ?",tuple(1,"foobar",UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"))));
+  assertRows(execute("SELECT k, textval FROM mv_tupleval WHERE tupleval = ?",tuple(1,null,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"))),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, udtval) VALUES (?, fromJson(?))",0,"{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}");
+  assertRows(execute("SELECT k, udtval.a, udtval.b, udtval.c FROM %s WHERE k = ?",0),row(0,1,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"),set("bar","foo")));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}"),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, udtval) VALUES (?, fromJson(?))",0,"{\"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"a\": 1, \"c\": [\"foo\", \"bar\"]}");
+  assertRows(execute("SELECT k, udtval.a, udtval.b, udtval.c FROM %s WHERE k = ?",0),row(0,1,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"),set("bar","foo")));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}"),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, udtval) VALUES (?, fromJson(?))",0,"{\"a\": null, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}");
+  assertRows(execute("SELECT k, udtval.a, udtval.b, udtval.c FROM %s WHERE k = ?",0),row(0,null,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"),set("bar","foo")));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}"));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": null, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}"),row(0,"abcd"));
+  updateView("INSERT INTO %s (k, udtval) VALUES (?, fromJson(?))",0,"{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\"}");
+  assertRows(execute("SELECT k, udtval.a, udtval.b, udtval.c FROM %s WHERE k = ?",0),row(0,1,UUID.fromString("6bddc89a-5644-11e4-97fc-56847afe9799"),null));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": null, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\", \"c\": [\"foo\", \"bar\"]}"));
+  assertRows(execute("SELECT k, textval FROM mv_udtval WHERE udtval = fromJson(?)","{\"a\": 1, \"b\": \"6bddc89a-5644-11e4-97fc-56847afe9799\"}"),row(0,"abcd"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.cql3.ViewTest </h4><pre class="type-13 type-15 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testCompoundPartitionKey() throws Throwable {
+  createTable("CREATE TABLE %s (" + "k int, " + "asciival ascii, "+ "bigintval bigint, "+ "PRIMARY KEY((k, asciival)))");
+  CFMetaData metadata=currentTableMetadata();
+  execute("USE " + keyspace());
+  executeNet(protocolVersion,"USE " + keyspace());
+  for (  ColumnDefinition def : new HashSet<>(metadata.allColumns())) {
+    try {
+      String query="CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL "+ (def.name.toString().equals("asciival") ? "" : "AND asciival IS NOT NULL ")+ "PRIMARY KEY ("+ def.name+ ", k"+ (def.name.toString().equals("asciival") ? "" : ", asciival")+ ")";
+      createView("mv1_" + def.name,query);
+      if (def.type.isMultiCell())       Assert.fail("MV on a multicell should fail " + def);
+    }
+ catch (    InvalidQueryException e) {
+      if (!def.type.isMultiCell() && !def.isPartitionKey())       Assert.fail("MV creation failed on " + def);
+    }
+    try {
+      String query="CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL "+ (def.name.toString().equals("asciival") ? "" : "AND asciival IS NOT NULL ")+ " PRIMARY KEY ("+ def.name+ ", asciival"+ (def.name.toString().equals("k") ? "" : ", k")+ ")";
+      createView("mv2_" + def.name,query);
+      if (def.type.isMultiCell())       Assert.fail("MV on a multicell should fail " + def);
+    }
+ catch (    InvalidQueryException e) {
+      if (!def.type.isMultiCell() && !def.isPartitionKey())       Assert.fail("MV creation failed on " + def);
+    }
+    try {
+      String query="CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL "+ (def.name.toString().equals("asciival") ? "" : "AND asciival IS NOT NULL ")+ "PRIMARY KEY (("+ def.name+ ", k), asciival)";
+      createView("mv3_" + def.name,query);
+      if (def.type.isMultiCell())       Assert.fail("MV on a multicell should fail " + def);
+    }
+ catch (    InvalidQueryException e) {
+      if (!def.type.isMultiCell() && !def.isPartitionKey())       Assert.fail("MV creation failed on " + def);
+    }
+    try {
+      String query="CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL "+ (def.name.toString().equals("asciival") ? "" : "AND asciival IS NOT NULL ")+ "PRIMARY KEY (("+ def.name+ ", k), asciival)";
+      createView("mv3_" + def.name,query);
+      Assert.fail("Should fail on duplicate name");
+    }
+ catch (    Exception e) {
+    }
+    try {
+      String query="CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE " + def.name + " IS NOT NULL AND k IS NOT NULL "+ (def.name.toString().equals("asciival") ? "" : "AND asciival IS NOT NULL ")+ "PRIMARY KEY (("+ def.name+ ", k), nonexistentcolumn)";
+      createView("mv3_" + def.name,query);
+      Assert.fail("Should fail with unknown base column");
+    }
+ catch (    InvalidQueryException e) {
+    }
+  }
+  updateView("INSERT INTO %s (k, asciival, bigintval) VALUES (?, ?, fromJson(?))",0,"ascii text","123123123123");
+  updateView("INSERT INTO %s (k, asciival) VALUES (?, fromJson(?))",0,"\"ascii text\"");
+  assertRows(execute("SELECT bigintval FROM %s WHERE k = ? and asciival = ?",0,"ascii text"),row(123123123123L));
+  assertRows(execute("SELECT k, bigintval from mv1_asciival WHERE asciival = ?","ascii text"),row(0,123123123123L));
+  assertRows(execute("SELECT k, bigintval from mv2_k WHERE asciival = ? and k = ?","ascii text",0),row(0,123123123123L));
+  assertRows(execute("SELECT k from mv1_bigintval WHERE bigintval = ?",123123123123L),row(0));
+  assertRows(execute("SELECT asciival from mv3_bigintval where bigintval = ? AND k = ?",123123123123L,0),row("ascii text"));
+  updateView("INSERT INTO %s (k, asciival, bigintval) VALUES (?, ?, fromJson(?))",0,"ascii text","1");
+  assertRows(execute("SELECT bigintval FROM %s WHERE k = ? and asciival = ?",0,"ascii text"),row(1L));
+  assertRows(execute("SELECT k, bigintval from mv1_asciival WHERE asciival = ?","ascii text"),row(0,1L));
+  assertRows(execute("SELECT k, bigintval from mv2_k WHERE asciival = ? and k = ?","ascii text",0),row(0,1L));
+  assertRows(execute("SELECT k from mv1_bigintval WHERE bigintval = ?",123123123123L));
+  assertRows(execute("SELECT asciival from mv3_bigintval where bigintval = ? AND k = ?",123123123123L,0));
+  assertRows(execute("SELECT asciival from mv3_bigintval where bigintval = ? AND k = ?",1L,0),row("ascii text"));
+  updateView("TRUNCATE %s");
+  assertRows(execute("SELECT bigintval FROM %s WHERE k = ? and asciival = ?",0,"ascii text"));
+  assertRows(execute("SELECT k, bigintval from mv1_asciival WHERE asciival = ?","ascii text"));
+  assertRows(execute("SELECT k, bigintval from mv2_k WHERE asciival = ? and k = ?","ascii text",0));
+  assertRows(execute("SELECT asciival from mv3_bigintval where bigintval = ? AND k = ?",1L,0));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.cql3.validation.entities.TimestampTest </h4><pre class="type-13 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test timestmp and ttl
+ * migrated from cql_tests.py:TestCQL.timestamp_and_ttl_test()
+ */
+@Test public void testTimestampTTL() throws Throwable {
+  createTable("CREATE TABLE %s (k int PRIMARY KEY, c text, d text)");
+  execute("INSERT INTO %s (k, c) VALUES (1, 'test')");
+  execute("INSERT INTO %s (k, c) VALUES (2, 'test') USING TTL 400");
+  Object[][] res=getRows(execute("SELECT k, c, writetime(c), ttl(c) FROM %s"));
+  Assert.assertEquals(2,res.length);
+  for (  Object[] r : res) {
+    assertTrue(r[2] instanceof Integer || r[2] instanceof Long);
+    if (r[0].equals(1))     assertNull(r[3]);
+ else     assertTrue(r[3] instanceof Integer || r[2] instanceof Long);
+  }
+  res=getRows(execute("SELECT k, c, blobAsBigint(bigintAsBlob(writetime(c))), ttl(c) FROM %s"));
+  Assert.assertEquals(2,res.length);
+  for (  Object[] r : res) {
+    assertTrue(r[2] instanceof Integer || r[2] instanceof Long);
+    if (r[0].equals(1))     assertNull(r[3]);
+ else     assertTrue(r[3] instanceof Integer || r[2] instanceof Long);
+  }
+  res=getRows(execute("SELECT k, c, writetime(c), blobAsInt(intAsBlob(ttl(c))) FROM %s"));
+  Assert.assertEquals(2,res.length);
+  for (  Object[] r : res) {
+    assertTrue(r[2] instanceof Integer || r[2] instanceof Long);
+    if (r[0].equals(1))     assertNull(r[3]);
+ else     assertTrue(r[3] instanceof Integer || r[2] instanceof Long);
+  }
+  assertInvalid("SELECT k, c, writetime(k) FROM %s");
+  assertRows(execute("SELECT k, d, writetime(d) FROM %s WHERE k = 1"),row(1,null,null));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.cql3.validation.operations.DeleteTest </h4><pre class="type-6 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test deletion by 'composite prefix' (range tombstones) with compaction
+ * migrated from cql_tests.py:TestCQL.range_tombstones_compaction_test()
+ */
+@Test public void testDeleteByCompositePrefixWithCompaction() throws Throwable {
+  createTable("CREATE TABLE %s (k int, c1 int, c2 int, v1 text, PRIMARY KEY (k, c1, c2))");
+  for (int c1=0; c1 < 4; c1++)   for (int c2=0; c2 < 2; c2++)   execute("INSERT INTO %s (k, c1, c2, v1) VALUES (0, ?, ?, ?)",c1,c2,String.format("%d%d",c1,c2));
+  flush();
+  execute("DELETE FROM %s WHERE k = 0 AND c1 = 1");
+  flush();
+  compact();
+  Object[][] rows=getRows(execute("SELECT v1 FROM %s WHERE k = 0"));
+  int idx=0;
+  for (int c1=0; c1 < 4; c1++)   for (int c2=0; c2 < 2; c2++)   if (c1 != 1)   assertEquals(String.format("%d%d",c1,c2),rows[idx++][0]);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test deletions
+ * migrated from cql_tests.py:TestCQL.no_range_ghost_test()
+ */
+@Test public void testNoRangeGhost() throws Throwable {
+  createTable("CREATE TABLE %s ( k int PRIMARY KEY, v int ) ");
+  for (int k=0; k < 5; k++)   execute("INSERT INTO %s (k, v) VALUES (?, 0)",k);
+  Object[][] rows=getRows(execute("SELECT k FROM %s"));
+  int[] ordered=sortIntRows(rows);
+  for (int k=0; k < 5; k++)   assertEquals(k,ordered[k]);
+  execute("DELETE FROM %s WHERE k=2");
+  rows=getRows(execute("SELECT k FROM %s"));
+  ordered=sortIntRows(rows);
+  int idx=0;
+  for (int k=0; k < 5; k++)   if (k != 2)   assertEquals(k,ordered[idx++]);
+  createTable("CREATE TABLE %s ( KEY varchar PRIMARY KEY, password varchar, gender varchar, birth_year bigint)");
+  execute("INSERT INTO %s (KEY, password) VALUES ('user1', 'ch@ngem3a')");
+  execute("UPDATE %s SET gender = 'm', birth_year = 1980 WHERE KEY = 'user1'");
+  assertRows(execute("SELECT * FROM %s WHERE KEY='user1'"),row("user1",1980L,"m","ch@ngem3a"));
+  execute("TRUNCATE %s");
+  assertEmpty(execute("SELECT * FROM %s"));
+  assertEmpty(execute("SELECT * FROM %s WHERE KEY='user1'"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.DirectoriesTest </h4><pre class="type-6 type-7 type-13 type-15 type-5 type-14 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDiskFreeSpace(){
+  DataDirectory[] dataDirectories=new DataDirectory[]{new DataDirectory(new File("/nearlyFullDir1")){
+    public long getAvailableSpace(){
+      return 11L;
+    }
+  }
+,new DataDirectory(new File("/nearlyFullDir2")){
+    public long getAvailableSpace(){
+      return 10L;
+    }
+  }
+,new DataDirectory(new File("/uniformDir1")){
+    public long getAvailableSpace(){
+      return 1000L;
+    }
+  }
+,new DataDirectory(new File("/uniformDir2")){
+    public long getAvailableSpace(){
+      return 999L;
+    }
+  }
+,new DataDirectory(new File("/veryFullDir")){
+    public long getAvailableSpace(){
+      return 4L;
+    }
+  }
+};
+  List<Directories.DataDirectoryCandidate> candidates=getWriteableDirectories(dataDirectories,0L);
+  assertSame(dataDirectories[2],candidates.get(0).dataDirectory);
+  assertSame(dataDirectories[3],candidates.get(1).dataDirectory);
+  assertSame(dataDirectories[0],candidates.get(2).dataDirectory);
+  assertSame(dataDirectories[1],candidates.get(3).dataDirectory);
+  Map<DataDirectory,DataDirectory> testMap=new IdentityHashMap<>();
+  for (int i=0; ; i++) {
+    candidates=getWriteableDirectories(dataDirectories,5L);
+    assertEquals(4,candidates.size());
+    DataDirectory dir=Directories.pickWriteableDirectory(candidates);
+    testMap.put(dir,dir);
+    assertFalse(testMap.size() > 4);
+    if (testMap.size() == 4) {
+      if (i >= 100)       break;
+    }
+    if (i >= 10000000)     fail();
+  }
+  testMap.clear();
+  for (int i=0; ; i++) {
+    candidates=getWriteableDirectories(dataDirectories,11L);
+    assertEquals(3,candidates.size());
+    for (    Directories.DataDirectoryCandidate candidate : candidates)     assertTrue(candidate.dataDirectory.getAvailableSpace() >= 11L);
+    DataDirectory dir=Directories.pickWriteableDirectory(candidates);
+    testMap.put(dir,dir);
+    assertFalse(testMap.size() > 3);
+    if (testMap.size() == 3) {
+      if (i >= 100)       break;
+    }
+    if (i >= 10000000)     fail();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.KeyCacheTest </h4><pre class="type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKeyCacheLoad() throws Exception {
+  CompactionManager.instance.disableAutoCompaction();
+  ColumnFamilyStore store=Keyspace.open(KEYSPACE1).getColumnFamilyStore(COLUMN_FAMILY2);
+  CacheService.instance.invalidateKeyCache();
+  assertKeyCacheSize(0,KEYSPACE1,COLUMN_FAMILY2);
+  SchemaLoader.insertData(KEYSPACE1,COLUMN_FAMILY2,0,100);
+  store.forceBlockingFlush();
+  readData(KEYSPACE1,COLUMN_FAMILY2,0,100);
+  assertKeyCacheSize(100,KEYSPACE1,COLUMN_FAMILY2);
+  Map<KeyCacheKey,RowIndexEntry> savedMap=new HashMap<KeyCacheKey,RowIndexEntry>();
+  for (Iterator<KeyCacheKey> iter=CacheService.instance.keyCache.keyIterator(); iter.hasNext(); ) {
+    KeyCacheKey k=iter.next();
+    if (k.desc.ksname.equals(KEYSPACE1) && k.desc.cfname.equals(COLUMN_FAMILY2))     savedMap.put(k,CacheService.instance.keyCache.get(k));
+  }
+  CacheService.instance.keyCache.submitWrite(Integer.MAX_VALUE).get();
+  CacheService.instance.invalidateKeyCache();
+  assertKeyCacheSize(0,KEYSPACE1,COLUMN_FAMILY2);
+  CacheService.instance.keyCache.loadSaved();
+  assertKeyCacheSize(savedMap.size(),KEYSPACE1,COLUMN_FAMILY2);
+  for (  Map.Entry<KeyCacheKey,RowIndexEntry> entry : savedMap.entrySet()) {
+    RowIndexEntry expected=entry.getValue();
+    RowIndexEntry actual=CacheService.instance.keyCache.get(entry.getKey());
+    assertEquals(expected.position,actual.position);
+    assertEquals(expected.columnsIndex(),actual.columnsIndex());
+    if (expected.isIndexed()) {
+      assertEquals(expected.deletionTime(),actual.deletionTime());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.ScrubTest </h4><pre class="type-7 type-13 type-15 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testScrubCorruptedCounterRow() throws IOException, WriteTimeoutException {
+  int numPartitions=1000;
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(COUNTER_CF);
+  cfs.clearUnsafe();
+  fillCounterCF(cfs,numPartitions);
+  assertOrderedAll(cfs,numPartitions);
+  assertEquals(1,cfs.getLiveSSTables().size());
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  overrideWithGarbage(sstable,ByteBufferUtil.bytes("0"),ByteBufferUtil.bytes("1"));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,false,false,true)){
+    scrubber.scrub();
+    fail("Expected a CorruptSSTableException to be thrown");
+  }
+ catch (  IOError err) {
+  }
+  Scrubber.ScrubResult scrubResult;
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,true,false,true)){
+    scrubResult=scrubber.scrubWithResult();
+  }
+   assertNotNull(scrubResult);
+  boolean compression=Boolean.parseBoolean(System.getProperty("cassandra.test.compression","false"));
+  if (compression) {
+    assertEquals(0,scrubResult.emptyRows);
+    assertEquals(numPartitions,scrubResult.badRows + scrubResult.goodRows);
+    assertTrue(scrubResult.goodRows >= scrubResult.badRows * 2);
+  }
+ else {
+    assertEquals(0,scrubResult.emptyRows);
+    assertEquals(1,scrubResult.badRows);
+    assertEquals(numPartitions - 1,scrubResult.goodRows);
+  }
+  assertEquals(1,cfs.getLiveSSTables().size());
+  assertOrderedAll(cfs,scrubResult.goodRows);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.commitlog.CommitLogStressTest </h4><pre class="type-10 type-13 type-15 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void cleanDir(){
+  File dir=new File(location);
+  if (dir.isDirectory()) {
+    File[] files=dir.listFiles();
+    for (    File f : files)     if (!f.delete())     Assert.fail("Failed to delete " + f);
+  }
+ else {
+    dir.mkdir();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.compaction.AntiCompactionTest </h4><pre class="type-6 type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void antiCompactOne() throws Exception {
+  ColumnFamilyStore store=prepareColumnFamilyStore();
+  Collection<SSTableReader> sstables=getUnrepairedSSTables(store);
+  assertEquals(store.getLiveSSTables().size(),sstables.size());
+  Range<Token> range=new Range<Token>(new BytesToken("0".getBytes()),new BytesToken("4".getBytes()));
+  List<Range<Token>> ranges=Arrays.asList(range);
+  int repairedKeys=0;
+  int nonRepairedKeys=0;
+  try (LifecycleTransaction txn=store.getTracker().tryModify(sstables,OperationType.ANTICOMPACTION);Refs<SSTableReader> refs=Refs.ref(sstables)){
+    if (txn == null)     throw new IllegalStateException();
+    long repairedAt=1000;
+    CompactionManager.instance.performAnticompaction(store,ranges,refs,txn,repairedAt);
+  }
+   assertEquals(2,store.getLiveSSTables().size());
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    try (ISSTableScanner scanner=sstable.getScanner((RateLimiter)null)){
+      while (scanner.hasNext()) {
+        UnfilteredRowIterator row=scanner.next();
+        if (sstable.isRepaired()) {
+          assertTrue(range.contains(row.partitionKey().getToken()));
+          repairedKeys++;
+        }
+ else {
+          assertFalse(range.contains(row.partitionKey().getToken()));
+          nonRepairedKeys++;
+        }
+      }
+    }
+   }
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    assertFalse(sstable.isMarkedCompacted());
+    assertEquals(1,sstable.selfRef().globalCount());
+  }
+  assertEquals(0,store.getTracker().getCompacting().size());
+  assertEquals(repairedKeys,4);
+  assertEquals(nonRepairedKeys,6);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.compaction.CompactionAwareWriterTest </h4><pre class="type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSplittingSizeTieredCompactionWriter() throws Throwable {
+  ColumnFamilyStore cfs=getColumnFamilyStore();
+  cfs.disableAutoCompaction();
+  int rowCount=10000;
+  populate(rowCount);
+  LifecycleTransaction txn=cfs.getTracker().tryModify(cfs.getLiveSSTables(),OperationType.COMPACTION);
+  long beforeSize=txn.originals().iterator().next().onDiskLength();
+  CompactionAwareWriter writer=new SplittingSizeTieredCompactionWriter(cfs,cfs.getDirectories(),txn,txn.originals(),0);
+  int rows=compact(cfs,txn,writer);
+  long expectedSize=beforeSize / 2;
+  List<SSTableReader> sortedSSTables=new ArrayList<>(cfs.getLiveSSTables());
+  Collections.sort(sortedSSTables,new Comparator<SSTableReader>(){
+    @Override public int compare(    SSTableReader o1,    SSTableReader o2){
+      return Longs.compare(o2.onDiskLength(),o1.onDiskLength());
+    }
+  }
+);
+  for (  SSTableReader sstable : sortedSSTables) {
+    if (expectedSize > SplittingSizeTieredCompactionWriter.DEFAULT_SMALLEST_SSTABLE_BYTES)     assertEquals(expectedSize,sstable.onDiskLength(),expectedSize / 100);
+    expectedSize/=2;
+  }
+  assertEquals(rowCount,rows);
+  validateData(cfs,rowCount);
+  cfs.truncateBlocking();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.db.compaction.LeveledCompactionStrategyTest </h4><pre class="type-13 type-15 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Ensure that the grouping operation preserves the levels of grouped tables
+ */
+@Test public void testGrouperLevels() throws Exception {
+  ByteBuffer value=ByteBuffer.wrap(new byte[100 * 1024]);
+  new Random().nextBytes(value.array());
+  int rows=40;
+  int columns=20;
+  for (int r=0; r < rows; r++) {
+    UpdateBuilder update=UpdateBuilder.create(cfs.metadata,String.valueOf(r));
+    for (int c=0; c < columns; c++)     update.newRow("column" + c).add("val",value);
+    update.applyUnsafe();
+    cfs.forceBlockingFlush();
+  }
+  waitForLeveling(cfs);
+  CompactionStrategyManager strategyManager=cfs.getCompactionStrategyManager();
+  int l1Count=strategyManager.getSSTableCountPerLevel()[1];
+  int l2Count=strategyManager.getSSTableCountPerLevel()[2];
+  if (l1Count == 0 || l2Count == 0) {
+    logger.error("L1 or L2 has 0 sstables. Expected > 0 on both.");
+    logger.error("L1: " + l1Count);
+    logger.error("L2: " + l2Count);
+    Assert.fail();
+  }
+  Collection<Collection<SSTableReader>> groupedSSTables=cfs.getCompactionStrategyManager().groupSSTablesForAntiCompaction(cfs.getLiveSSTables());
+  for (  Collection<SSTableReader> sstableGroup : groupedSSTables) {
+    int groupLevel=-1;
+    Iterator<SSTableReader> it=sstableGroup.iterator();
+    while (it.hasNext()) {
+      SSTableReader sstable=it.next();
+      int tableLevel=sstable.getSSTableLevel();
+      if (groupLevel == -1)       groupLevel=tableLevel;
+      assert groupLevel == tableLevel;
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.dht.RangeTest </h4><pre class="type-6 type-7 type-13 type-15 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testRandomOrderedRangeContainmentChecker(){
+  Random r=new Random();
+  for (int j=0; j < 1000; j++) {
+    int numTokens=r.nextInt(300) + 1;
+    List<Range<Token>> ranges=new ArrayList<>(numTokens);
+    List<Token> tokens=new ArrayList<>(2 * numTokens);
+    for (int i=0; i < 2 * numTokens; i++)     tokens.add(t(r.nextLong()));
+    Collections.sort(tokens);
+    for (int i=0; i < tokens.size(); i++) {
+      ranges.add(new Range<>(tokens.get(i),tokens.get(i + 1)));
+      i++;
+    }
+    List<Token> tokensToTest=new ArrayList<>();
+    for (int i=0; i < 10000; i++)     tokensToTest.add(t(r.nextLong()));
+    tokensToTest.add(t(Long.MAX_VALUE));
+    tokensToTest.add(t(Long.MIN_VALUE));
+    tokensToTest.add(t(Long.MAX_VALUE - 1));
+    tokensToTest.add(t(Long.MIN_VALUE + 1));
+    Collections.sort(tokensToTest);
+    Range.OrderedRangeContainmentChecker checker=new Range.OrderedRangeContainmentChecker(ranges);
+    for (    Token t : tokensToTest) {
+      if (checker.contains(t) != Range.isInRanges(t,ranges))       fail(String.format("This should never flap! If it does, it is a bug (ranges = %s, token = %s)",Joiner.on(",").join(ranges),t));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.index.sasi.disk.OnDiskIndexTest </h4><pre class="type-6 type-7 type-13 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testSuperBlocks() throws Exception {
+  Map<ByteBuffer,TokenTreeBuilder> terms=new HashMap<>();
+  terms.put(UTF8Type.instance.decompose("1234"),keyBuilder(1L,2L));
+  terms.put(UTF8Type.instance.decompose("2345"),keyBuilder(3L,4L));
+  terms.put(UTF8Type.instance.decompose("3456"),keyBuilder(5L,6L));
+  terms.put(UTF8Type.instance.decompose("4567"),keyBuilder(7L,8L));
+  terms.put(UTF8Type.instance.decompose("5678"),keyBuilder(9L,10L));
+  OnDiskIndexBuilder builder=new OnDiskIndexBuilder(UTF8Type.instance,Int32Type.instance,OnDiskIndexBuilder.Mode.SPARSE);
+  for (  Map.Entry<ByteBuffer,TokenTreeBuilder> entry : terms.entrySet())   addAll(builder,entry.getKey(),entry.getValue());
+  File index=File.createTempFile("on-disk-sa-try-superblocks",".db");
+  index.deleteOnExit();
+  builder.finish(index);
+  OnDiskIndex onDisk=new OnDiskIndex(index,Int32Type.instance,new KeyConverter());
+  OnDiskIndex.OnDiskSuperBlock superBlock=onDisk.dataLevel.getSuperBlock(0);
+  Iterator<Token> iter=superBlock.iterator();
+  Long lastToken=null;
+  while (iter.hasNext()) {
+    Token token=iter.next();
+    if (lastToken != null)     Assert.assertTrue(lastToken.compareTo(token.get()) < 0);
+    lastToken=token.get();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.index.sasi.utils.MappedBufferTest </h4><pre class="type-6 type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSequentialIterationWithPadding() throws Exception {
+  long numValues=1000;
+  int maxPageBits=6;
+  int[] paddings=new int[]{0,3,5,7,9,11,13};
+  for (int numPageBits=3; numPageBits <= maxPageBits; numPageBits++) {
+    for (int typeSize=2; typeSize <= 8; typeSize*=2) {
+      for (      int padding : paddings) {
+        try (MappedBuffer buffer=createTestFile(numValues,typeSize,numPageBits,padding)){
+          long offset=0;
+          for (long j=0; j < numValues; j++) {
+switch (typeSize) {
+case 2:
+              Assert.assertEquals(j,buffer.getShort(offset));
+            break;
+case 4:
+          Assert.assertEquals(j,buffer.getInt(offset));
+        break;
+case 8:
+      Assert.assertEquals(j,buffer.getLong(offset));
+    break;
+default :
+  throw new AssertionError();
+}
+offset+=typeSize + padding;
+}
+}
+ }
+}
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSequentialIteration() throws IOException {
+  long numValues=1000;
+  for (int typeSize=2; typeSize <= 8; typeSize*=2) {
+    try (MappedBuffer buffer=createTestFile(numValues,typeSize,16,0)){
+      for (int j=0; j < numValues; j++) {
+        Assert.assertEquals(j * typeSize,buffer.position());
+switch (typeSize) {
+case 2:
+          Assert.assertEquals(j,buffer.getShort());
+        break;
+case 4:
+      Assert.assertEquals(j,buffer.getInt());
+    break;
+case 8:
+  Assert.assertEquals(j,buffer.getLong());
+break;
+default :
+throw new AssertionError();
+}
+}
+}
+ }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.compress.CompressedRandomAccessReaderTest </h4><pre class="type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test6791() throws IOException, ConfigurationException {
+  File f=File.createTempFile("compressed6791_","3");
+  String filename=f.getAbsolutePath();
+  try (ChannelProxy channel=new ChannelProxy(f)){
+    MetadataCollector sstableMetadataCollector=new MetadataCollector(new ClusteringComparator(BytesType.instance));
+    try (CompressedSequentialWriter writer=new CompressedSequentialWriter(f,filename + ".metadata",CompressionParams.snappy(32),sstableMetadataCollector)){
+      for (int i=0; i < 20; i++)       writer.write("x".getBytes());
+      FileMark mark=writer.mark();
+      for (int i=0; i < 40; ++i)       writer.write("y".getBytes());
+      writer.resetAndTruncate(mark);
+      for (int i=0; i < 20; i++)       writer.write("x".getBytes());
+      writer.finish();
+    }
+     try (RandomAccessReader reader=new CompressedRandomAccessReader.Builder(channel,new CompressionMetadata(filename + ".metadata",f.length(),ChecksumType.CRC32)).build()){
+      String res=reader.readLine();
+      assertEquals(res,"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+      assertEquals(40,res.length());
+    }
+   }
+  finally {
+    if (f.exists())     assertTrue(f.delete());
+    File metadata=new File(filename + ".metadata");
+    if (metadata.exists())     metadata.delete();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.sstable.IndexSummaryManagerTest </h4><pre class="type-7 type-13 type-4 type-5 type-2 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testRedistributeSummaries() throws IOException {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  int numSSTables=4;
+  int numRows=256;
+  createSSTables(ksname,cfname,numSSTables,numRows);
+  int minSamplingLevel=(BASE_SAMPLING_LEVEL * cfs.metadata.params.minIndexInterval) / cfs.metadata.params.maxIndexInterval;
+  List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   sstable.overrideReadMeter(new RestorableMeter(100.0,100.0));
+  long singleSummaryOffHeapSpace=sstables.get(0).getIndexSummaryOffHeapSize();
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * numSSTables));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL,sstable.getIndexSummarySamplingLevel());
+  assertEquals(singleSummaryOffHeapSpace * numSSTables,totalOffHeapSize(sstables));
+  validateData(cfs,numRows);
+  assert sstables.size() == 4;
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 2)));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 2,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 4)));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 4,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 2) + 4));
+  }
+   assert sstables.size() == 4;
+  for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 2,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * numSSTables));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(50.0,50.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(50.0,50.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(1).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  double lowerRate=50.0 * (DOWNSAMPLE_THESHOLD + (DOWNSAMPLE_THESHOLD * 0.10));
+  double higherRate=50.0 * (UPSAMPLE_THRESHOLD - (UPSAMPLE_THRESHOLD * 0.10));
+  sstables.get(0).overrideReadMeter(new RestorableMeter(lowerRate,lowerRate));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(higherRate,higherRate));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(1).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables=resetSummaries(cfs,sstables,singleSummaryOffHeapSpace);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(1.0,1.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(2.0,2.0));
+  sstables.get(2).overrideReadMeter(new RestorableMeter(1000.0,1000.0));
+  sstables.get(3).overrideReadMeter(new RestorableMeter(1000.0,1000.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3) + 50);
+  }
+   Collections.sort(sstables,hotnessComparator);
+  if (sstables.get(0).getIndexSummarySamplingLevel() == minSamplingLevel)   assertEquals(BASE_SAMPLING_LEVEL,sstables.get(1).getIndexSummarySamplingLevel());
+ else   assertEquals(BASE_SAMPLING_LEVEL,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(0.0,0.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(0.0,0.0));
+  sstables.get(2).overrideReadMeter(new RestorableMeter(92,92));
+  sstables.get(3).overrideReadMeter(new RestorableMeter(128.0,128.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(long)(singleSummaryOffHeapSpace + (singleSummaryOffHeapSpace * (92.0 / BASE_SAMPLING_LEVEL))));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(1,sstables.get(0).getIndexSummarySize());
+  assertEquals(1,sstables.get(0).getIndexSummarySize());
+  assertTrue(sstables.get(2).getIndexSummarySamplingLevel() > minSamplingLevel);
+  assertTrue(sstables.get(2).getIndexSummarySamplingLevel() < BASE_SAMPLING_LEVEL);
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),10);
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(1,sstable.getIndexSummarySize());
+  validateData(cfs,numRows);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-13 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJMXFunctions() throws IOException {
+  IndexSummaryManager manager=IndexSummaryManager.instance;
+  manager.setResizeIntervalInMinutes(-1);
+  assertNull(manager.getTimeToNextResize(TimeUnit.MINUTES));
+  manager.setResizeIntervalInMinutes(10);
+  assertEquals(10,manager.getResizeIntervalInMinutes());
+  assertEquals(10,manager.getTimeToNextResize(TimeUnit.MINUTES),1);
+  manager.setResizeIntervalInMinutes(15);
+  assertEquals(15,manager.getResizeIntervalInMinutes());
+  assertEquals(15,manager.getTimeToNextResize(TimeUnit.MINUTES),2);
+  assertTrue(manager.getMemoryPoolCapacityInMB() >= 0);
+  manager.setMemoryPoolCapacityInMB(10);
+  assertEquals(10,manager.getMemoryPoolCapacityInMB());
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  cfs.truncateBlocking();
+  cfs.disableAutoCompaction();
+  ByteBuffer value=ByteBuffer.wrap(new byte[100]);
+  int numSSTables=2;
+  int numRows=10;
+  for (int sstable=0; sstable < numSSTables; sstable++) {
+    for (int row=0; row < numRows; row++) {
+      String key=String.format("%3d",row);
+      new RowUpdateBuilder(cfs.metadata,0,key).clustering("column").add("val",value).build().applyUnsafe();
+    }
+    cfs.forceBlockingFlush();
+  }
+  assertTrue(manager.getAverageIndexInterval() >= cfs.metadata.params.minIndexInterval);
+  Map<String,Integer> intervals=manager.getIndexIntervals();
+  for (  Map.Entry<String,Integer> entry : intervals.entrySet())   if (entry.getKey().contains(CF_STANDARDLOWiINTERVAL))   assertEquals(cfs.metadata.params.minIndexInterval,entry.getValue(),0.001);
+  manager.setMemoryPoolCapacityInMB(0);
+  manager.redistributeSummaries();
+  assertTrue(manager.getAverageIndexInterval() > cfs.metadata.params.minIndexInterval);
+  intervals=manager.getIndexIntervals();
+  for (  Map.Entry<String,Integer> entry : intervals.entrySet()) {
+    if (entry.getKey().contains(CF_STANDARDLOWiINTERVAL))     assertTrue(entry.getValue() >= cfs.metadata.params.minIndexInterval);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.sstable.IndexSummaryTest </h4><pre class="type-6 type-7 type-13 type-4 type-2 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testDownsample(){
+  final int NUM_KEYS=4096;
+  final int INDEX_INTERVAL=128;
+  final int ORIGINAL_NUM_ENTRIES=NUM_KEYS / INDEX_INTERVAL;
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(NUM_KEYS,INDEX_INTERVAL);
+  List<DecoratedKey> keys=random.left;
+  IndexSummary original=random.right;
+  for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++)   assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(original.getKey(i)));
+  List<Integer> samplePattern=Downsampling.getSamplingPattern(BASE_SAMPLING_LEVEL);
+  int downsamplingRound=1;
+  for (int samplingLevel=BASE_SAMPLING_LEVEL - 1; samplingLevel >= 1; samplingLevel--) {
+    try (IndexSummary downsampled=downsample(original,samplingLevel,128,partitioner)){
+      assertEquals(entriesAtSamplingLevel(samplingLevel,original.getMaxNumberOfEntries()),downsampled.size());
+      int sampledCount=0;
+      List<Integer> skipStartPoints=samplePattern.subList(0,downsamplingRound);
+      for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++) {
+        if (!shouldSkip(i,skipStartPoints)) {
+          assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+          sampledCount++;
+        }
+      }
+      testPosition(original,downsampled,keys);
+      downsamplingRound++;
+    }
+   }
+  IndexSummary previous=original;
+  downsamplingRound=1;
+  for (int downsampleLevel=BASE_SAMPLING_LEVEL - 1; downsampleLevel >= 1; downsampleLevel--) {
+    IndexSummary downsampled=downsample(previous,downsampleLevel,128,partitioner);
+    if (previous != original)     previous.close();
+    assertEquals(entriesAtSamplingLevel(downsampleLevel,original.getMaxNumberOfEntries()),downsampled.size());
+    int sampledCount=0;
+    List<Integer> skipStartPoints=samplePattern.subList(0,downsamplingRound);
+    for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++) {
+      if (!shouldSkip(i,skipStartPoints)) {
+        assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+        sampledCount++;
+      }
+    }
+    testPosition(original,downsampled,keys);
+    previous=downsampled;
+    downsamplingRound++;
+  }
+  previous.close();
+  original.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.sstable.SSTableMetadataTest </h4><pre class="type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTrackMaxDeletionTime(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard1");
+  long timestamp=System.currentTimeMillis();
+  for (int i=0; i < 10; i++) {
+    DecoratedKey key=Util.dk(Integer.toString(i));
+    for (int j=0; j < 10; j++)     new RowUpdateBuilder(store.metadata,timestamp,10 + j,Integer.toString(i)).clustering(Integer.toString(j)).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  new RowUpdateBuilder(store.metadata,timestamp,10000,"longttl").clustering("col").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  store.forceBlockingFlush();
+  assertEquals(1,store.getLiveSSTables().size());
+  int ttltimestamp=(int)(System.currentTimeMillis() / 1000);
+  int firstDelTime=0;
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    firstDelTime=sstable.getSSTableMetadata().maxLocalDeletionTime;
+    assertEquals(ttltimestamp + 10000,firstDelTime,10);
+  }
+  new RowUpdateBuilder(store.metadata,timestamp,20000,"longttl2").clustering("col").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  ttltimestamp=(int)(System.currentTimeMillis() / 1000);
+  store.forceBlockingFlush();
+  assertEquals(2,store.getLiveSSTables().size());
+  List<SSTableReader> sstables=new ArrayList<>(store.getLiveSSTables());
+  if (sstables.get(0).getSSTableMetadata().maxLocalDeletionTime < sstables.get(1).getSSTableMetadata().maxLocalDeletionTime) {
+    assertEquals(sstables.get(0).getSSTableMetadata().maxLocalDeletionTime,firstDelTime);
+    assertEquals(sstables.get(1).getSSTableMetadata().maxLocalDeletionTime,ttltimestamp + 20000,10);
+  }
+ else {
+    assertEquals(sstables.get(1).getSSTableMetadata().maxLocalDeletionTime,firstDelTime);
+    assertEquals(sstables.get(0).getSSTableMetadata().maxLocalDeletionTime,ttltimestamp + 20000,10);
+  }
+  Util.compact(store,store.getLiveSSTables());
+  assertEquals(1,store.getLiveSSTables().size());
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    assertEquals(sstable.getSSTableMetadata().maxLocalDeletionTime,ttltimestamp + 20000,10);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * 1. create a row with columns with ttls, 5x100 and 1x1000
+ * 2. flush, verify (maxLocalDeletionTime = time+1000)
+ * 3. delete column with ttl=1000
+ * 4. flush, verify the new sstable (maxLocalDeletionTime = ~now)
+ * 5. compact
+ * 6. verify resulting sstable has maxLocalDeletionTime = time + 100.
+ * @throws ExecutionException
+ * @throws InterruptedException
+ */
+@Test public void testWithDeletes() throws ExecutionException, InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard2");
+  long timestamp=System.currentTimeMillis();
+  DecoratedKey key=Util.dk("deletetest");
+  for (int i=0; i < 5; i++)   new RowUpdateBuilder(store.metadata,timestamp,100,"deletetest").clustering("deletecolumn" + i).add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  new RowUpdateBuilder(store.metadata,timestamp,1000,"deletetest").clustering("todelete").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  store.forceBlockingFlush();
+  assertEquals(1,store.getLiveSSTables().size());
+  int ttltimestamp=(int)(System.currentTimeMillis() / 1000);
+  int firstMaxDelTime=0;
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    firstMaxDelTime=sstable.getSSTableMetadata().maxLocalDeletionTime;
+    assertEquals(ttltimestamp + 1000,firstMaxDelTime,10);
+  }
+  RowUpdateBuilder.deleteRow(store.metadata,timestamp + 1,"deletetest","todelete").applyUnsafe();
+  store.forceBlockingFlush();
+  assertEquals(2,store.getLiveSSTables().size());
+  boolean foundDelete=false;
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    if (sstable.getSSTableMetadata().maxLocalDeletionTime != firstMaxDelTime) {
+      assertEquals(sstable.getSSTableMetadata().maxLocalDeletionTime,ttltimestamp,10);
+      foundDelete=true;
+    }
+  }
+  assertTrue(foundDelete);
+  Util.compact(store,store.getLiveSSTables());
+  assertEquals(1,store.getLiveSSTables().size());
+  for (  SSTableReader sstable : store.getLiveSSTables()) {
+    assertEquals(ttltimestamp + 100,sstable.getSSTableMetadata().maxLocalDeletionTime,10);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.sstable.SSTableRewriterTest </h4><pre class="type-6 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_abort() throws Exception {
+  testNumberOfFiles_abort(new RewriterTest(){
+    public void run(    ISSTableScanner scanner,    CompactionController controller,    SSTableReader sstable,    ColumnFamilyStore cfs,    SSTableRewriter rewriter,    LifecycleTransaction txn){
+      try (CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+        int files=1;
+        while (ci.hasNext()) {
+          rewriter.append(ci.next());
+          if (rewriter.currentWriter().getFilePointer() > 25000000) {
+            rewriter.switchWriter(getWriter(cfs,sstable.descriptor.directory,txn));
+            files++;
+            assertEquals(cfs.getLiveSSTables().size(),files);
+          }
+        }
+        rewriter.abort();
+      }
+     }
+  }
+);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_truncate() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  cfs.disableAutoCompaction();
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  Set<SSTableReader> compacting=Sets.newHashSet(s);
+  List<SSTableReader> sstables;
+  int files=1;
+  try (ISSTableScanner scanner=s.getScanner();CompactionController controller=new CompactionController(cfs,compacting,0);LifecycleTransaction txn=cfs.getTracker().tryModify(compacting,OperationType.UNKNOWN);SSTableRewriter rewriter=new SSTableRewriter(txn,1000,false,10000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+    while (ci.hasNext()) {
+      rewriter.append(ci.next());
+      if (rewriter.currentWriter().getOnDiskFilePointer() > 25000000) {
+        rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+        files++;
+        assertEquals(cfs.getLiveSSTables().size(),files);
+      }
+    }
+    sstables=rewriter.finish();
+  }
+   LifecycleTransaction.waitForDeletions();
+  assertFileCounts(s.descriptor.directory.list());
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFilesAndSizes() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  long startStorageMetricsLoad=StorageMetrics.load.getCount();
+  long sBytesOnDisk=s.bytesOnDisk();
+  Set<SSTableReader> compacting=Sets.newHashSet(s);
+  List<SSTableReader> sstables;
+  int files=1;
+  try (ISSTableScanner scanner=s.getScanner();CompactionController controller=new CompactionController(cfs,compacting,0);LifecycleTransaction txn=cfs.getTracker().tryModify(compacting,OperationType.UNKNOWN);SSTableRewriter rewriter=new SSTableRewriter(txn,1000,false,10000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+    while (ci.hasNext()) {
+      rewriter.append(ci.next());
+      if (rewriter.currentWriter().getOnDiskFilePointer() > 25000000) {
+        rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+        files++;
+        assertEquals(cfs.getLiveSSTables().size(),files);
+        assertEquals(s.bytesOnDisk(),cfs.metric.liveDiskSpaceUsed.getCount());
+        assertEquals(s.bytesOnDisk(),cfs.metric.totalDiskSpaceUsed.getCount());
+      }
+    }
+    sstables=rewriter.finish();
+  }
+   LifecycleTransaction.waitForDeletions();
+  long sum=0;
+  for (  SSTableReader x : cfs.getLiveSSTables())   sum+=x.bytesOnDisk();
+  assertEquals(sum,cfs.metric.liveDiskSpaceUsed.getCount());
+  assertEquals(startStorageMetricsLoad - sBytesOnDisk + sum,StorageMetrics.load.getCount());
+  assertEquals(files,sstables.size());
+  assertEquals(files,cfs.getLiveSSTables().size());
+  LifecycleTransaction.waitForDeletions();
+  assertEquals(sum,cfs.metric.totalDiskSpaceUsed.getCount());
+  assertFileCounts(s.descriptor.directory.list());
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void getPositionsTest() throws InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  Set<SSTableReader> sstables=new HashSet<>(cfs.getLiveSSTables());
+  assertEquals(1,sstables.size());
+  int nowInSec=FBUtilities.nowInSeconds();
+  boolean checked=false;
+  try (AbstractCompactionStrategy.ScannerList scanners=cfs.getCompactionStrategyManager().getScanners(sstables);LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN);SSTableRewriter writer=new SSTableRewriter(txn,1000,false,10000000,false);CompactionController controller=new CompactionController(cfs,sstables,cfs.gcBefore(nowInSec));CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,scanners.scanners,controller,nowInSec,UUIDGen.getTimeUUID())){
+    writer.switchWriter(getWriter(cfs,sstables.iterator().next().descriptor.directory,txn));
+    while (ci.hasNext()) {
+      UnfilteredRowIterator row=ci.next();
+      writer.append(row);
+      if (!checked && writer.currentWriter().getFilePointer() > 1500000) {
+        checked=true;
+        for (        SSTableReader sstable : cfs.getLiveSSTables()) {
+          if (sstable.openReason == SSTableReader.OpenReason.EARLY) {
+            SSTableReader c=txn.current(sstables.iterator().next());
+            Collection<Range<Token>> r=Arrays.asList(new Range<>(cfs.getPartitioner().getMinimumToken(),cfs.getPartitioner().getMinimumToken()));
+            List<Pair<Long,Long>> tmplinkPositions=sstable.getPositionsForRanges(r);
+            List<Pair<Long,Long>> compactingPositions=c.getPositionsForRanges(r);
+            assertEquals(1,tmplinkPositions.size());
+            assertEquals(1,compactingPositions.size());
+            assertEquals(0,tmplinkPositions.get(0).left.longValue());
+            assertEquals(tmplinkPositions.get(0).right.longValue(),compactingPositions.get(0).left.longValue());
+            assertEquals(c.uncompressedLength(),compactingPositions.get(0).right.longValue());
+          }
+        }
+      }
+    }
+    assertTrue(checked);
+    writer.finish();
+  }
+   LifecycleTransaction.waitForDeletions();
+  validateCFS(cfs);
+  int filecounts=assertFileCounts(sstables.iterator().next().descriptor.directory.list());
+  assertEquals(1,filecounts);
+  truncate(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_finish_empty_new_writer() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  Set<SSTableReader> compacting=Sets.newHashSet(s);
+  int files=1;
+  try (ISSTableScanner scanner=s.getScanner();CompactionController controller=new CompactionController(cfs,compacting,0);LifecycleTransaction txn=cfs.getTracker().tryModify(compacting,OperationType.UNKNOWN);SSTableRewriter rewriter=new SSTableRewriter(txn,1000,false,10000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+    while (ci.hasNext()) {
+      rewriter.append(ci.next());
+      if (rewriter.currentWriter().getFilePointer() > 2500000) {
+        rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+        files++;
+        assertEquals(cfs.getLiveSSTables().size(),files);
+      }
+      if (files == 3) {
+        rewriter.finish();
+        break;
+      }
+    }
+  }
+   LifecycleTransaction.waitForDeletions();
+  assertEquals(files - 1,cfs.getLiveSSTables().size());
+  assertFileCounts(s.descriptor.directory.list());
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_abort3() throws Exception {
+  testNumberOfFiles_abort(new RewriterTest(){
+    public void run(    ISSTableScanner scanner,    CompactionController controller,    SSTableReader sstable,    ColumnFamilyStore cfs,    SSTableRewriter rewriter,    LifecycleTransaction txn){
+      try (CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+        int files=1;
+        while (ci.hasNext()) {
+          rewriter.append(ci.next());
+          if (files == 1 && rewriter.currentWriter().getFilePointer() > 10000000) {
+            rewriter.switchWriter(getWriter(cfs,sstable.descriptor.directory,txn));
+            files++;
+            assertEquals(cfs.getLiveSSTables().size(),files);
+          }
+        }
+        rewriter.abort();
+      }
+     }
+  }
+);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_dont_clean_readers() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  Set<SSTableReader> compacting=Sets.newHashSet(s);
+  List<SSTableReader> sstables;
+  int files=1;
+  try (ISSTableScanner scanner=s.getScanner();CompactionController controller=new CompactionController(cfs,compacting,0);LifecycleTransaction txn=cfs.getTracker().tryModify(compacting,OperationType.UNKNOWN);SSTableRewriter rewriter=new SSTableRewriter(txn,1000,false,10000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+    while (ci.hasNext()) {
+      rewriter.append(ci.next());
+      if (rewriter.currentWriter().getOnDiskFilePointer() > 25000000) {
+        rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+        files++;
+        assertEquals(cfs.getLiveSSTables().size(),files);
+      }
+    }
+    sstables=rewriter.finish();
+  }
+   assertEquals(files,sstables.size());
+  assertEquals(files,cfs.getLiveSSTables().size());
+  LifecycleTransaction.waitForDeletions();
+  assertFileCounts(s.descriptor.directory.list());
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-13 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNumberOfFiles_abort2() throws Exception {
+  testNumberOfFiles_abort(new RewriterTest(){
+    public void run(    ISSTableScanner scanner,    CompactionController controller,    SSTableReader sstable,    ColumnFamilyStore cfs,    SSTableRewriter rewriter,    LifecycleTransaction txn){
+      try (CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+        int files=1;
+        while (ci.hasNext()) {
+          rewriter.append(ci.next());
+          if (rewriter.currentWriter().getFilePointer() > 25000000) {
+            rewriter.switchWriter(getWriter(cfs,sstable.descriptor.directory,txn));
+            files++;
+            assertEquals(cfs.getLiveSSTables().size(),files);
+          }
+          if (files == 3) {
+            rewriter.abort();
+            break;
+          }
+        }
+      }
+     }
+  }
+);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-5 type-2 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCanonicalView() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  SSTableReader s=writeFile(cfs,1000);
+  cfs.addSSTable(s);
+  Set<SSTableReader> sstables=Sets.newHashSet(s);
+  assertEquals(1,sstables.size());
+  boolean checked=false;
+  try (ISSTableScanner scanner=sstables.iterator().next().getScanner();CompactionController controller=new CompactionController(cfs,sstables,0);LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN);SSTableRewriter writer=new SSTableRewriter(txn,1000,false,10000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    writer.switchWriter(getWriter(cfs,sstables.iterator().next().descriptor.directory,txn));
+    while (ci.hasNext()) {
+      writer.append(ci.next());
+      if (!checked && writer.currentWriter().getFilePointer() > 15000000) {
+        checked=true;
+        ColumnFamilyStore.ViewFragment viewFragment=cfs.select(View.select(SSTableSet.CANONICAL));
+        assertEquals(1,viewFragment.sstables.size());
+        SSTableReader sstable=viewFragment.sstables.get(0);
+        assertEquals(s.descriptor,sstable.descriptor);
+        assertTrue("Found early opened SSTable in canonical view: " + sstable.getFilename(),sstable.openReason != SSTableReader.OpenReason.EARLY);
+      }
+    }
+  }
+   truncateCF();
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-7 type-13 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSmallFiles() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  cfs.disableAutoCompaction();
+  SSTableReader s=writeFile(cfs,400);
+  cfs.addSSTable(s);
+  Set<SSTableReader> compacting=Sets.newHashSet(s);
+  List<SSTableReader> sstables;
+  int files=1;
+  try (ISSTableScanner scanner=s.getScanner();CompactionController controller=new CompactionController(cfs,compacting,0);LifecycleTransaction txn=cfs.getTracker().tryModify(compacting,OperationType.UNKNOWN);SSTableRewriter rewriter=new SSTableRewriter(txn,1000,false,1000000,false);CompactionIterator ci=new CompactionIterator(OperationType.COMPACTION,Collections.singletonList(scanner),controller,FBUtilities.nowInSeconds(),UUIDGen.getTimeUUID())){
+    rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+    while (ci.hasNext()) {
+      rewriter.append(ci.next());
+      if (rewriter.currentWriter().getOnDiskFilePointer() > 2500000) {
+        assertEquals(files,cfs.getLiveSSTables().size());
+        rewriter.switchWriter(getWriter(cfs,s.descriptor.directory,txn));
+        files++;
+      }
+    }
+    sstables=rewriter.finish();
+  }
+   assertEquals(files,sstables.size());
+  assertEquals(files,cfs.getLiveSSTables().size());
+  LifecycleTransaction.waitForDeletions();
+  assertFileCounts(s.descriptor.directory.list());
+  validateCFS(cfs);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.io.util.MmappedRegionsTest </h4><pre class="type-6 type-7 type-13 type-4 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTwoSegments() throws Exception {
+  ByteBuffer buffer=allocateBuffer(2048);
+  try (ChannelProxy channel=new ChannelProxy(writeFile("testTwoSegments",buffer));MmappedRegions regions=MmappedRegions.empty(channel)){
+    regions.extend(1024);
+    for (int i=0; i < 1024; i++) {
+      MmappedRegions.Region region=regions.floor(i);
+      assertNotNull(region);
+      assertEquals(0,region.bottom());
+      assertEquals(1024,region.top());
+    }
+    regions.extend(2048);
+    for (int i=0; i < 2048; i++) {
+      MmappedRegions.Region region=regions.floor(i);
+      assertNotNull(region);
+      if (i < 1024) {
+        assertEquals(0,region.bottom());
+        assertEquals(1024,region.top());
+      }
+ else {
+        assertEquals(1024,region.bottom());
+        assertEquals(2048,region.top());
+      }
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.locator.SimpleStrategyTest </h4><pre class="type-6 type-7 type-13 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testGetEndpointsDuringBootstrap() throws UnknownHostException {
+  final int RING_SIZE=10;
+  TokenMetadata tmd=new TokenMetadata();
+  TokenMetadata oldTmd=StorageServiceAccessor.setTokenMetadata(tmd);
+  Token[] endpointTokens=new Token[RING_SIZE];
+  Token[] keyTokens=new Token[RING_SIZE];
+  for (int i=0; i < RING_SIZE; i++) {
+    endpointTokens[i]=new BigIntegerToken(String.valueOf(RING_SIZE * 2 * i));
+    keyTokens[i]=new BigIntegerToken(String.valueOf(RING_SIZE * 2 * i + RING_SIZE));
+  }
+  List<InetAddress> hosts=new ArrayList<InetAddress>();
+  for (int i=0; i < endpointTokens.length; i++) {
+    InetAddress ep=InetAddress.getByName("127.0.0." + String.valueOf(i + 1));
+    tmd.updateNormalToken(endpointTokens[i],ep);
+    hosts.add(ep);
+  }
+  Token bsToken=new BigIntegerToken(String.valueOf(210));
+  InetAddress bootstrapEndpoint=InetAddress.getByName("127.0.0.11");
+  tmd.addBootstrapToken(bsToken,bootstrapEndpoint);
+  AbstractReplicationStrategy strategy=null;
+  for (  String keyspaceName : Schema.instance.getNonSystemKeyspaces()) {
+    strategy=getStrategy(keyspaceName,tmd);
+    PendingRangeCalculatorService.calculatePendingRanges(strategy,keyspaceName);
+    int replicationFactor=strategy.getReplicationFactor();
+    for (int i=0; i < keyTokens.length; i++) {
+      Collection<InetAddress> endpoints=tmd.getWriteEndpoints(keyTokens[i],keyspaceName,strategy.getNaturalEndpoints(keyTokens[i]));
+      assertTrue(endpoints.size() >= replicationFactor);
+      for (int j=0; j < replicationFactor; j++) {
+        assertTrue(endpoints.contains(hosts.get((i + j + 1) % hosts.size())));
+      }
+      if (i < RING_SIZE - replicationFactor)       assertFalse(endpoints.contains(bootstrapEndpoint));
+ else       assertTrue(endpoints.contains(bootstrapEndpoint));
+    }
+  }
+  StorageServiceAccessor.setTokenMetadata(oldTmd);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.repair.ValidatorTest </h4><pre class="type-7 type-13 type-15 type-4 type-5 type-2 type-12 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testValidatorFailed() throws Throwable {
+  Range<Token> range=new Range<>(partitioner.getMinimumToken(),partitioner.getRandomToken());
+  final RepairJobDesc desc=new RepairJobDesc(UUID.randomUUID(),UUID.randomUUID(),keyspace,columnFamily,Arrays.asList(range));
+  final SimpleCondition lock=new SimpleCondition();
+  MessagingService.instance().addMessageSink(new IMessageSink(){
+    public boolean allowOutgoingMessage(    MessageOut message,    int id,    InetAddress to){
+      try {
+        if (message.verb == MessagingService.Verb.REPAIR_MESSAGE) {
+          RepairMessage m=(RepairMessage)message.payload;
+          assertEquals(RepairMessage.Type.VALIDATION_COMPLETE,m.messageType);
+          assertEquals(desc,m.desc);
+          assertFalse(((ValidationComplete)m).success());
+          assertNull(((ValidationComplete)m).trees);
+        }
+      }
+  finally {
+        lock.signalAll();
+      }
+      return false;
+    }
+    public boolean allowIncomingMessage(    MessageIn message,    int id){
+      return false;
+    }
+  }
+);
+  InetAddress remote=InetAddress.getByName("127.0.0.2");
+  Validator validator=new Validator(desc,remote,0);
+  validator.fail();
+  if (!lock.isSignaled())   lock.await();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-13 type-4 type-5 type-2 type-12 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testValidatorComplete() throws Throwable {
+  Range<Token> range=new Range<>(partitioner.getMinimumToken(),partitioner.getRandomToken());
+  final RepairJobDesc desc=new RepairJobDesc(UUID.randomUUID(),UUID.randomUUID(),keyspace,columnFamily,Arrays.asList(range));
+  final SimpleCondition lock=new SimpleCondition();
+  MessagingService.instance().addMessageSink(new IMessageSink(){
+    public boolean allowOutgoingMessage(    MessageOut message,    int id,    InetAddress to){
+      try {
+        if (message.verb == MessagingService.Verb.REPAIR_MESSAGE) {
+          RepairMessage m=(RepairMessage)message.payload;
+          assertEquals(RepairMessage.Type.VALIDATION_COMPLETE,m.messageType);
+          assertEquals(desc,m.desc);
+          assertTrue(((ValidationComplete)m).success());
+          assertNotNull(((ValidationComplete)m).trees);
+        }
+      }
+  finally {
+        lock.signalAll();
+      }
+      return false;
+    }
+    public boolean allowIncomingMessage(    MessageIn message,    int id){
+      return false;
+    }
+  }
+);
+  InetAddress remote=InetAddress.getByName("127.0.0.2");
+  ColumnFamilyStore cfs=Keyspace.open(keyspace).getColumnFamilyStore(columnFamily);
+  Validator validator=new Validator(desc,remote,0);
+  MerkleTrees tree=new MerkleTrees(partitioner);
+  tree.addMerkleTrees((int)Math.pow(2,15),validator.desc.ranges);
+  validator.prepare(cfs,tree);
+  assertTrue(tree.size() > 1);
+  Token mid=partitioner.midpoint(range.left,range.right);
+  validator.add(EmptyIterators.unfilteredRow(cfs.metadata,new BufferDecoratedKey(mid,ByteBufferUtil.bytes("inconceivable!")),false));
+  validator.complete();
+  Token min=tree.partitioner().getMinimumToken();
+  assertNotNull(tree.hash(new Range<>(min,min)));
+  if (!lock.isSignaled())   lock.await();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.repair.messages.RepairOptionTest </h4><pre class="type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testParseOptions(){
+  IPartitioner partitioner=Murmur3Partitioner.instance;
+  Token.TokenFactory tokenFactory=partitioner.getTokenFactory();
+  RepairOption option=RepairOption.parse(new HashMap<String,String>(),partitioner);
+  if (FBUtilities.isWindows() && (DatabaseDescriptor.getDiskAccessMode() != Config.DiskAccessMode.standard || DatabaseDescriptor.getIndexAccessMode() != Config.DiskAccessMode.standard))   assertTrue(option.getParallelism() == RepairParallelism.PARALLEL);
+ else   assertTrue(option.getParallelism() == RepairParallelism.SEQUENTIAL);
+  assertFalse(option.isPrimaryRange());
+  assertFalse(option.isIncremental());
+  Map<String,String> options=new HashMap<>();
+  options.put(RepairOption.PARALLELISM_KEY,"parallel");
+  options.put(RepairOption.PRIMARY_RANGE_KEY,"false");
+  options.put(RepairOption.INCREMENTAL_KEY,"false");
+  options.put(RepairOption.RANGES_KEY,"0:10,11:20,21:30");
+  options.put(RepairOption.COLUMNFAMILIES_KEY,"cf1,cf2,cf3");
+  options.put(RepairOption.DATACENTERS_KEY,"dc1,dc2,dc3");
+  options.put(RepairOption.HOSTS_KEY,"127.0.0.1,127.0.0.2,127.0.0.3");
+  option=RepairOption.parse(options,partitioner);
+  assertTrue(option.getParallelism() == RepairParallelism.PARALLEL);
+  assertFalse(option.isPrimaryRange());
+  assertFalse(option.isIncremental());
+  Set<Range<Token>> expectedRanges=new HashSet<>(3);
+  expectedRanges.add(new Range<>(tokenFactory.fromString("0"),tokenFactory.fromString("10")));
+  expectedRanges.add(new Range<>(tokenFactory.fromString("11"),tokenFactory.fromString("20")));
+  expectedRanges.add(new Range<>(tokenFactory.fromString("21"),tokenFactory.fromString("30")));
+  assertEquals(expectedRanges,option.getRanges());
+  Set<String> expectedCFs=new HashSet<>(3);
+  expectedCFs.add("cf1");
+  expectedCFs.add("cf2");
+  expectedCFs.add("cf3");
+  assertEquals(expectedCFs,option.getColumnFamilies());
+  Set<String> expectedDCs=new HashSet<>(3);
+  expectedDCs.add("dc1");
+  expectedDCs.add("dc2");
+  expectedDCs.add("dc3");
+  assertEquals(expectedDCs,option.getDataCenters());
+  Set<String> expectedHosts=new HashSet<>(3);
+  expectedHosts.add("127.0.0.1");
+  expectedHosts.add("127.0.0.2");
+  expectedHosts.add("127.0.0.3");
+  assertEquals(expectedHosts,option.getHosts());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.service.MoveTest </h4><pre class="type-7 type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void newTestWriteEndpointsDuringMove() throws Exception {
+  StorageService ss=StorageService.instance;
+  final int RING_SIZE=10;
+  final int MOVING_NODE=3;
+  TokenMetadata tmd=ss.getTokenMetadata();
+  VersionedValue.VersionedValueFactory valueFactory=new VersionedValue.VersionedValueFactory(partitioner);
+  ArrayList<Token> endpointTokens=new ArrayList<Token>();
+  ArrayList<Token> keyTokens=new ArrayList<Token>();
+  List<InetAddress> hosts=new ArrayList<InetAddress>();
+  List<UUID> hostIds=new ArrayList<UUID>();
+  Util.createInitialRing(ss,partitioner,endpointTokens,keyTokens,hosts,hostIds,RING_SIZE);
+  Map<Token,List<InetAddress>> expectedEndpoints=new HashMap<Token,List<InetAddress>>();
+  for (  Token token : keyTokens) {
+    List<InetAddress> endpoints=new ArrayList<InetAddress>();
+    Iterator<Token> tokenIter=TokenMetadata.ringIterator(tmd.sortedTokens(),token,false);
+    while (tokenIter.hasNext()) {
+      endpoints.add(tmd.getEndpoint(tokenIter.next()));
+    }
+    expectedEndpoints.put(token,endpoints);
+  }
+  Token newToken=positionToken(MOVING_NODE);
+  ss.onChange(hosts.get(MOVING_NODE),ApplicationState.STATUS,valueFactory.moving(newToken));
+  PendingRangeCalculatorService.instance.blockUntilFinished();
+  assertTrue(tmd.isMoving(hosts.get(MOVING_NODE)));
+  AbstractReplicationStrategy strategy;
+  for (  String keyspaceName : Schema.instance.getNonSystemKeyspaces()) {
+    strategy=getStrategy(keyspaceName,tmd);
+    if (strategy instanceof NetworkTopologyStrategy)     continue;
+    int numMoved=0;
+    for (    Token token : keyTokens) {
+      int replicationFactor=strategy.getReplicationFactor();
+      HashSet<InetAddress> actual=new HashSet<InetAddress>(tmd.getWriteEndpoints(token,keyspaceName,strategy.calculateNaturalEndpoints(token,tmd.cloneOnlyTokenMap())));
+      HashSet<InetAddress> expected=new HashSet<InetAddress>();
+      for (int i=0; i < replicationFactor; i++) {
+        expected.add(expectedEndpoints.get(token).get(i));
+      }
+      if (expected.size() == actual.size()) {
+        assertEquals("mismatched endpoint sets",expected,actual);
+      }
+ else {
+        expected.add(hosts.get(MOVING_NODE));
+        assertEquals("mismatched endpoint sets",expected,actual);
+        numMoved++;
+      }
+    }
+    assertEquals("mismatched number of moved token",1,numMoved);
+  }
+  ss.onChange(hosts.get(MOVING_NODE),ApplicationState.STATUS,valueFactory.normal(Collections.singleton(newToken)));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.triggers.TriggerExecutorTest </h4><pre class="type-7 type-13 type-4 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void sameKeyDifferentCfRowMutations() throws ConfigurationException, InvalidRequestException {
+  CFMetaData metadata=makeCfMetaData("ks1","cf1",TriggerMetadata.create("test",SameKeyDifferentCfTrigger.class.getName()));
+  PartitionUpdate cf1=makeCf(metadata,"k1","k1v1",null);
+  PartitionUpdate cf2=makeCf(metadata,"k2","k2v1",null);
+  Mutation rm1=new Mutation("ks1",cf1.partitionKey()).add(cf1);
+  Mutation rm2=new Mutation("ks1",cf2.partitionKey()).add(cf2);
+  List<? extends IMutation> tmutations=new ArrayList<>(TriggerExecutor.instance.execute(Arrays.asList(rm1,rm2)));
+  assertEquals(2,tmutations.size());
+  Collections.sort(tmutations,new RmComparator());
+  List<PartitionUpdate> mutatedCFs=new ArrayList<>(tmutations.get(0).getPartitionUpdates());
+  assertEquals(2,mutatedCFs.size());
+  for (  PartitionUpdate update : mutatedCFs) {
+    if (update.metadata().cfName.equals("cf1")) {
+      Row row=update.iterator().next();
+      assertEquals(bytes("k1v1"),row.getCell(metadata.getColumnDefinition(bytes("c1"))).value());
+      assertNull(row.getCell(metadata.getColumnDefinition(bytes("c2"))));
+    }
+ else {
+      Row row=update.iterator().next();
+      assertNull(row.getCell(metadata.getColumnDefinition(bytes("c1"))));
+      assertEquals(bytes("trigger"),row.getCell(metadata.getColumnDefinition(bytes("c2"))).value());
+    }
+  }
+  mutatedCFs=new ArrayList<>(tmutations.get(1).getPartitionUpdates());
+  assertEquals(2,mutatedCFs.size());
+  for (  PartitionUpdate update : mutatedCFs) {
+    if (update.metadata().cfName.equals("cf1")) {
+      Row row=update.iterator().next();
+      assertEquals(bytes("k2v1"),row.getCell(metadata.getColumnDefinition(bytes("c1"))).value());
+      assertNull(row.getCell(metadata.getColumnDefinition(bytes("c2"))));
+    }
+ else {
+      Row row=update.iterator().next();
+      assertNull(row.getCell(metadata.getColumnDefinition(bytes("c1"))));
+      assertEquals(bytes("trigger"),row.getCell(metadata.getColumnDefinition(bytes("c2"))).value());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.cassandra.utils.concurrent.AbstractTransactionalTest </h4><pre class="type-13 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testThrowableReturn() throws Exception {
+  TestableTransaction txn;
+  txn=newTest();
+  Throwable t=new RuntimeException();
+  txn.testing.prepareToCommit();
+  if (txn.commitCanThrow()) {
+    try {
+      txn.testing.commit(t);
+    }
+ catch (    Throwable tt) {
+      Assert.assertEquals(t,tt);
+    }
+    Assert.assertEquals(t,txn.testing.abort(t));
+    Assert.assertEquals(0,t.getSuppressed().length);
+  }
+ else {
+    Assert.assertEquals(t,txn.testing.commit(t));
+    Assert.assertEquals(t,txn.testing.abort(t));
+    Assert.assertTrue(t.getSuppressed()[0] instanceof IllegalStateException);
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

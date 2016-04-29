@@ -1,0 +1,77 @@
+<h3 style="margin:0px">Class: org.jclouds.aws.ec2.compute.AWSEC2ComputeServiceLiveTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 type-7 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Override @Test public void testExtendedOptionsAndLogin() throws Exception {
+  String region="us-west-2";
+  AWSSecurityGroupApi securityGroupApi=view.unwrapApi(AWSEC2Api.class).getSecurityGroupApi().get();
+  KeyPairApi keyPairApi=view.unwrapApi(AWSEC2Api.class).getKeyPairApi().get();
+  InstanceApi instanceApi=view.unwrapApi(AWSEC2Api.class).getInstanceApi().get();
+  String group=this.group + "o";
+  Date before=new Date();
+  ImmutableMap<String,String> userMetadata=ImmutableMap.<String,String>of("test",group);
+  ImmutableSet<String> tags=ImmutableSet.of(group);
+  Template template=client.templateBuilder().locationId(region).osFamily(AMZN_LINUX).os64Bit(true).build();
+  template.getOptions().tags(tags);
+  template.getOptions().userMetadata(userMetadata);
+  template.getOptions().tags(tags);
+  template.getOptions().as(AWSEC2TemplateOptions.class).enableMonitoring();
+  template.getOptions().as(AWSEC2TemplateOptions.class).spotPrice(0.05f);
+  String startedId=null;
+  try {
+    cleanupExtendedStuffInRegion(region,securityGroupApi,keyPairApi,group);
+    Thread.sleep(3000);
+    String groupId=securityGroupApi.createSecurityGroupInRegionAndReturnId(region,group,group);
+    securityGroupApi.authorizeSecurityGroupIngressInRegion(region,groupId,permit(IpProtocol.TCP).port(22));
+    template.getOptions().as(AWSEC2TemplateOptions.class).securityGroupIds(groupId);
+    KeyPair result=keyPairApi.createKeyPairInRegion(region,group);
+    template.getOptions().as(AWSEC2TemplateOptions.class).keyPair(result.getKeyName());
+    assert result.getKeyMaterial() != null : result;
+    template.getOptions().overrideLoginPrivateKey(result.getKeyMaterial());
+    Set<? extends NodeMetadata> nodes=client.createNodesInGroup(group,1,template);
+    NodeMetadata first=getOnlyElement(nodes);
+    checkUserMetadataContains(first,userMetadata);
+    checkTagsInNodeEquals(first,tags);
+    assert first.getCredentials() != null : first;
+    assert first.getCredentials().identity != null : first;
+    startedId=first.getProviderId();
+    AWSRunningInstance instance=AWSRunningInstance.class.cast(getOnlyElement(getOnlyElement(instanceApi.describeInstancesInRegion(region,startedId))));
+    assertEquals(instance.getKeyName(),group);
+    assert instance.getSpotInstanceRequestId() != null;
+    assertEquals(instance.getMonitoringState(),MonitoringState.ENABLED);
+    ListenableFuture<ExecResponse> future=client.submitScriptOnNode(first.getId(),Statements.exec("while true; do true; done"),runAsRoot(false).nameTask("cpuSpinner"));
+    Thread.sleep(TimeUnit.MILLISECONDS.convert(5,TimeUnit.MINUTES));
+    future.cancel(true);
+    CloudWatchApi monitoringApi=ContextBuilder.newBuilder(new AWSCloudWatchProviderMetadata()).credentials(identity,credential).modules(setupModules()).buildApi(CloudWatchApi.class);
+    try {
+      GetMetricStatisticsResponse datapoints=monitoringApi.getMetricApiForRegion(instance.getRegion()).getMetricStatistics(GetMetricStatistics.builder().dimension(new Dimension(EC2Constants.Dimension.INSTANCE_ID,instance.getId())).unit(Unit.PERCENT).namespace("AWS/EC2").metricName("CPUUtilization").startTime(before).endTime(new Date()).period(60).statistic(Statistics.AVERAGE).build());
+      assert !datapoints.isEmpty() : instance;
+    }
+  finally {
+      monitoringApi.close();
+    }
+    assertEquals(newTreeSet(instance.getGroupNames()),ImmutableSortedSet.<String>of("jclouds#" + group,group));
+    SecurityGroup secgroup=getOnlyElement(securityGroupApi.describeSecurityGroupsInRegion(instance.getRegion(),"jclouds#" + group));
+    assert secgroup.size() == 0 : secgroup;
+    runScriptWithCreds(group,first.getOperatingSystem(),LoginCredentials.builder().user(first.getCredentials().identity).privateKey(result.getKeyMaterial()).build());
+  }
+  finally {
+    client.destroyNodesMatching(NodePredicates.inGroup(group));
+    if (startedId != null) {
+      assertEquals(keyPairApi.describeKeyPairsInRegion(region,group).size(),1);
+      assertEquals(securityGroupApi.describeSecurityGroupsInRegion(region,group).size(),1);
+    }
+    cleanupExtendedStuffInRegion(region,securityGroupApi,keyPairApi,group);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

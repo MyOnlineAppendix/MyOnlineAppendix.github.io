@@ -1,0 +1,120 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.query.SQL2OptimiseQueryTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="19"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('19')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-19"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * checks the {@code Query#optimise()} calls for the conversion from OR to UNION from a query
+ * POV; ensuring that it returns always the same, expected resultset.
+ * @throws RepositoryException
+ * @throws CommitFailedException
+ */
+@Test public void orToUnions() throws RepositoryException, CommitFailedException {
+  Tree test, t;
+  List<String> original, optimised, cheapest, expected;
+  String statement;
+  test=root.getTree("/").addChild("test");
+  test.setProperty(JCR_PRIMARYTYPE,NT_OAK_UNSTRUCTURED,NAME);
+  t=addChildWithProperty(test,"a","p","a");
+  t.setProperty("p1","a1");
+  t=addChildWithProperty(test,"b","p","b");
+  t.setProperty("p1","b1");
+  t.setProperty("p2","a");
+  t=addChildWithProperty(test,"c","p","c");
+  t.setProperty("p3","a");
+  addChildWithProperty(test,"d","p","d");
+  addChildWithProperty(test,"e","p","e");
+  test=root.getTree("/").addChild("test2");
+  addChildWithProperty(test,"a","p","a");
+  root.commit();
+  statement=String.format("SELECT * FROM [%s] WHERE p = 'a' OR p = 'b'",NT_OAK_UNSTRUCTURED);
+  expected=of("/test/a","/test/b","/test2/a");
+  setQuerySelectionMode(ORIGINAL);
+  original=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(ALTERNATIVE);
+  optimised=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(CHEAPEST);
+  cheapest=executeQuery(statement,JCR_SQL2,true);
+  assertOrToUnionResults(expected,original,optimised,cheapest);
+  statement=String.format("SELECT * FROM [%s] WHERE p = 'a' OR p = 'b' OR p = 'c' OR p = 'd' OR p = 'e' ",NT_OAK_UNSTRUCTURED);
+  expected=of("/test/a","/test/b","/test/c","/test/d","/test/e","/test2/a");
+  setQuerySelectionMode(ORIGINAL);
+  original=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(ALTERNATIVE);
+  optimised=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(CHEAPEST);
+  cheapest=executeQuery(statement,JCR_SQL2,true);
+  assertOrToUnionResults(expected,original,optimised,cheapest);
+  statement=String.format("SELECT * FROM [%s] WHERE (p = 'a' OR p = 'b') AND (p1 = 'a1' OR p1 = 'b1')",NT_OAK_UNSTRUCTURED);
+  expected=of("/test/a","/test/b");
+  setQuerySelectionMode(ORIGINAL);
+  original=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(ALTERNATIVE);
+  optimised=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(CHEAPEST);
+  cheapest=executeQuery(statement,JCR_SQL2,true);
+  assertOrToUnionResults(expected,original,optimised,cheapest);
+  statement=String.format("SELECT * FROM [%s] WHERE (p = 'a' AND p1 = 'a1') OR (p = 'b' AND p1 = 'b1')",NT_OAK_UNSTRUCTURED);
+  expected=of("/test/a","/test/b");
+  setQuerySelectionMode(ORIGINAL);
+  original=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(ALTERNATIVE);
+  optimised=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(CHEAPEST);
+  cheapest=executeQuery(statement,JCR_SQL2,true);
+  assertOrToUnionResults(expected,original,optimised,cheapest);
+  statement="SELECT * FROM [oak:Unstructured] AS c " + "WHERE ( c.[p] = 'a' " + "OR c.[p2] = 'a' "+ "OR c.[p3] = 'a') "+ "AND ISDESCENDANTNODE(c, '/test') "+ "ORDER BY added DESC";
+  expected=of("/test/a","/test/b","/test/c");
+  setQuerySelectionMode(ORIGINAL);
+  original=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(ALTERNATIVE);
+  optimised=executeQuery(statement,JCR_SQL2,true);
+  setQuerySelectionMode(CHEAPEST);
+  cheapest=executeQuery(statement,JCR_SQL2,true);
+  assertOrToUnionResults(expected,original,optimised,cheapest);
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-19 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * ensure that an optimisation is available for the provided queries.
+ * @throws ParseException
+ */
+@Test public void optimise() throws ParseException {
+  SQL2Parser parser=new SQL2Parser(getMappings(),getTypes(),qeSettings);
+  String statement;
+  Query original, optimised;
+  statement="SELECT * FROM [nt:unstructured] AS c " + "WHERE " + "(c.[p1]='a' OR c.[p2]='b') ";
+  original=parser.parse(statement,false);
+  assertNotNull(original);
+  optimised=original.buildAlternativeQuery();
+  assertNotNull(optimised);
+  assertNotSame(original,optimised);
+  assertTrue(optimised instanceof UnionQueryImpl);
+  statement="SELECT * FROM [nt:unstructured] AS c " + "WHERE " + "(c.[p1]='a' OR c.[p2]='b') "+ "AND "+ "ISDESCENDANTNODE(c, '/test') ";
+  original=parser.parse(statement,false);
+  assertNotNull(original);
+  optimised=original.buildAlternativeQuery();
+  assertNotNull(optimised);
+  assertNotSame(original,optimised);
+  statement="SELECT * FROM [nt:unstructured] AS c " + "WHERE " + "(c.[p1]='a' OR c.[p2]='b' OR c.[p3]='c') "+ "AND "+ "ISDESCENDANTNODE(c, '/test') ";
+  original=parser.parse(statement,false);
+  assertNotNull(original);
+  optimised=original.buildAlternativeQuery();
+  assertNotNull(optimised);
+  assertNotSame(original,optimised);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

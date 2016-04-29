@@ -1,0 +1,162 @@
+<h3 style="margin:0px">Class: org.apache.helix.ipc.TestNettyHelixIPCService (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public void afterClass() throws Exception {
+  firstNode.disconnect();
+  secondNode.disconnect();
+  controller.disconnect();
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMessageManager() throws Exception {
+  final int numMessages=1000;
+  final int messageType=1;
+  final int ackMessageType=2;
+  final HelixIPCService firstIPC=new NettyHelixIPCService(new NettyHelixIPCService.Config().setInstanceName(firstNode.getInstanceName()).setPort(firstPort));
+  firstIPC.registerCallback(messageType,new HelixIPCCallback(){
+    final Random random=new Random();
+    @Override public void onMessage(    HelixMessageScope scope,    UUID messageId,    ByteBuf message){
+      if (random.nextInt() % 2 == 0) {
+        HelixAddress sender=firstResolver.getSource(scope);
+        firstIPC.send(sender,ackMessageType,messageId,null);
+      }
+    }
+  }
+);
+  firstIPC.start();
+  final HelixIPCService secondIPC=new NettyHelixIPCService(new NettyHelixIPCService.Config().setInstanceName(secondNode.getInstanceName()).setPort(secondPort));
+  secondIPC.registerCallback(messageType,new HelixIPCCallback(){
+    final Random random=new Random();
+    @Override public void onMessage(    HelixMessageScope scope,    UUID messageId,    ByteBuf message){
+      if (random.nextInt() % 2 == 0) {
+        HelixAddress sender=secondResolver.getSource(scope);
+        secondIPC.send(sender,ackMessageType,messageId,null);
+      }
+    }
+  }
+);
+  secondIPC.start();
+  Thread.sleep(500);
+  final AtomicInteger numAcks=new AtomicInteger();
+  final AtomicInteger numErrors=new AtomicInteger();
+  HelixIPCService messageManager=new HelixIPCMessageManager(Executors.newSingleThreadScheduledExecutor(),firstIPC,300,-1);
+  messageManager.registerCallback(ackMessageType,new HelixIPCCallback(){
+    @Override public void onMessage(    HelixMessageScope scope,    UUID messageId,    ByteBuf message){
+      numAcks.incrementAndGet();
+    }
+  }
+);
+  messageManager.start();
+  String secondName="localhost_" + secondPort;
+  Set<String> secondPartitions=new HashSet<String>();
+  IdealState idealState=controller.getClusterManagmentTool().getResourceIdealState(CLUSTER_NAME,RESOURCE_NAME);
+  for (  String partitionName : idealState.getPartitionSet()) {
+    for (    Map.Entry<String,String> stateEntry : idealState.getInstanceStateMap(partitionName).entrySet()) {
+      if (stateEntry.getKey().equals(secondName)) {
+        secondPartitions.add(partitionName);
+      }
+    }
+  }
+  for (  String partitionName : secondPartitions) {
+    for (int i=0; i < numMessages; i++) {
+      HelixMessageScope scope=new HelixMessageScope.Builder().cluster(firstNode.getClusterName()).resource(RESOURCE_NAME).partition(partitionName).state("ONLINE").build();
+      Set<HelixAddress> destinations=firstResolver.getDestinations(scope);
+      for (      HelixAddress destination : destinations) {
+        ByteBuf message=Unpooled.wrappedBuffer(("Hello" + i).getBytes());
+        messageManager.send(destination,messageType,UUID.randomUUID(),message);
+      }
+    }
+  }
+  Thread.sleep(5000);
+  Assert.assertEquals(numAcks.get() + numErrors.get(),numMessages * secondPartitions.size());
+  messageManager.shutdown();
+  firstIPC.shutdown();
+  secondIPC.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-7 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testService() throws Exception {
+  final int numMessages=1000;
+  final int messageType=1;
+  final ConcurrentMap<String,AtomicInteger> firstCounts=new ConcurrentHashMap<String,AtomicInteger>();
+  final HelixIPCService firstIPC=new NettyHelixIPCService(new NettyHelixIPCService.Config().setInstanceName(firstNode.getInstanceName()).setPort(firstPort));
+  firstIPC.registerCallback(messageType,new HelixIPCCallback(){
+    @Override public void onMessage(    HelixMessageScope scope,    UUID messageId,    ByteBuf message){
+      String key=scope.getPartition() + ":" + scope.getState();
+      firstCounts.putIfAbsent(key,new AtomicInteger());
+      firstCounts.get(key).incrementAndGet();
+    }
+  }
+);
+  firstIPC.start();
+  final ConcurrentMap<String,AtomicInteger> secondCounts=new ConcurrentHashMap<String,AtomicInteger>();
+  final HelixIPCService secondIPC=new NettyHelixIPCService(new NettyHelixIPCService.Config().setInstanceName(secondNode.getInstanceName()).setPort(secondPort));
+  secondIPC.registerCallback(messageType,new HelixIPCCallback(){
+    @Override public void onMessage(    HelixMessageScope scope,    UUID messageId,    ByteBuf message){
+      String key=scope.getPartition() + ":" + scope.getState();
+      secondCounts.putIfAbsent(key,new AtomicInteger());
+      secondCounts.get(key).incrementAndGet();
+    }
+  }
+);
+  secondIPC.start();
+  Thread.sleep(500);
+  String secondName="localhost_" + secondPort;
+  Set<String> secondPartitions=new HashSet<String>();
+  IdealState idealState=controller.getClusterManagmentTool().getResourceIdealState(CLUSTER_NAME,RESOURCE_NAME);
+  for (  String partitionName : idealState.getPartitionSet()) {
+    for (    Map.Entry<String,String> stateEntry : idealState.getInstanceStateMap(partitionName).entrySet()) {
+      if (stateEntry.getKey().equals(secondName)) {
+        secondPartitions.add(partitionName);
+      }
+    }
+  }
+  for (  String partitionName : secondPartitions) {
+    for (int i=0; i < numMessages; i++) {
+      HelixMessageScope scope=new HelixMessageScope.Builder().cluster(firstNode.getClusterName()).resource(RESOURCE_NAME).partition(partitionName).state("ONLINE").build();
+      Set<HelixAddress> destinations=firstResolver.getDestinations(scope);
+      for (      HelixAddress destination : destinations) {
+        ByteBuf message=Unpooled.wrappedBuffer(("Hello" + i).getBytes());
+        firstIPC.send(destination,messageType,UUID.randomUUID(),message);
+      }
+    }
+  }
+  for (  String partitionName : secondPartitions) {
+    for (int i=0; i < numMessages; i++) {
+      HelixMessageScope scope=new HelixMessageScope.Builder().cluster(secondNode.getClusterName()).resource(RESOURCE_NAME).partition(partitionName).state("ONLINE").build();
+      Set<HelixAddress> destinations=secondResolver.getDestinations(scope);
+      for (      HelixAddress destination : destinations) {
+        ByteBuf message=Unpooled.wrappedBuffer(("Hello" + i).getBytes());
+        secondIPC.send(destination,messageType,UUID.randomUUID(),message);
+      }
+    }
+  }
+  Thread.sleep(500);
+  for (  String partitionName : secondPartitions) {
+    AtomicInteger count=secondCounts.get(partitionName + ":ONLINE");
+    Assert.assertNotNull(count);
+    Assert.assertEquals(count.get(),2 * numMessages);
+  }
+  firstIPC.shutdown();
+  secondIPC.shutdown();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,148 @@
+<h3 style="margin:0px">Class: org.apache.mahout.clustering.streaming.mapreduce.StreamingKMeansTestMR (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testHypercubeMapReduceRunSequentially() throws Exception {
+  Configuration configuration=getConfiguration();
+  configure(configuration);
+  configuration.set(DefaultOptionCreator.METHOD_OPTION,DefaultOptionCreator.SEQUENTIAL_METHOD);
+  Path inputPath=new Path("testInput");
+  Path outputPath=new Path("testOutput");
+  StreamingKMeansUtilsMR.writeVectorsToSequenceFile(syntheticData.getFirst(),inputPath,configuration);
+  StreamingKMeansDriver.run(configuration,inputPath,outputPath);
+  testReducerResults(syntheticData.getFirst().size(),Lists.newArrayList(Iterables.transform(new SequenceFileIterable<IntWritable,CentroidWritable>(outputPath,configuration),new Function<Pair<IntWritable,CentroidWritable>,org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable>>(){
+    @Override public org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable> apply(    org.apache.mahout.common.Pair<IntWritable,CentroidWritable> input){
+      return new org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable>(input.getFirst(),input.getSecond());
+    }
+  }
+)));
+}
+
+</code></pre>
+
+<pre class="type-17 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testHypercubeReducer() throws IOException {
+  ReduceDriver<IntWritable,CentroidWritable,IntWritable,CentroidWritable> reduceDriver=ReduceDriver.newReduceDriver(new StreamingKMeansReducer());
+  Configuration configuration=reduceDriver.getConfiguration();
+  configure(configuration);
+  System.out.printf("%s reducer test\n",configuration.get(StreamingKMeansDriver.SEARCHER_CLASS_OPTION));
+  StreamingKMeans clusterer=new StreamingKMeans(StreamingKMeansUtilsMR.searcherFromConfiguration(configuration),(1 << NUM_DIMENSIONS) * (int)Math.log(NUM_DATA_POINTS),DISTANCE_CUTOFF);
+  long start=System.currentTimeMillis();
+  clusterer.cluster(syntheticData.getFirst());
+  long end=System.currentTimeMillis();
+  System.out.printf("%f [s]\n",(end - start) / 1000.0);
+  List<CentroidWritable> reducerInputs=Lists.newArrayList();
+  int postMapperTotalWeight=0;
+  for (  Centroid intermediateCentroid : clusterer) {
+    reducerInputs.add(new CentroidWritable(intermediateCentroid));
+    postMapperTotalWeight+=intermediateCentroid.getWeight();
+  }
+  reduceDriver.addInput(new IntWritable(0),reducerInputs);
+  List<org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable>> results=reduceDriver.run();
+  testReducerResults(postMapperTotalWeight,results);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  RandomUtils.useTestSeed();
+  syntheticData=DataUtils.sampleMultiNormalHypercube(NUM_DIMENSIONS,NUM_DATA_POINTS,1.0e-4);
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testHypercubeMapper() throws IOException {
+  MapDriver<Writable,VectorWritable,IntWritable,CentroidWritable> mapDriver=MapDriver.newMapDriver(new StreamingKMeansMapper());
+  configure(mapDriver.getConfiguration());
+  System.out.printf("%s mapper test\n",mapDriver.getConfiguration().get(StreamingKMeansDriver.SEARCHER_CLASS_OPTION));
+  for (  Centroid datapoint : syntheticData.getFirst()) {
+    mapDriver.addInput(new IntWritable(0),new VectorWritable(datapoint));
+  }
+  List<org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable>> results=mapDriver.run();
+  BruteSearch resultSearcher=new BruteSearch(new SquaredEuclideanDistanceMeasure());
+  for (  org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable> result : results) {
+    resultSearcher.add(result.getSecond().getCentroid());
+  }
+  System.out.printf("Clustered the data into %d clusters\n",results.size());
+  for (  Vector mean : syntheticData.getSecond()) {
+    WeightedThing<Vector> closest=resultSearcher.search(mean,1).get(0);
+    assertTrue("Weight " + closest.getWeight() + " not less than 0.5",closest.getWeight() < 0.5);
+  }
+}
+
+</code></pre>
+
+<pre class="type-17 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testHypercubeMapReduce() throws IOException {
+  MapReduceDriver<Writable,VectorWritable,IntWritable,CentroidWritable,IntWritable,CentroidWritable> mapReduceDriver=new MapReduceDriver<Writable,VectorWritable,IntWritable,CentroidWritable,IntWritable,CentroidWritable>(new StreamingKMeansMapper(),new StreamingKMeansReducer());
+  Configuration configuration=mapReduceDriver.getConfiguration();
+  configure(configuration);
+  System.out.printf("%s full test\n",configuration.get(StreamingKMeansDriver.SEARCHER_CLASS_OPTION));
+  for (  Centroid datapoint : syntheticData.getFirst()) {
+    mapReduceDriver.addInput(new IntWritable(0),new VectorWritable(datapoint));
+  }
+  List<org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable>> results=mapReduceDriver.run();
+  testReducerResults(syntheticData.getFirst().size(),results);
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMapperVsLocal() throws IOException {
+  MapDriver<Writable,VectorWritable,IntWritable,CentroidWritable> mapDriver=MapDriver.newMapDriver(new StreamingKMeansMapper());
+  Configuration configuration=mapDriver.getConfiguration();
+  configure(configuration);
+  System.out.printf("%s mapper vs local test\n",mapDriver.getConfiguration().get(StreamingKMeansDriver.SEARCHER_CLASS_OPTION));
+  for (  Centroid datapoint : syntheticData.getFirst()) {
+    mapDriver.addInput(new IntWritable(0),new VectorWritable(datapoint));
+  }
+  List<Centroid> mapperCentroids=Lists.newArrayList();
+  for (  org.apache.hadoop.mrunit.types.Pair<IntWritable,CentroidWritable> pair : mapDriver.run()) {
+    mapperCentroids.add(pair.getSecond().getCentroid());
+  }
+  StreamingKMeans batchClusterer=new StreamingKMeans(StreamingKMeansUtilsMR.searcherFromConfiguration(configuration),mapDriver.getConfiguration().getInt("estimatedNumMapClusters",-1),DISTANCE_CUTOFF);
+  batchClusterer.cluster(syntheticData.getFirst());
+  List<Centroid> batchCentroids=Lists.newArrayList();
+  for (  Vector v : batchClusterer) {
+    batchCentroids.add((Centroid)v);
+  }
+  StreamingKMeans perPointClusterer=new StreamingKMeans(StreamingKMeansUtilsMR.searcherFromConfiguration(configuration),(1 << NUM_DIMENSIONS) * (int)Math.log(NUM_DATA_POINTS),DISTANCE_CUTOFF);
+  for (  Centroid datapoint : syntheticData.getFirst()) {
+    perPointClusterer.cluster(datapoint);
+  }
+  List<Centroid> perPointCentroids=Lists.newArrayList();
+  for (  Vector v : perPointClusterer) {
+    perPointCentroids.add((Centroid)v);
+  }
+  double mapperCost=ClusteringUtils.totalClusterCost(syntheticData.getFirst(),mapperCentroids);
+  double localCost=ClusteringUtils.totalClusterCost(syntheticData.getFirst(),batchCentroids);
+  double perPointCost=ClusteringUtils.totalClusterCost(syntheticData.getFirst(),perPointCentroids);
+  System.out.printf("[Total cost] Mapper %f [%d] Local %f [%d] Perpoint local %f [%d];" + "[ratio m-vs-l %f] [ratio pp-vs-l %f]\n",mapperCost,mapperCentroids.size(),localCost,batchCentroids.size(),perPointCost,perPointCentroids.size(),mapperCost / localCost,perPointCost / localCost);
+  assertEquals("Mapper StreamingKMeans / Batch local StreamingKMeans total cost ratio too far from 1",1.0,mapperCost / localCost,0.8);
+  assertEquals("One by one local StreamingKMeans / Batch local StreamingKMeans total cost ratio too high",1.0,perPointCost / localCost,0.8);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,65 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestSimulatorJobTracker (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-4 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testTrackerInteraction() throws IOException, InterruptedException {
+  LOG.info("Testing Inter Tracker protocols");
+  int now=0;
+  JobConf jtConf=createJobConf();
+  int NoMaps=2;
+  int NoReduces=10;
+  jtConf.set("fs.default.name","file:///");
+  jtConf.set("mapred.jobtracker.taskScheduler",JobQueueTaskScheduler.class.getName());
+  SimulatorJobTracker sjobTracker=SimulatorJobTracker.startTracker(jtConf,0);
+  System.out.println("Created the SimulatorJobTracker successfully");
+  sjobTracker.offerService();
+  FakeJobClient jbc=new FakeJobClient(sjobTracker,NoMaps,NoReduces);
+  int NoJobs=1;
+  for (int i=0; i < NoJobs; i++) {
+    jbc.submitNewJob();
+  }
+  org.apache.hadoop.mapreduce.JobStatus[] allJobs=sjobTracker.getAllJobs();
+  Assert.assertTrue("allJobs queue length is " + allJobs.length,allJobs.length >= 1);
+  for (  org.apache.hadoop.mapreduce.JobStatus js : allJobs) {
+    LOG.info("From JTQueue: job id = " + js.getJobID());
+  }
+  Configuration ttConf=new Configuration();
+  ttConf.set("mumak.tasktracker.tracker.name","tracker_host1.foo.com:localhost/127.0.0.1:9010");
+  ttConf.set("mumak.tasktracker.host.name","host1.foo.com");
+  ttConf.setInt("mapred.tasktracker.map.tasks.maximum",10);
+  ttConf.setInt("mapred.tasktracker.reduce.tasks.maximum",10);
+  ttConf.setInt("mumak.tasktracker.heartbeat.fuzz",-1);
+  FakeTaskTracker fakeTracker=new FakeTaskTracker(sjobTracker,ttConf);
+  int numLaunchTaskActions=0;
+  for (int i=0; i < NoMaps * 2; ++i) {
+    numLaunchTaskActions+=fakeTracker.sendFakeHeartbeat(now);
+    if (numLaunchTaskActions >= NoMaps) {
+      break;
+    }
+    now+=5;
+    LOG.debug("Number of MapLaunchTasks=" + numLaunchTaskActions + " now = "+ now);
+  }
+  Assert.assertTrue("Failed to launch all maps: " + numLaunchTaskActions,numLaunchTaskActions >= NoMaps);
+  LOG.info("Sending task completed status");
+  numLaunchTaskActions+=fakeTracker.sendFakeHeartbeat(now);
+  for (int i=0; i < NoReduces * 2; ++i) {
+    if (numLaunchTaskActions >= NoMaps + NoReduces) {
+      break;
+    }
+    numLaunchTaskActions+=fakeTracker.sendFakeHeartbeat(now);
+    now+=5;
+    LOG.debug("Number of ReduceLaunchTasks=" + numLaunchTaskActions + " now = "+ now);
+  }
+  Assert.assertTrue("Failed to launch all reduces: " + numLaunchTaskActions,numLaunchTaskActions >= NoMaps + NoReduces);
+  numLaunchTaskActions+=fakeTracker.sendFakeHeartbeat(now);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

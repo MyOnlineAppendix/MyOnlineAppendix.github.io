@@ -1,0 +1,109 @@
+<h3 style="margin:0px">Class: org.apache.directory.server.ssl.StartTlsIT (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-14 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests StartTLS by creating a JNDI connection using the generated key 
+ * store with the installed self signed certificate.  It then searches 
+ * the server and verifies the presence of the expected entries and closes
+ * the connection.  This process repeats for a number of iterations.  
+ * Modify the CONNECT_ITERATIONS constant to change the number of 
+ * iterations.  Modify the VERBOSE constant to print out information while
+ * performing searches.
+ */
+@Test public void testStartTls() throws Exception {
+  for (int ii=0; ii < CONNECT_ITERATIONS; ii++) {
+    if (VERBOSE) {
+      System.out.println("Performing " + ii + "-th iteration to connect via StartTLS.");
+    }
+    System.setProperty("javax.net.ssl.trustStore",ksFile.getAbsolutePath());
+    System.setProperty("javax.net.ssl.keyStore",ksFile.getAbsolutePath());
+    System.setProperty("javax.net.ssl.keyStorePassword","changeit");
+    LOG.debug("testStartTls() test starting ... ");
+    Hashtable<String,Object> env=new Hashtable<String,Object>();
+    env.put(Context.INITIAL_CONTEXT_FACTORY,"com.sun.jndi.ldap.LdapCtxFactory");
+    env.put("java.naming.security.principal","uid=admin,ou=system");
+    env.put("java.naming.security.credentials","secret");
+    env.put("java.naming.security.authentication","simple");
+    env.put(Context.PROVIDER_URL,"ldap://" + InetAddress.getLocalHost().getHostName() + ":"+ getLdapServer().getPort());
+    LOG.debug("About to get initial context");
+    LdapContext ctx=new InitialLdapContext(env,null);
+    LOG.debug("About send startTls extended operation");
+    StartTlsResponse tls=(StartTlsResponse)ctx.extendedOperation(new StartTlsRequest());
+    LOG.debug("Extended operation issued");
+    tls.setHostnameVerifier(new HostnameVerifier(){
+      public boolean verify(      String hostname,      SSLSession session){
+        return true;
+      }
+    }
+);
+    LOG.debug("TLS negotion about to begin");
+    tls.negotiate(ReloadableSSLSocketFactory.getDefault());
+    search(ii,ctx);
+    ctx.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-6 type-5 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Sets up the key store and installs the self signed certificate for the 
+ * server (created on first startup) which is to be used by the StartTLS 
+ * JDNDI client that will connect.  The key store is created from scratch
+ * programmatically and whipped on each run.  The certificate is acquired 
+ * by pulling down the bytes for administrator's userCertificate from 
+ * uid=admin,ou=system.  We use sysRoot direct context instead of one over
+ * the wire since the server is configured to prevent connections without
+ * TLS secured connections.
+ */
+@Before public void installKeyStoreWithCertificate() throws Exception {
+  if (ksFile != null && ksFile.exists()) {
+    ksFile.delete();
+  }
+  ksFile=File.createTempFile("testStore","ks");
+  CoreSession session=getLdapServer().getDirectoryService().getAdminSession();
+  Entry entry=session.lookup(new Dn("uid=admin,ou=system"),CERT_IDS);
+  byte[] userCertificate=entry.get(CERT_IDS[0]).getBytes();
+  assertNotNull(userCertificate);
+  try (ByteArrayInputStream in=new ByteArrayInputStream(userCertificate)){
+    CertificateFactory factory=CertificateFactory.getInstance("X.509");
+    Certificate cert=factory.generateCertificate(in);
+    KeyStore ks=KeyStore.getInstance(KeyStore.getDefaultType());
+    ks.load(null,null);
+    ks.setCertificateEntry("apacheds",cert);
+    ks.store(new FileOutputStream(ksFile),"changeit".toCharArray());
+    LOG.debug("Keystore file installed: {}",ksFile.getAbsolutePath());
+  }
+   oldConfidentialityRequiredValue=getLdapServer().isConfidentialityRequired();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+/** 
+ * Just deletes the generated key store file.
+ */
+@After public void deleteKeyStore() throws Exception {
+  if (ksFile != null && ksFile.exists()) {
+    ksFile.delete();
+  }
+  LOG.debug("Keystore file deleted: {}",ksFile.getAbsolutePath());
+  getLdapServer().setConfidentialityRequired(oldConfidentialityRequiredValue);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

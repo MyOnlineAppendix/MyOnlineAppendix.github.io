@@ -1,0 +1,163 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.metrics2.lib.TestMutableMetrics (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(5)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the snapshot method
+ */
+@Test public void testSnapshot(){
+  MetricsRecordBuilder mb=mockMetricsRecordBuilder();
+  MetricsRegistry registry=new MetricsRegistry("test");
+  registry.newCounter("c1","int counter",1);
+  registry.newCounter("c2","long counter",2L);
+  registry.newGauge("g1","int gauge",3);
+  registry.newGauge("g2","long gauge",4L);
+  registry.newStat("s1","stat","Ops","Time",true).add(0);
+  registry.newRate("s2","stat",false).add(0);
+  registry.snapshot(mb,true);
+  MutableStat s2=(MutableStat)registry.get("s2");
+  s2.snapshot(mb,true);
+  s2.add(1);
+  s2.snapshot(mb,true);
+  verify(mb).addCounter(info("c1","int counter"),1);
+  verify(mb).addCounter(info("c2","long counter"),2L);
+  verify(mb).addGauge(info("g1","int gauge"),3);
+  verify(mb).addGauge(info("g2","long gauge"),4L);
+  verify(mb).addCounter(info("S1NumOps","Number of ops for stat"),1L);
+  verify(mb).addGauge(eq(info("S1AvgTime","Average time for stat")),eq(0.0,EPSILON));
+  verify(mb).addGauge(eq(info("S1StdevTime","Standard deviation of time for stat")),eq(0.0,EPSILON));
+  verify(mb).addGauge(eq(info("S1IMinTime","Interval min time for stat")),eq(0.0,EPSILON));
+  verify(mb).addGauge(eq(info("S1IMaxTime","Interval max time for stat")),eq(0.0,EPSILON));
+  verify(mb).addGauge(eq(info("S1MinTime","Min time for stat")),eq(0.0,EPSILON));
+  verify(mb).addGauge(eq(info("S1MaxTime","Max time for stat")),eq(0.0,EPSILON));
+  verify(mb,times(2)).addCounter(info("S2NumOps","Number of ops for stat"),1L);
+  verify(mb,times(2)).addGauge(eq(info("S2AvgTime","Average time for stat")),eq(0.0,EPSILON));
+  verify(mb).addCounter(info("S2NumOps","Number of ops for stat"),2L);
+  verify(mb).addGauge(eq(info("S2AvgTime","Average time for stat")),eq(1.0,EPSILON));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testMutableRates(){
+  MetricsRecordBuilder rb=mockMetricsRecordBuilder();
+  MetricsRegistry registry=new MetricsRegistry("test");
+  MutableRates rates=new MutableRates(registry);
+  rates.init(TestProtocol.class);
+  registry.snapshot(rb,false);
+  assertCounter("FooNumOps",0L,rb);
+  assertGauge("FooAvgTime",0.0,rb);
+  assertCounter("BarNumOps",0L,rb);
+  assertGauge("BarAvgTime",0.0,rb);
+}
+
+</code></pre>
+
+<pre class="type-18 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Ensure that quantile estimates from {@link MutableQuantiles} are within
+ * specified error bounds.
+ */
+@Test(timeout=30000) public void testMutableQuantilesError() throws Exception {
+  MetricsRecordBuilder mb=mockMetricsRecordBuilder();
+  MetricsRegistry registry=new MetricsRegistry("test");
+  MutableQuantiles quantiles=registry.newQuantiles("foo","stat","Ops","Latency",5);
+  long start=System.nanoTime() / 1000000;
+  for (long i=1; i <= 1000; i++) {
+    quantiles.add(i);
+    quantiles.add(1001 - i);
+  }
+  long end=System.nanoTime() / 1000000;
+  Thread.sleep(6000 - (end - start));
+  registry.snapshot(mb,false);
+  Map<Quantile,Long> previousSnapshot=quantiles.previousSnapshot;
+  for (  Entry<Quantile,Long> item : previousSnapshot.entrySet()) {
+    System.out.println(String.format("Quantile %.2f has value %d",item.getKey().quantile,item.getValue()));
+  }
+  verify(mb).addGauge(info("FooNumOps","Number of ops for stat with 5s interval"),(long)2000);
+  Quantile[] quants=MutableQuantiles.quantiles;
+  String name="Foo%dthPercentileLatency";
+  String desc="%d percentile latency with 5 second interval for stat";
+  for (  Quantile q : quants) {
+    int percentile=(int)(100 * q.quantile);
+    int error=(int)(1000 * q.error);
+    String n=String.format(name,percentile);
+    String d=String.format(desc,percentile);
+    long expected=(long)(q.quantile * 1000);
+    verify(mb).addGauge(eq(info(n,d)),leq(expected + error));
+    verify(mb).addGauge(eq(info(n,d)),geq(expected - error));
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that {@link MutableQuantiles} rolls over correctly even if no items
+ * have been added to the window
+ */
+@Test(timeout=30000) public void testMutableQuantilesEmptyRollover() throws Exception {
+  MetricsRecordBuilder mb=mockMetricsRecordBuilder();
+  MetricsRegistry registry=new MetricsRegistry("test");
+  MutableQuantiles quantiles=registry.newQuantiles("foo","stat","Ops","Latency",5);
+  quantiles.snapshot(mb,true);
+  verify(mb).addGauge(info("FooNumOps","Number of ops for stat with 5s interval"),(long)0);
+  Thread.sleep(6000);
+  quantiles.snapshot(mb,false);
+  verify(mb,times(2)).addGauge(info("FooNumOps","Number of ops for stat with 5s interval"),(long)0);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that {@link MutableQuantiles} rolls the window over at the specified
+ * interval.
+ */
+@Test(timeout=30000) public void testMutableQuantilesRollover() throws Exception {
+  MetricsRecordBuilder mb=mockMetricsRecordBuilder();
+  MetricsRegistry registry=new MetricsRegistry("test");
+  MutableQuantiles quantiles=registry.newQuantiles("foo","stat","Ops","Latency",5);
+  Quantile[] quants=MutableQuantiles.quantiles;
+  String name="Foo%dthPercentileLatency";
+  String desc="%d percentile latency with 5 second interval for stat";
+  long start=System.nanoTime() / 1000000;
+  for (int i=1; i <= 3; i++) {
+    for (long j=1; j <= 1000; j++) {
+      quantiles.add(i);
+    }
+    long sleep=(start + (5000 * i) + 1000) - (System.nanoTime() / 1000000);
+    Thread.sleep(sleep);
+    registry.snapshot(mb,false);
+    for (    Quantile q : quants) {
+      int percentile=(int)(100 * q.quantile);
+      String n=String.format(name,percentile);
+      String d=String.format(desc,percentile);
+      verify(mb).addGauge(info(n,d),(long)i);
+    }
+  }
+  verify(mb,times(3)).addGauge(info("FooNumOps","Number of ops for stat with 5s interval"),(long)1000);
+  for (  Quantile q : quants) {
+    int percentile=(int)(100 * q.quantile);
+    String n=String.format(name,percentile);
+    String d=String.format(desc,percentile);
+    verify(mb,times(3)).addGauge(eq(info(n,d)),anyLong());
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

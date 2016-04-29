@@ -1,0 +1,271 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.jcr.LargeOperationIT (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(7)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Assert that large commits scale linearly wrt. to the number of changed items.
+ * @throws RepositoryException
+ * @throws InterruptedException
+ */
+@Test public void largeCommit() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("large-commit","oak:Unstructured");
+  final ContentGenerator contentGenerator=new ContentGenerator();
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    ScalabilityTest test=new ScalabilityTest(scale){
+      @Override void before(      int scale) throws RepositoryException {
+        contentGenerator.addNodes(n,scale);
+      }
+      @Override void run(      int scale) throws RepositoryException {
+        session.save();
+      }
+    }
+;
+    double t=test.run();
+    executionTimes.add(t);
+    LOG.info("Committing {} node took {} ns/node",scale,t);
+  }
+  assertOnLgn("large commit",scales,executionTimes,false);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Assert adding siblings scales linearly with the number of already existing siblings.
+ * @throws RepositoryException
+ * @throws InterruptedException
+ */
+@Test public void manySiblings() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("many-siblings","oak:Unstructured");
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    ScalabilityTest test=new ScalabilityTest(scale){
+      @Override void before(      int scale) throws RepositoryException {
+        Node s=n.addNode("s" + scale);
+        for (int k=0; k < scale; k++) {
+          s.addNode("s" + k);
+        }
+      }
+      @Override void run(      int scale) throws RepositoryException {
+        Node s=n.getNode("s" + scale);
+        for (int k=0; k < 100; k++) {
+          s.addNode("t" + k);
+        }
+        session.save();
+      }
+    }
+;
+    double t=test.run();
+    executionTimes.add(t);
+    LOG.info("Adding 100 siblings next to {} siblings took {} ns/node",scale,t);
+  }
+  boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+  assertOnLgn("many siblings",scales,executionTimes,knownIssue);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void largeRemove() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("large-remove","oak:Unstructured");
+  final ContentGenerator contentGenerator=new ContentGenerator(1000);
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    ScalabilityTest test=new ScalabilityTest(scale){
+      @Override void before(      int scale) throws RepositoryException {
+        Node s=n.addNode("s" + scale);
+        contentGenerator.addNodes(s,scale);
+      }
+      @Override void run(      int scale) throws RepositoryException {
+        session.getNode("/large-remove/s" + scale).remove();
+        session.save();
+      }
+    }
+;
+    double t=test.run();
+    executionTimes.add(t);
+    LOG.info("Removing {} node took {} ns/node",scale,t);
+  }
+  boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+  assertOnLgn("large remove",scales,executionTimes,knownIssue);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown(){
+  safeLogout(session);
+  if (repository instanceof JackrabbitRepository) {
+    ((JackrabbitRepository)repository).shutdown();
+  }
+  fixture.dispose(nodeStore);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void slowListener() throws RepositoryException, ExecutionException, InterruptedException {
+  Node n=session.getRootNode().addNode("slow-events","oak:Unstructured");
+  final DelayedEventHandling delayedEventHandling=new DelayedEventHandling(n,100,10);
+  Future<Void> result=delayedEventHandling.start();
+  try {
+    ArrayList<Double> executionTimes=Lists.newArrayList();
+    for (    int scale : scales) {
+      ScalabilityTest test=new ScalabilityTest(scale){
+        @Override void run(        int scale) throws InterruptedException {
+          delayedEventHandling.waitForNodes(scale);
+        }
+      }
+;
+      double t=test.run();
+      executionTimes.add(t);
+      LOG.info("Adding {} nodes took {} ns/node",scale,t);
+    }
+    boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+    assertOnLgn("slow listeners",scales,executionTimes,knownIssue);
+  }
+  finally {
+    delayedEventHandling.stop();
+    result.get();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Assert copy scales linearly with the number of items copied
+ * @throws RepositoryException
+ * @throws InterruptedException
+ */
+@Test public void largeCopy() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("large-copy","oak:Unstructured");
+  final ContentGenerator contentGenerator=new ContentGenerator(1000);
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    ScalabilityTest test=new ScalabilityTest(scale){
+      @Override void before(      int scale) throws RepositoryException {
+        Node s=n.addNode("s" + scale);
+        contentGenerator.addNodes(s,scale);
+      }
+      @Override void run(      int scale) throws RepositoryException {
+        session.getWorkspace().copy("/large-copy/s" + scale,"/large-copy/t" + scale);
+      }
+    }
+;
+    double t=test.run();
+    executionTimes.add(t);
+    LOG.info("Copying {} node took {} ns/node",scale,t);
+  }
+  boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+  assertOnLgn("large copy",scales,executionTimes,knownIssue);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Assert move scales linearly with the number of items copied
+ * @throws RepositoryException
+ * @throws InterruptedException
+ */
+@Test public void largeMove() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("large-move","oak:Unstructured");
+  final ContentGenerator contentGenerator=new ContentGenerator(1000);
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    ScalabilityTest test=new ScalabilityTest(scale){
+      @Override void before(      int scale) throws RepositoryException {
+        Node s=n.addNode("s" + scale);
+        contentGenerator.addNodes(s,scale);
+      }
+      @Override void run(      int scale) throws RepositoryException {
+        session.getWorkspace().move("/large-move/s" + scale,"/large-move/t" + scale);
+      }
+    }
+;
+    double t=test.run();
+    executionTimes.add(t);
+    LOG.info("Moving {} node took {} ns/node",scale,t);
+  }
+  boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+  assertOnLgn("large move",scales,executionTimes,knownIssue);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Assert processing of pending observation events scales linearly with the
+ * number of pending events.
+ * @throws RepositoryException
+ * @throws InterruptedException
+ */
+@Test public void largeNumberOfPendingEvents() throws RepositoryException, InterruptedException {
+  final Node n=session.getRootNode().addNode("pending-events","oak:Unstructured");
+  final ContentGenerator contentGenerator=new ContentGenerator(1000);
+  ArrayList<Double> executionTimes=Lists.newArrayList();
+  for (  int scale : scales) {
+    final Observer observer=new Observer(scale,100);
+    try {
+      ScalabilityTest test=new ScalabilityTest(scale){
+        @Override void before(        int scale) throws RepositoryException {
+          contentGenerator.addNodes(n,scale);
+        }
+        @Override void run(        int scale) throws InterruptedException {
+          observer.waitForEvents(scale);
+        }
+      }
+;
+      double t=test.run();
+      executionTimes.add(t);
+      LOG.info("{} pending events took {} ns/event to process",scale,t);
+    }
+  finally {
+      try {
+        observer.dispose();
+      }
+ catch (      Exception ignore) {
+      }
+    }
+  }
+  boolean knownIssue=fixture.getClass() == DocumentMongoFixture.class;
+  assertOnLgn("large number of pending events",scales,executionTimes,knownIssue);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws RepositoryException {
+  ((LoggerContext)LoggerFactory.getILoggerFactory()).getLogger(DocumentNodeStore.class).setLevel(Level.ERROR);
+  ((LoggerContext)LoggerFactory.getILoggerFactory()).getLogger("org.apache.jackrabbit.oak.jcr.observation.ChangeProcessor").setLevel(Level.ERROR);
+  ((LoggerContext)LoggerFactory.getILoggerFactory()).getLogger(RefreshStrategy.class).setLevel(Level.ERROR);
+  nodeStore=fixture.createNodeStore();
+  repository=new Jcr(nodeStore).createRepository();
+  session=createAdminSession();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

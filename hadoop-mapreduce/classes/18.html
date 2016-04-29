@@ -1,0 +1,70 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestFileOwner (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDown() throws java.lang.Exception {
+  cluster.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-13 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testFilePermission() throws Exception {
+  wovenClient=cluster.getJTClient().getProxy();
+  Configuration conf=new Configuration(cluster.getConf());
+  FinishTaskControlAction.configureControlActionForJob(conf);
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(1,0,100,100,100,100);
+  JobConf jconf=new JobConf(conf);
+  slpJob.submit();
+  RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  taskController=conf.get(TTConfig.TT_TASK_CONTROLLER);
+  JobInfo info=wovenClient.getJobInfo(rJob.getID());
+  Assert.assertNotNull("JobInfo is null",info);
+  JobID id=rJob.getID();
+  while (info.runningMaps() != 1) {
+    Thread.sleep(1000);
+    info=wovenClient.getJobInfo(id);
+  }
+  TaskInfo[] myTaskInfos=wovenClient.getTaskInfo(id);
+  for (  TaskInfo tInfo : myTaskInfos) {
+    if (!tInfo.isSetupOrCleanup()) {
+      String[] taskTrackers=tInfo.getTaskTrackers();
+      for (      String taskTracker : taskTrackers) {
+        TTInfo ttInfo=wovenClient.getTTInfo(taskTracker);
+        TTClient ttCli=cluster.getTTClient(ttInfo.getStatus().getHost());
+        Assert.assertNotNull("TTClient instance is null",ttCli);
+        TTTaskInfo ttTaskInfo=ttCli.getProxy().getTask(tInfo.getTaskID());
+        Assert.assertNotNull("TTTaskInfo is null",ttTaskInfo);
+        while (ttTaskInfo.getTaskStatus().getRunState() != TaskStatus.State.RUNNING) {
+          Thread.sleep(100);
+          ttTaskInfo=ttCli.getProxy().getTask(tInfo.getTaskID());
+        }
+        testPermissionWithTaskController(ttCli,conf,info);
+        FinishTaskControlAction action=new FinishTaskControlAction(TaskID.downgrade(tInfo.getTaskID()));
+        for (        TTClient cli : cluster.getTTClients()) {
+          cli.getProxy().sendAction(action);
+        }
+      }
+    }
+  }
+  JobInfo jInfo=wovenClient.getJobInfo(id);
+  jInfo=cluster.getJTClient().getProxy().getJobInfo(id);
+  while (!jInfo.getStatus().isJobComplete()) {
+    Thread.sleep(100);
+    jInfo=cluster.getJTClient().getProxy().getJobInfo(id);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

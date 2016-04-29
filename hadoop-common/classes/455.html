@@ -1,0 +1,69 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestTransferRbw (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTransferRbw() throws Exception {
+  final HdfsConfiguration conf=new HdfsConfiguration();
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(REPLICATION).build();
+  try {
+    cluster.waitActive();
+    final DistributedFileSystem fs=cluster.getFileSystem();
+    final Path p=new Path("/foo");
+    final int size=(1 << 16) + RAN.nextInt(1 << 16);
+    LOG.info("size = " + size);
+    final FSDataOutputStream out=fs.create(p,REPLICATION);
+    final byte[] bytes=new byte[1024];
+    for (int remaining=size; remaining > 0; ) {
+      RAN.nextBytes(bytes);
+      final int len=bytes.length < remaining ? bytes.length : remaining;
+      out.write(bytes,0,len);
+      out.hflush();
+      remaining-=len;
+    }
+    final ReplicaBeingWritten oldrbw;
+    final DataNode newnode;
+    final DatanodeInfo newnodeinfo;
+    final String bpid=cluster.getNamesystem().getBlockPoolId();
+{
+      final DataNode oldnode=cluster.getDataNodes().get(0);
+      oldrbw=getRbw(oldnode,bpid);
+      LOG.info("oldrbw = " + oldrbw);
+      cluster.startDataNodes(conf,1,true,null,null);
+      newnode=cluster.getDataNodes().get(REPLICATION);
+      final DatanodeInfo oldnodeinfo;
+{
+        final DatanodeInfo[] datatnodeinfos=cluster.getNameNodeRpc().getDatanodeReport(DatanodeReportType.LIVE);
+        Assert.assertEquals(2,datatnodeinfos.length);
+        int i=0;
+        for (DatanodeRegistration dnReg=newnode.getDNRegistrationForBP(bpid); i < datatnodeinfos.length && !datatnodeinfos[i].equals(dnReg); i++)         ;
+        Assert.assertTrue(i < datatnodeinfos.length);
+        newnodeinfo=datatnodeinfos[i];
+        oldnodeinfo=datatnodeinfos[1 - i];
+      }
+      final ExtendedBlock b=new ExtendedBlock(bpid,oldrbw.getBlockId(),oldrbw.getBytesAcked(),oldrbw.getGenerationStamp());
+      final BlockOpResponseProto s=DFSTestUtil.transferRbw(b,DFSClientAdapter.getDFSClient(fs),oldnodeinfo,newnodeinfo);
+      Assert.assertEquals(Status.SUCCESS,s.getStatus());
+    }
+    final ReplicaBeingWritten newrbw=getRbw(newnode,bpid);
+    LOG.info("newrbw = " + newrbw);
+    Assert.assertEquals(oldrbw.getBlockId(),newrbw.getBlockId());
+    Assert.assertEquals(oldrbw.getGenerationStamp(),newrbw.getGenerationStamp());
+    Assert.assertEquals(oldrbw.getVisibleLength(),newrbw.getVisibleLength());
+    LOG.info("DONE");
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

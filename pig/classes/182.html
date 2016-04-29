@@ -1,0 +1,142 @@
+<h3 style="margin:0px">Class: org.apache.pig.test.TestJobControlCompiler (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAddArchiveToDistributedCache() throws IOException {
+  final File textFile=File.createTempFile("file",".txt");
+  textFile.deleteOnExit();
+  final List<File> zipArchives=createFiles(".zip");
+  zipArchives.add(textFile);
+  final List<File> tarArchives=createFiles(".tgz",".tar.gz",".tar");
+  final PigServer pigServer=new PigServer(ExecType.MAPREDUCE);
+  final PigContext pigContext=pigServer.getPigContext();
+  pigContext.connect();
+  pigContext.getProperties().put("pig.streaming.ship.files",StringUtils.join(zipArchives,","));
+  pigContext.getProperties().put("pig.streaming.cache.files",StringUtils.join(tarArchives,","));
+  final JobConf jobConf=compileTestJob(pigContext,CONF);
+  URI[] uris=DistributedCache.getCacheFiles(jobConf);
+  int sizeTxt=0;
+  for (int i=0; i < uris.length; i++) {
+    if (uris[i].toString().endsWith(".txt")) {
+      sizeTxt++;
+    }
+  }
+  Assert.assertTrue(sizeTxt == 1);
+  assertFilesInDistributedCache(DistributedCache.getCacheArchives(jobConf),4,".zip",".tgz",".tar.gz",".tar");
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * specifically tests that REGISTERED jars get added to distributed cache
+ * @throws Exception
+ */
+@Test public void testJarAddedToDistributedCache() throws Exception {
+  File tmpFile=File.createTempFile("Some_",".jar");
+  tmpFile.deleteOnExit();
+  String className=createTestJar(tmpFile);
+  final String testUDFFileName=className + ".class";
+  PigServer pigServer=new PigServer(ExecType.MAPREDUCE);
+  PigContext pigContext=pigServer.getPigContext();
+  pigContext.connect();
+  pigContext.addJar(tmpFile.getAbsolutePath());
+  JobControlCompiler jobControlCompiler=new JobControlCompiler(pigContext,CONF);
+  MROperPlan plan=new MROperPlan();
+  MapReduceOper mro=new MapReduceOper(new OperatorKey());
+  mro.UDFs=new HashSet<String>();
+  mro.UDFs.add(className + "()");
+  plan.add(mro);
+  JobControl jobControl=jobControlCompiler.compile(plan,"test");
+  JobConf jobConf=jobControl.getWaitingJobs().get(0).getJobConf();
+  Path[] fileClassPaths=DistributedCache.getFileClassPaths(jobConf);
+  Assert.assertEquals("size for " + Arrays.toString(fileClassPaths),HadoopShims.isHadoopYARN() ? 5 : 6,fileClassPaths.length);
+  Path distributedCachePath=fileClassPaths[0];
+  Assert.assertEquals("ends with jar name: " + distributedCachePath,distributedCachePath.getName(),tmpFile.getName());
+  Assert.assertTrue("starts with /: " + distributedCachePath,distributedCachePath.toString().startsWith("/"));
+  Assert.assertTrue("jar pushed to distributed cache should contain testUDF",jarContainsFileNamed(new File(fileClassPaths[0].toUri().getPath()),testUDFFileName));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-6 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests that no duplicate jars are added to distributed cache, which might cause conflicts
+ * and tests with both symlinked and normal jar specification
+ */
+@Test public void testNoDuplicateJarsInDistributedCache() throws Exception {
+  final PigServer pigServer=new PigServer(ExecType.MAPREDUCE);
+  PigContext pigContext=pigServer.getPigContext();
+  pigContext.connect();
+  Configuration conf=new Configuration();
+  DistributedCache.addFileToClassPath(new Path(new URI("/lib/udf-0.jar#udf.jar")),conf,FileSystem.get(conf));
+  DistributedCache.addFileToClassPath(new Path(new URI("/lib/udf1.jar#diffname.jar")),conf,FileSystem.get(conf));
+  DistributedCache.addFileToClassPath(new Path(new URI("/lib/udf2.jar")),conf,FileSystem.get(conf));
+  createAndAddResource("udf.jar",pigContext);
+  createAndAddResource("udf1.jar",pigContext);
+  createAndAddResource("udf2.jar",pigContext);
+  createAndAddResource("another.jar",pigContext);
+  final JobConf jobConf=compileTestJob(pigContext,conf);
+  URI[] cacheURIs=DistributedCache.getCacheFiles(jobConf);
+  Path[] fileClassPaths=DistributedCache.getFileClassPaths(jobConf);
+  System.out.println("cache.files= " + Arrays.toString(cacheURIs));
+  System.out.println("classpath.files= " + Arrays.toString(fileClassPaths));
+  if (HadoopShims.isHadoopYARN()) {
+    Assert.assertEquals("size 9 for " + Arrays.toString(cacheURIs),9,Arrays.asList(StringUtils.join(cacheURIs,",").split(",")).size());
+    Assert.assertEquals("size 9 for " + Arrays.toString(fileClassPaths),9,Arrays.asList(StringUtils.join(fileClassPaths,",").split(",")).size());
+  }
+ else {
+    Assert.assertEquals("size 12 for " + Arrays.toString(cacheURIs),12,Arrays.asList(StringUtils.join(cacheURIs,",").split(",")).size());
+    Assert.assertEquals("size 12 for " + Arrays.toString(fileClassPaths),12,Arrays.asList(StringUtils.join(fileClassPaths,",").split(",")).size());
+  }
+  Map<String,Integer> occurrences=new HashMap<String,Integer>();
+  for (  URI cacheURI : cacheURIs) {
+    Integer val=occurrences.get(cacheURI.toString());
+    val=(val == null) ? 1 : ++val;
+    occurrences.put(cacheURI.toString(),val);
+  }
+  if (HadoopShims.isHadoopYARN()) {
+    Assert.assertEquals(9,occurrences.size());
+  }
+ else {
+    Assert.assertEquals(10,occurrences.size());
+  }
+  for (  String file : occurrences.keySet()) {
+    if (!HadoopShims.isHadoopYARN() && (file.endsWith("udf.jar") || file.endsWith("udf2.jar"))) {
+      Assert.assertEquals("Two occurrences for " + file,2,(int)occurrences.get(file));
+    }
+ else {
+      Assert.assertEquals("One occurrence for " + file,1,(int)occurrences.get(file));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testEstimateNumberOfReducers() throws Exception {
+  Assert.assertEquals(2,JobControlCompiler.estimateNumberOfReducers(new Job(CONF),createMockPOLoadMapReduceOper(2L * 1000 * 1000* 999)));
+  Assert.assertEquals(2,JobControlCompiler.estimateNumberOfReducers(new Job(CONF),createMockPOLoadMapReduceOper(2L * 1000 * 1000* 1000)));
+  Assert.assertEquals(3,JobControlCompiler.estimateNumberOfReducers(new Job(CONF),createMockPOLoadMapReduceOper(2L * 1000 * 1000* 1001)));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

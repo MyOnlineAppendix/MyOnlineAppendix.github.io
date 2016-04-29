@@ -1,0 +1,62 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.twill.yarn.LogHandlerTestRun </h4><pre class="type-4 type-14 type-7 type-2 type-3 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLogHandler() throws ExecutionException, InterruptedException, TimeoutException {
+  final CountDownLatch latch=new CountDownLatch(3);
+  final Queue<LogThrowable> throwables=new ConcurrentLinkedQueue<LogThrowable>();
+  final Queue<String> runnables=new ConcurrentLinkedQueue<String>();
+  LogHandler logHandler=new LogHandler(){
+    @Override public void onLog(    LogEntry logEntry){
+      if (logEntry.getSourceClassName().contains("LogHandlerTestRun")) {
+        runnables.add(logEntry.getRunnableName());
+      }
+      if (logEntry.getSourceClassName().contains("ApplicationMasterService")) {
+        Assert.assertNull(logEntry.getRunnableName());
+      }
+      if (logEntry.getMessage().startsWith("Starting runnable " + LogRunnable.class.getSimpleName())) {
+        latch.countDown();
+      }
+ else       if (logEntry.getMessage().equals("Running")) {
+        latch.countDown();
+      }
+ else       if (logEntry.getMessage().equals("Got exception") && logEntry.getThrowable() != null) {
+        throwables.add(logEntry.getThrowable());
+        latch.countDown();
+      }
+    }
+  }
+;
+  TwillRunner runner=getTwillRunner();
+  TwillController controller=runner.prepare(new LogRunnable()).addLogHandler(new PrinterLogHandler(new PrintWriter(System.out,true))).addLogHandler(logHandler).start();
+  try {
+    Assert.assertTrue(latch.await(100,TimeUnit.SECONDS));
+  }
+  finally {
+    controller.terminate().get(120,TimeUnit.SECONDS);
+  }
+  Assert.assertEquals(2,runnables.size());
+  Assert.assertArrayEquals(new String[]{"LogRunnable","LogRunnable"},runnables.toArray());
+  Assert.assertEquals(1,throwables.size());
+  LogThrowable t=throwables.poll();
+  Assert.assertEquals(RuntimeException.class.getName(),t.getClassName());
+  Assert.assertNotNull(t.getCause());
+  Assert.assertEquals(5,t.getStackTraces().length);
+  t=t.getCause();
+  Assert.assertEquals(Exception.class.getName(),t.getClassName());
+  Assert.assertEquals("Exception",t.getMessage());
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

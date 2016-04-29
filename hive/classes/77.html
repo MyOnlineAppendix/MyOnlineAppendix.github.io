@@ -1,0 +1,80 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hive.metastore.hbase.TestHBaseMetastoreMetrics (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws IOException {
+  HBaseReadWrite.setConf(conf);
+  conf=new HiveConf();
+  conf.setVar(HiveConf.ConfVars.METASTORE_RAW_STORE_IMPL,"org.apache.hadoop.hive.metastore.hbase.HBaseStore");
+  conf.setBoolVar(HiveConf.ConfVars.METASTORE_FASTPATH,true);
+  conf.setBoolVar(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY,false);
+  conf.setBoolVar(HiveConf.ConfVars.METASTORE_METRICS,true);
+  conf.setVar(HiveConf.ConfVars.HIVE_METRICS_REPORTER,MetricsReporting.JSON_FILE.name() + "," + MetricsReporting.JMX.name());
+  SessionState.start(new CliSessionState(conf));
+  driver=new Driver(conf);
+  metrics=(CodahaleMetrics)MetricsFactory.getInstance();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testMetaDataCounts() throws Exception {
+  driver.run("create database testdb1");
+  driver.run("create table testtbl1 (key string)");
+  driver.run("create table testtblpart (key string) partitioned by (partkey string)");
+  driver.run("use testdb1");
+  driver.run("create table testtbl2 (key string)");
+  driver.run("create table testtblpart2 (key string) partitioned by (partkey string)");
+  driver.run("alter table default.testtblpart add partition (partkey='a')");
+  driver.run("alter table default.testtblpart add partition (partkey='b')");
+  driver.run("alter table default.testtblpart add partition (partkey='c')");
+  driver.run("alter table testdb1.testtblpart2 add partition (partkey='a')");
+  driver.run("alter table testdb1.testtblpart2 add partition (partkey='b')");
+  driver.run("alter table testdb1.testtblpart2 add partition (partkey='c')");
+  driver.run("create database tempdb");
+  driver.run("use tempdb");
+  driver.run("create table delete_by_table (key string) partitioned by (partkey string)");
+  driver.run("alter table delete_by_table add partition (partkey='temp')");
+  driver.run("drop table delete_by_table");
+  driver.run("create table delete_by_part (key string) partitioned by (partkey string)");
+  driver.run("alter table delete_by_part add partition (partkey='temp')");
+  driver.run("alter table delete_by_part drop partition (partkey='temp')");
+  driver.run("create table delete_by_db (key string) partitioned by (partkey string)");
+  driver.run("alter table delete_by_db add partition (partkey='temp')");
+  driver.run("use default");
+  driver.run("drop database tempdb cascade");
+  String json=metrics.dumpJson();
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.CREATE_TOTAL_DATABASES,2);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.CREATE_TOTAL_TABLES,7);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.CREATE_TOTAL_PARTITIONS,9);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.DELETE_TOTAL_DATABASES,1);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.DELETE_TOTAL_TABLES,3);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.COUNTER,MetricsConstant.DELETE_TOTAL_PARTITIONS,3);
+  conf.setVar(HiveConf.ConfVars.METASTORE_RAW_STORE_IMPL,ObjectStore.class.getName());
+  HiveMetaStore.HMSHandler baseHandler=new HiveMetaStore.HMSHandler("test",conf,false);
+  baseHandler.init();
+  baseHandler.updateMetrics();
+  json=metrics.dumpJson();
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.GAUGE,MetricsConstant.INIT_TOTAL_DATABASES,2);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.GAUGE,MetricsConstant.INIT_TOTAL_TABLES,4);
+  MetricsTestUtils.verifyMetricsJson(json,MetricsTestUtils.GAUGE,MetricsConstant.INIT_TOTAL_PARTITIONS,6);
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void shutdown() throws Exception {
+  HBaseIntegrationTests.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

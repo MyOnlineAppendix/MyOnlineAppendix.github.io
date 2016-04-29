@@ -1,0 +1,62 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestSeekOptimizations (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  rand=new Random(91238123L);
+  expectedKVs.clear();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws IOException {
+  if (region != null) {
+    HBaseTestingUtility.closeRegionAndWAL(region);
+  }
+  StoreScanner.enableLazySeekGlobally(StoreScanner.LAZY_SEEK_ENABLED_BY_DEFAULT);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testMultipleTimestampRanges() throws IOException {
+  StoreFileScanner.instrument();
+  region=TEST_UTIL.createTestRegion("testMultipleTimestampRanges",new HColumnDescriptor(FAMILY).setCompressionType(comprAlgo).setBloomFilterType(bloomType).setMaxVersions(3));
+  final long latestDelTS=USE_MANY_STORE_FILES ? 1397 : -1;
+  createTimestampRange(1,50,-1);
+  createTimestampRange(51,100,-1);
+  if (USE_MANY_STORE_FILES) {
+    createTimestampRange(100,500,127);
+    createTimestampRange(900,1300,-1);
+    createTimestampRange(1301,2500,latestDelTS);
+    createTimestampRange(2502,2598,-1);
+    createTimestampRange(2599,2999,-1);
+  }
+  prepareExpectedKVs(latestDelTS);
+  for (  int[] columnArr : COLUMN_SETS) {
+    for (    int[] rowRange : ROW_RANGES) {
+      for (      int maxVersions : MAX_VERSIONS_VALUES) {
+        for (        boolean lazySeekEnabled : new boolean[]{false,true}) {
+          testScan(columnArr,lazySeekEnabled,rowRange[0],rowRange[1],maxVersions);
+        }
+      }
+    }
+  }
+  final double seekSavings=1 - totalSeekLazy * 1.0 / totalSeekDiligent;
+  System.err.println("For bloom=" + bloomType + ", compr="+ comprAlgo+ " total seeks without optimization: "+ totalSeekDiligent+ ", with optimization: "+ totalSeekLazy+ " ("+ String.format("%.2f%%",totalSeekLazy * 100.0 / totalSeekDiligent)+ "), savings: "+ String.format("%.2f%%",100.0 * seekSavings)+ "\n");
+  final double expectedSeekSavings=0.0;
+  assertTrue("Lazy seek is only saving " + String.format("%.2f%%",seekSavings * 100) + " seeks but should "+ "save at least "+ String.format("%.2f%%",expectedSeekSavings * 100),seekSavings >= expectedSeekSavings);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,76 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestRegionStates (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=10000) public void testCanMakeProgressThoughMetaIsDown() throws IOException, InterruptedException, BrokenBarrierException {
+  MasterServices server=mock(MasterServices.class);
+  when(server.getServerName()).thenReturn(ServerName.valueOf("master,1,1"));
+  Connection connection=mock(ClusterConnection.class);
+  Table metaTable=Mockito.mock(Table.class);
+  final CyclicBarrier latch=new CyclicBarrier(2);
+  when(metaTable.get((Get)Mockito.any())).thenAnswer(new Answer<Result>(){
+    @Override public Result answer(    InvocationOnMock invocation) throws Throwable {
+      latch.await();
+      throw new java.net.ConnectException("Connection refused");
+    }
+  }
+);
+  when(connection.getTable(TableName.META_TABLE_NAME)).thenReturn(metaTable);
+  when(server.getConnection()).thenReturn((ClusterConnection)connection);
+  Configuration configuration=mock(Configuration.class);
+  when(server.getConfiguration()).thenReturn(configuration);
+  TableStateManager tsm=mock(TableStateManager.class);
+  ServerManager sm=mock(ServerManager.class);
+  when(sm.isServerOnline(isA(ServerName.class))).thenReturn(true);
+  RegionStateStore rss=mock(RegionStateStore.class);
+  final RegionStates regionStates=new RegionStates(server,tsm,sm,rss);
+  final ServerName sn=mockServer("one",1);
+  regionStates.updateRegionState(HRegionInfo.FIRST_META_REGIONINFO,State.SPLITTING_NEW,sn);
+  Thread backgroundThread=new Thread("Get stuck setting server offline"){
+    @Override public void run(){
+      regionStates.serverOffline(sn);
+    }
+  }
+;
+  assertTrue(latch.getNumberWaiting() == 0);
+  backgroundThread.start();
+  while (latch.getNumberWaiting() == 0)   ;
+  regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+  latch.await();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testWeDontReturnDrainingServersForOurBalancePlans() throws Exception {
+  MasterServices server=mock(MasterServices.class);
+  when(server.getServerName()).thenReturn(ServerName.valueOf("master,1,1"));
+  Configuration configuration=mock(Configuration.class);
+  when(server.getConfiguration()).thenReturn(configuration);
+  TableStateManager tsm=mock(TableStateManager.class);
+  ServerManager sm=mock(ServerManager.class);
+  when(sm.isServerOnline(isA(ServerName.class))).thenReturn(true);
+  RegionStateStore rss=mock(RegionStateStore.class);
+  RegionStates regionStates=new RegionStates(server,tsm,sm,rss);
+  ServerName one=mockServer("one",1);
+  ServerName two=mockServer("two",1);
+  ServerName three=mockServer("three",1);
+  when(sm.getDrainingServersList()).thenReturn(Arrays.asList(three));
+  regionStates.regionOnline(createFakeRegion(),one);
+  regionStates.regionOnline(createFakeRegion(),two);
+  regionStates.regionOnline(createFakeRegion(),three);
+  Map<TableName,Map<ServerName,List<HRegionInfo>>> result=regionStates.getAssignmentsByTable();
+  for (  Map<ServerName,List<HRegionInfo>> map : result.values()) {
+    assertFalse(map.keySet().contains(three));
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

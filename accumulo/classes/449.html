@@ -1,0 +1,228 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.replication.SequentialWorkAssignerIT (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-5 type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void workAcrossPeersHappensConcurrently() throws Exception {
+  ReplicationTarget target1=new ReplicationTarget("cluster1","table1","1");
+  Text serializedTarget1=target1.toText();
+  ReplicationTarget target2=new ReplicationTarget("cluster2","table1","1");
+  Text serializedTarget2=target2.toText();
+  BatchWriter bw=ReplicationTable.getBatchWriter(conn);
+  String filename1="z_file1", filename2="a_file1";
+  String file1="/accumulo/wal/tserver+port/" + filename1, file2="/accumulo/wal/tserver+port/" + filename2;
+  Status stat1=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(250).build();
+  Status stat2=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(500).build();
+  Mutation m=new Mutation(file1);
+  WorkSection.add(m,serializedTarget1,ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=new Mutation(file2);
+  WorkSection.add(m,serializedTarget2,ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file1,stat1.getCreatedTime());
+  OrderSection.add(m,new Text(target1.getSourceTableId()),ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file2,stat2.getCreatedTime());
+  OrderSection.add(m,new Text(target2.getSourceTableId()),ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  bw.close();
+  DistributedWorkQueue workQueue=createMock(DistributedWorkQueue.class);
+  Map<String,Map<String,String>> queuedWork=new HashMap<>();
+  assigner.setQueuedWork(queuedWork);
+  assigner.setWorkQueue(workQueue);
+  assigner.setMaxQueueSize(Integer.MAX_VALUE);
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target1),file1);
+  expectLastCall().once();
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target2),file2);
+  expectLastCall().once();
+  replay(workQueue);
+  assigner.createWork();
+  verify(workQueue);
+  Assert.assertEquals(2,queuedWork.size());
+  Assert.assertTrue(queuedWork.containsKey("cluster1"));
+  Map<String,String> cluster1Work=queuedWork.get("cluster1");
+  Assert.assertEquals(1,cluster1Work.size());
+  Assert.assertTrue(cluster1Work.containsKey(target1.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target1),cluster1Work.get(target1.getSourceTableId()));
+  Map<String,String> cluster2Work=queuedWork.get("cluster2");
+  Assert.assertEquals(1,cluster2Work.size());
+  Assert.assertTrue(cluster2Work.containsKey(target2.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target2),cluster2Work.get(target2.getSourceTableId()));
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void createWorkForFilesInCorrectOrder() throws Exception {
+  ReplicationTarget target=new ReplicationTarget("cluster1","table1","1");
+  Text serializedTarget=target.toText();
+  BatchWriter bw=ReplicationTable.getBatchWriter(conn);
+  String filename1="z_file1", filename2="a_file1";
+  String file1="/accumulo/wal/tserver+port/" + filename1, file2="/accumulo/wal/tserver+port/" + filename2;
+  Status stat1=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(250).build();
+  Status stat2=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(500).build();
+  Mutation m=new Mutation(file1);
+  WorkSection.add(m,serializedTarget,ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=new Mutation(file2);
+  WorkSection.add(m,serializedTarget,ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file1,stat1.getCreatedTime());
+  OrderSection.add(m,new Text(target.getSourceTableId()),ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file2,stat2.getCreatedTime());
+  OrderSection.add(m,new Text(target.getSourceTableId()),ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  bw.close();
+  DistributedWorkQueue workQueue=createMock(DistributedWorkQueue.class);
+  Map<String,Map<String,String>> queuedWork=new HashMap<>();
+  assigner.setQueuedWork(queuedWork);
+  assigner.setWorkQueue(workQueue);
+  assigner.setMaxQueueSize(Integer.MAX_VALUE);
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target),file1);
+  expectLastCall().once();
+  replay(workQueue);
+  assigner.createWork();
+  verify(workQueue);
+  Assert.assertEquals(1,queuedWork.size());
+  Assert.assertTrue(queuedWork.containsKey("cluster1"));
+  Map<String,String> cluster1Work=queuedWork.get("cluster1");
+  Assert.assertEquals(1,cluster1Work.size());
+  Assert.assertTrue(cluster1Work.containsKey(target.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target),cluster1Work.get(target.getSourceTableId()));
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void workAcrossTablesHappensConcurrently() throws Exception {
+  ReplicationTarget target1=new ReplicationTarget("cluster1","table1","1");
+  Text serializedTarget1=target1.toText();
+  ReplicationTarget target2=new ReplicationTarget("cluster1","table2","2");
+  Text serializedTarget2=target2.toText();
+  BatchWriter bw=ReplicationTable.getBatchWriter(conn);
+  String filename1="z_file1", filename2="a_file1";
+  String file1="/accumulo/wal/tserver+port/" + filename1, file2="/accumulo/wal/tserver+port/" + filename2;
+  Status stat1=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(250).build();
+  Status stat2=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(500).build();
+  Mutation m=new Mutation(file1);
+  WorkSection.add(m,serializedTarget1,ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=new Mutation(file2);
+  WorkSection.add(m,serializedTarget2,ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file1,stat1.getCreatedTime());
+  OrderSection.add(m,new Text(target1.getSourceTableId()),ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file2,stat2.getCreatedTime());
+  OrderSection.add(m,new Text(target2.getSourceTableId()),ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  bw.close();
+  DistributedWorkQueue workQueue=createMock(DistributedWorkQueue.class);
+  Map<String,Map<String,String>> queuedWork=new HashMap<>();
+  assigner.setQueuedWork(queuedWork);
+  assigner.setWorkQueue(workQueue);
+  assigner.setMaxQueueSize(Integer.MAX_VALUE);
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target1),file1);
+  expectLastCall().once();
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target2),file2);
+  expectLastCall().once();
+  replay(workQueue);
+  assigner.createWork();
+  verify(workQueue);
+  Assert.assertEquals(1,queuedWork.size());
+  Assert.assertTrue(queuedWork.containsKey("cluster1"));
+  Map<String,String> cluster1Work=queuedWork.get("cluster1");
+  Assert.assertEquals(2,cluster1Work.size());
+  Assert.assertTrue(cluster1Work.containsKey(target1.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target1),cluster1Work.get(target1.getSourceTableId()));
+  Assert.assertTrue(cluster1Work.containsKey(target2.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target2),cluster1Work.get(target2.getSourceTableId()));
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void reprocessingOfCompletedWorkRemovesWork() throws Exception {
+  ReplicationTarget target=new ReplicationTarget("cluster1","table1","1");
+  Text serializedTarget=target.toText();
+  BatchWriter bw=ReplicationTable.getBatchWriter(conn);
+  String filename1="z_file1", filename2="a_file1";
+  String file1="/accumulo/wal/tserver+port/" + filename1, file2="/accumulo/wal/tserver+port/" + filename2;
+  Status stat1=Status.newBuilder().setBegin(100).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(250).build();
+  Status stat2=Status.newBuilder().setBegin(0).setEnd(100).setClosed(true).setInfiniteEnd(false).setCreatedTime(500).build();
+  Mutation m=new Mutation(file1);
+  WorkSection.add(m,serializedTarget,ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=new Mutation(file2);
+  WorkSection.add(m,serializedTarget,ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file1,stat1.getCreatedTime());
+  OrderSection.add(m,new Text(target.getSourceTableId()),ProtobufUtil.toValue(stat1));
+  bw.addMutation(m);
+  m=OrderSection.createMutation(file2,stat2.getCreatedTime());
+  OrderSection.add(m,new Text(target.getSourceTableId()),ProtobufUtil.toValue(stat2));
+  bw.addMutation(m);
+  bw.close();
+  DistributedWorkQueue workQueue=createMock(DistributedWorkQueue.class);
+  Map<String,Map<String,String>> queuedWork=new HashMap<>();
+  Map<String,String> queuedWorkForCluster=new HashMap<>();
+  queuedWorkForCluster.put(target.getSourceTableId(),DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename1,target));
+  queuedWork.put("cluster1",queuedWorkForCluster);
+  assigner.setQueuedWork(queuedWork);
+  assigner.setWorkQueue(workQueue);
+  assigner.setMaxQueueSize(Integer.MAX_VALUE);
+  workQueue.addWork(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target),file2);
+  expectLastCall().once();
+  replay(workQueue);
+  assigner.createWork();
+  verify(workQueue);
+  Assert.assertEquals(1,queuedWork.size());
+  Assert.assertTrue(queuedWork.containsKey("cluster1"));
+  Map<String,String> cluster1Work=queuedWork.get("cluster1");
+  Assert.assertEquals(1,cluster1Work.size());
+  Assert.assertTrue(cluster1Work.containsKey(target.getSourceTableId()));
+  Assert.assertEquals(DistributedWorkQueueWorkAssignerHelper.getQueueKey(filename2,target),cluster1Work.get(target.getSourceTableId()));
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void init() throws Exception {
+  conn=getConnector();
+  assigner=new MockSequentialWorkAssigner(conn);
+  conn.securityOperations().grantTablePermission(conn.whoami(),ReplicationTable.NAME,TablePermission.READ);
+  conn.securityOperations().grantTablePermission(conn.whoami(),ReplicationTable.NAME,TablePermission.WRITE);
+  ReplicationTable.setOnline(conn);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

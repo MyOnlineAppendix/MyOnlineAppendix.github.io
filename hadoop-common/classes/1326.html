@@ -1,0 +1,84 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.security.TestClientToAMTokens (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-7 type-10 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClientToAMTokens() throws Exception {
+  final Configuration conf=new Configuration();
+  conf.set(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,"kerberos");
+  UserGroupInformation.setConfiguration(conf);
+  ContainerManagementProtocol containerManager=mock(ContainerManagementProtocol.class);
+  StartContainersResponse mockResponse=mock(StartContainersResponse.class);
+  when(containerManager.startContainers((StartContainersRequest)any())).thenReturn(mockResponse);
+  final DrainDispatcher dispatcher=new DrainDispatcher();
+  MockRM rm=new MockRMWithCustomAMLauncher(conf,containerManager){
+    protected ClientRMService createClientRMService(){
+      return new ClientRMService(this.rmContext,scheduler,this.rmAppManager,this.applicationACLsManager,this.queueACLsManager,getRMContext().getRMDelegationTokenSecretManager());
+    }
+    @Override protected Dispatcher createDispatcher(){
+      return dispatcher;
+    }
+    @Override protected void doSecureLogin() throws IOException {
+    }
+  }
+;
+  rm.start();
+  RMApp app=rm.submitApp(1024);
+  MockNM nm1=rm.registerNode("localhost:1234",3072);
+  nm1.nodeHeartbeat(true);
+  dispatcher.await();
+  nm1.nodeHeartbeat(true);
+  dispatcher.await();
+  ApplicationAttemptId appAttempt=app.getCurrentAppAttempt().getAppAttemptId();
+  final MockAM mockAM=new MockAM(rm.getRMContext(),rm.getApplicationMasterService(),app.getCurrentAppAttempt().getAppAttemptId());
+  UserGroupInformation appUgi=UserGroupInformation.createRemoteUser(appAttempt.toString());
+  RegisterApplicationMasterResponse response=appUgi.doAs(new PrivilegedAction<RegisterApplicationMasterResponse>(){
+    @Override public RegisterApplicationMasterResponse run(){
+      RegisterApplicationMasterResponse response=null;
+      try {
+        response=mockAM.registerAppAttempt();
+      }
+ catch (      Exception e) {
+        Assert.fail("Exception was not expected");
+      }
+      return response;
+    }
+  }
+);
+  GetApplicationReportRequest request=Records.newRecord(GetApplicationReportRequest.class);
+  request.setApplicationId(app.getApplicationId());
+  GetApplicationReportResponse reportResponse=rm.getClientRMService().getApplicationReport(request);
+  ApplicationReport appReport=reportResponse.getApplicationReport();
+  org.apache.hadoop.yarn.api.records.Token originalClientToAMToken=appReport.getClientToAMToken();
+  Assert.assertNotNull(response.getClientToAMTokenMasterKey());
+  Assert.assertTrue(response.getClientToAMTokenMasterKey().array().length > 0);
+  ApplicationAttemptId appAttemptId=app.getAppAttempts().keySet().iterator().next();
+  Assert.assertNotNull(appAttemptId);
+  final CustomAM am=new CustomAM(appAttemptId,response.getClientToAMTokenMasterKey().array());
+  am.init(conf);
+  am.start();
+  SecurityUtil.setSecurityInfoProviders(new CustomSecurityInfo());
+  try {
+    CustomProtocol client=(CustomProtocol)RPC.getProxy(CustomProtocol.class,1L,am.address,conf);
+    client.ping();
+    fail("Access by unauthenticated user should fail!!");
+  }
+ catch (  Exception e) {
+    Assert.assertFalse(am.pinged);
+  }
+  Token<ClientToAMTokenIdentifier> token=ConverterUtils.convertFromYarn(originalClientToAMToken,am.address);
+  verifyTokenWithTamperedID(conf,am,token);
+  verifyTokenWithTamperedUserName(conf,am,token);
+  verifyValidToken(conf,am,token);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

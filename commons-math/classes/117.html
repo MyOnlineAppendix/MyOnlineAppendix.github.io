@@ -1,0 +1,178 @@
+<h3 style="margin:0px">Class: org.apache.commons.math4.filter.KalmanFilterTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testCannonball(){
+  final int iterations=144;
+  final double dt=0.1d;
+  final double measurementNoise=30d;
+  final double initialVelocity=100;
+  final double angle=45;
+  final Cannonball cannonball=new Cannonball(dt,angle,initialVelocity);
+  final double speedX=cannonball.getXVelocity();
+  final double speedY=cannonball.getYVelocity();
+  final RealMatrix A=MatrixUtils.createRealMatrix(new double[][]{{1,dt,0,0},{0,1,0,0},{0,0,1,dt},{0,0,0,1}});
+  final RealVector controlVector=MatrixUtils.createRealVector(new double[]{0,0,0.5 * -9.81 * dt* dt,-9.81 * dt});
+  final RealMatrix B=MatrixUtils.createRealMatrix(new double[][]{{0,0,0,0},{0,0,0,0},{0,0,1,0},{0,0,0,1}});
+  final RealMatrix H=MatrixUtils.createRealMatrix(new double[][]{{1,0,0,0},{0,0,0,0},{0,0,1,0},{0,0,0,0}});
+  final RealVector initialState=MatrixUtils.createRealVector(new double[]{0,speedX,0,speedY});
+  final double var=measurementNoise * measurementNoise;
+  final RealMatrix initialErrorCovariance=MatrixUtils.createRealMatrix(new double[][]{{var,0,0,0},{0,1e-3,0,0},{0,0,var,0},{0,0,0,1e-3}});
+  final RealMatrix Q=MatrixUtils.createRealMatrix(4,4);
+  final RealMatrix R=MatrixUtils.createRealMatrix(new double[][]{{var,0,0,0},{0,1e-3,0,0},{0,0,var,0},{0,0,0,1e-3}});
+  final ProcessModel pm=new DefaultProcessModel(A,B,Q,initialState,initialErrorCovariance);
+  final MeasurementModel mm=new DefaultMeasurementModel(H,R);
+  final KalmanFilter filter=new KalmanFilter(pm,mm);
+  final RandomGenerator rng=new Well19937c(1000);
+  final NormalDistribution dist=new NormalDistribution(rng,0,measurementNoise);
+  for (int i=0; i < iterations; i++) {
+    double x=cannonball.getX();
+    double y=cannonball.getY();
+    double nx=x + dist.sample();
+    double ny=y + dist.sample();
+    cannonball.step();
+    filter.predict(controlVector);
+    filter.correct(new double[]{nx,0,ny,0});
+    double diff=FastMath.abs(cannonball.getY() - filter.getStateEstimation()[2]);
+    Assert.assertTrue(Precision.compareTo(diff,measurementNoise,1e-6) < 0);
+  }
+  Assert.assertTrue(Precision.compareTo(filter.getErrorCovariance()[0][0],9,1e-6) < 0);
+  Assert.assertTrue(Precision.compareTo(filter.getErrorCovariance()[2][2],9,1e-6) < 0);
+}
+
+</code></pre>
+
+<pre class="type-10 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=MatrixDimensionMismatchException.class) public void testTransitionControlMatrixMismatch(){
+  RealMatrix A=new Array2DRowRealMatrix(new double[]{1d});
+  RealMatrix B=new Array2DRowRealMatrix(new double[]{1d,1d});
+  RealMatrix H=new Array2DRowRealMatrix(new double[]{1d});
+  RealMatrix Q=new Array2DRowRealMatrix(new double[]{0});
+  RealMatrix R=new Array2DRowRealMatrix(new double[]{0});
+  ProcessModel pm=new DefaultProcessModel(A,B,Q,new ArrayRealVector(new double[]{0}),null);
+  MeasurementModel mm=new DefaultMeasurementModel(H,R);
+  new KalmanFilter(pm,mm);
+  Assert.fail("transition and control matrix should not be compatible");
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 type-3 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConstant(){
+  double constantValue=10d;
+  double measurementNoise=0.1d;
+  double processNoise=1e-5d;
+  RealMatrix A=new Array2DRowRealMatrix(new double[]{1d});
+  RealMatrix B=null;
+  RealMatrix H=new Array2DRowRealMatrix(new double[]{1d});
+  RealVector x=new ArrayRealVector(new double[]{constantValue});
+  RealMatrix Q=new Array2DRowRealMatrix(new double[]{processNoise});
+  RealMatrix R=new Array2DRowRealMatrix(new double[]{measurementNoise});
+  ProcessModel pm=new DefaultProcessModel(A,B,Q,new ArrayRealVector(new double[]{constantValue}),null);
+  MeasurementModel mm=new DefaultMeasurementModel(H,R);
+  KalmanFilter filter=new KalmanFilter(pm,mm);
+  Assert.assertEquals(1,filter.getMeasurementDimension());
+  Assert.assertEquals(1,filter.getStateDimension());
+  assertMatrixEquals(Q.getData(),filter.getErrorCovariance());
+  double[] expectedInitialState=new double[]{constantValue};
+  assertVectorEquals(expectedInitialState,filter.getStateEstimation());
+  RealVector pNoise=new ArrayRealVector(1);
+  RealVector mNoise=new ArrayRealVector(1);
+  RandomGenerator rand=new JDKRandomGenerator();
+  for (int i=0; i < 60; i++) {
+    filter.predict();
+    pNoise.setEntry(0,processNoise * rand.nextGaussian());
+    x=A.operate(x).add(pNoise);
+    mNoise.setEntry(0,measurementNoise * rand.nextGaussian());
+    RealVector z=H.operate(x).add(mNoise);
+    filter.correct(z);
+    double diff=FastMath.abs(constantValue - filter.getStateEstimation()[0]);
+    Assert.assertTrue(Precision.compareTo(diff,measurementNoise,1e-6) < 0);
+  }
+  Assert.assertTrue(Precision.compareTo(filter.getErrorCovariance()[0][0],0.02d,1e-6) < 0);
+}
+
+</code></pre>
+
+<pre class="type-5 type-9 type-2 type-3 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConstantAcceleration(){
+  double dt=0.1d;
+  double measurementNoise=10d;
+  double accelNoise=0.2d;
+  RealMatrix A=new Array2DRowRealMatrix(new double[][]{{1,dt},{0,1}});
+  RealMatrix B=new Array2DRowRealMatrix(new double[][]{{FastMath.pow(dt,2d) / 2d},{dt}});
+  RealMatrix H=new Array2DRowRealMatrix(new double[][]{{1d,0d}});
+  RealVector x=new ArrayRealVector(new double[]{0,0});
+  RealMatrix tmp=new Array2DRowRealMatrix(new double[][]{{FastMath.pow(dt,4d) / 4d,FastMath.pow(dt,3d) / 2d},{FastMath.pow(dt,3d) / 2d,FastMath.pow(dt,2d)}});
+  RealMatrix Q=tmp.scalarMultiply(FastMath.pow(accelNoise,2));
+  RealMatrix P0=new Array2DRowRealMatrix(new double[][]{{1,1},{1,1}});
+  RealMatrix R=new Array2DRowRealMatrix(new double[]{FastMath.pow(measurementNoise,2)});
+  RealVector u=new ArrayRealVector(new double[]{0.1d});
+  ProcessModel pm=new DefaultProcessModel(A,B,Q,x,P0);
+  MeasurementModel mm=new DefaultMeasurementModel(H,R);
+  KalmanFilter filter=new KalmanFilter(pm,mm);
+  Assert.assertEquals(1,filter.getMeasurementDimension());
+  Assert.assertEquals(2,filter.getStateDimension());
+  assertMatrixEquals(P0.getData(),filter.getErrorCovariance());
+  double[] expectedInitialState=new double[]{0.0,0.0};
+  assertVectorEquals(expectedInitialState,filter.getStateEstimation());
+  RandomGenerator rand=new JDKRandomGenerator();
+  RealVector tmpPNoise=new ArrayRealVector(new double[]{FastMath.pow(dt,2d) / 2d,dt});
+  for (int i=0; i < 60; i++) {
+    filter.predict(u);
+    RealVector pNoise=tmpPNoise.mapMultiply(accelNoise * rand.nextGaussian());
+    x=A.operate(x).add(B.operate(u)).add(pNoise);
+    double mNoise=measurementNoise * rand.nextGaussian();
+    RealVector z=H.operate(x).mapAdd(mNoise);
+    filter.correct(z);
+    double diff=FastMath.abs(x.getEntry(0) - filter.getStateEstimation()[0]);
+    Assert.assertTrue(Precision.compareTo(diff,measurementNoise,1e-6) < 0);
+  }
+  Assert.assertTrue(Precision.compareTo(filter.getErrorCovariance()[1][1],0.1d,1e-6) < 0);
+}
+
+</code></pre>
+
+<pre class="type-10 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=MatrixDimensionMismatchException.class) public void testTransitionMeasurementMatrixMismatch(){
+  RealMatrix A=new Array2DRowRealMatrix(new double[]{1d});
+  RealMatrix B=null;
+  RealMatrix H=new Array2DRowRealMatrix(new double[]{1d,1d});
+  RealMatrix Q=new Array2DRowRealMatrix(new double[]{0});
+  RealMatrix R=new Array2DRowRealMatrix(new double[]{0});
+  ProcessModel pm=new DefaultProcessModel(A,B,Q,new ArrayRealVector(new double[]{0}),null);
+  MeasurementModel mm=new DefaultMeasurementModel(H,R);
+  new KalmanFilter(pm,mm);
+  Assert.fail("transition and measurement matrix should not be compatible");
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

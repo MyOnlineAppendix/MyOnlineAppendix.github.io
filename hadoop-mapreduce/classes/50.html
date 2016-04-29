@@ -1,0 +1,62 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestTaskLauncher (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-4 type-6 type-5 type-12 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the case "task waiting to be launched is killed externally".
+ * Launches a task which will wait for ever to get slots. Kill the
+ * task and see if launcher is able to come out of the wait and pickup a
+ * another task.
+ * @throws IOException
+ */
+@Test public void testExternalKillForLaunchTask() throws IOException {
+  JobConf ttConf=new JobConf();
+  ttConf.setInt(TTConfig.TT_MAP_SLOTS,4);
+  TaskTracker tt=new MyTaskTracker();
+  tt.runningTasks=new LinkedHashMap<TaskAttemptID,TaskInProgress>();
+  tt.setConf(ttConf);
+  tt.setIndexCache(new IndexCache(ttConf));
+  tt.setTaskMemoryManagerEnabledFlag();
+  tt.setTaskTrackerInstrumentation(TaskTracker.createInstrumentation(tt,tt.getJobConf()));
+  TaskLauncher mapLauncher=tt.new TaskLauncher(TaskType.MAP,4);
+  mapLauncher.start();
+  String jtId="test";
+  TaskAttemptID attemptID=new TaskAttemptID(jtId,1,TaskType.MAP,0,0);
+  Task task=new MapTask(null,attemptID,0,null,5);
+  mapLauncher.addToTaskQueue(new LaunchTaskAction(task));
+  TaskInProgress killTip=tt.runningTasks.get(attemptID);
+  assertNotNull(killTip);
+  for (int i=0; i < 300; i++) {
+    if (mapLauncher.getNumWaitingTasksToLaunch() == 0) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertEquals("Launcher didnt pick up the task " + attemptID + "to launch",0,mapLauncher.getNumWaitingTasksToLaunch());
+  tt.processKillTaskAction(new KillTaskAction(attemptID));
+  assertEquals(TaskStatus.State.KILLED,killTip.getRunState());
+  TaskAttemptID runningAttemptID=new TaskAttemptID(jtId,1,TaskType.MAP,0,expectedLaunchAttemptId);
+  mapLauncher.addToTaskQueue(new LaunchTaskAction(new MapTask(null,runningAttemptID,0,null,1)));
+  TaskInProgress runningTip=tt.runningTasks.get(runningAttemptID);
+  assertNotNull(runningTip);
+  for (int i=0; i < 300; i++) {
+    if (runningTip.getRunState().equals(TaskStatus.State.RUNNING)) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertEquals(TaskStatus.State.RUNNING,runningTip.getRunState());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

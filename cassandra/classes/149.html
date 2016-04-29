@@ -1,0 +1,64 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.compaction.LongLeveledCompactionStrategyTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testParallelLeveledCompaction() throws Exception {
+  String ksname=KEYSPACE1;
+  String cfname="StandardLeveled";
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore(cfname);
+  store.disableAutoCompaction();
+  CompactionStrategyManager mgr=store.getCompactionStrategyManager();
+  LeveledCompactionStrategy lcs=(LeveledCompactionStrategy)mgr.getStrategies().get(1).get(0);
+  ByteBuffer value=ByteBuffer.wrap(new byte[100 * 1024]);
+  int rows=128;
+  int columns=10;
+  for (int r=0; r < rows; r++) {
+    DecoratedKey key=Util.dk(String.valueOf(r));
+    UpdateBuilder builder=UpdateBuilder.create(store.metadata,key);
+    for (int c=0; c < columns; c++)     builder.newRow("column" + c).add("val",value);
+    Mutation rm=new Mutation(builder.build());
+    rm.apply();
+    store.forceBlockingFlush();
+  }
+  ExecutorService executor=new ThreadPoolExecutor(4,4,Long.MAX_VALUE,TimeUnit.SECONDS,new LinkedBlockingDeque<Runnable>());
+  List<Runnable> tasks=new ArrayList<Runnable>();
+  while (true) {
+    while (true) {
+      final AbstractCompactionTask nextTask=lcs.getNextBackgroundTask(Integer.MIN_VALUE);
+      if (nextTask == null)       break;
+      tasks.add(new Runnable(){
+        public void run(){
+          nextTask.execute(null);
+        }
+      }
+);
+    }
+    if (tasks.isEmpty())     break;
+    List<Future<?>> futures=new ArrayList<Future<?>>(tasks.size());
+    for (    Runnable r : tasks)     futures.add(executor.submit(r));
+    FBUtilities.waitOnFutures(futures);
+    tasks.clear();
+  }
+  LeveledManifest manifest=lcs.manifest;
+  int levels=manifest.getLevelCount();
+  for (int level=0; level < levels; level++) {
+    List<SSTableReader> sstables=manifest.getLevel(level);
+    assert (double)SSTableReader.getTotalBytes(sstables) / LeveledManifest.maxBytesForLevel(level,1 * 1024 * 1024) < 1.00;
+    for (    SSTableReader sstable : sstables) {
+      assert level == sstable.getSSTableLevel();
+      if (level > 0) {
+        Set<SSTableReader> overlaps=LeveledManifest.overlapping(sstable,sstables);
+        assert overlaps.size() == 1 && overlaps.contains(sstable);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

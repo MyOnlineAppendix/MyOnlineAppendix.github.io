@@ -1,0 +1,2774 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspIterativeVerifier</h3><kbd>Verifies assertions in iterations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.felix.cm.integration.FELIX4385_StressTest </h4><pre class="type-15 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void test_ConcurrentManagedServicesWithConcurrentConfigurations(){
+  final Log log=new Log(bundleContext);
+  log.info("starting test_ConcurrentManagedServicesWithConcurrentConfigurations");
+  int parallelism=Math.max(10,Runtime.getRuntime().availableProcessors());
+  final ConfigurationAdmin ca=getConfigurationAdmin();
+  final ExecutorService executor=Executors.newFixedThreadPool(parallelism);
+  try {
+    int pidCounter=0;
+    long timeStamp=System.currentTimeMillis();
+    for (int loop=0; loop < 1000; loop++) {
+      log.debug("loop#%d -------------------------",(loop + 1));
+      final CountDownLatch managedServiceUpdated=new CountDownLatch(MANAGED_SERVICES);
+      final CountDownLatch managedServiceUnregistered=new CountDownLatch(MANAGED_SERVICES);
+      log.info("registering aspects concurrently");
+      final CopyOnWriteArrayList<ServiceRegistration> managedServices=new CopyOnWriteArrayList<ServiceRegistration>();
+      final CopyOnWriteArrayList<Configuration> confs=new CopyOnWriteArrayList<Configuration>();
+      for (int i=0; i < MANAGED_SERVICES; i++) {
+        final String pid="pid." + i + "-"+ (pidCounter++);
+        executor.execute(new Runnable(){
+          public void run(){
+            Hashtable props=new Hashtable();
+            props.put(Constants.SERVICE_PID,pid);
+            ServiceRegistration sr=bundleContext.registerService(ManagedService.class.getName(),new TestManagedService(managedServiceUpdated),props);
+            managedServices.add(sr);
+            try {
+              Configuration c=ca.getConfiguration(pid,null);
+              c.update(new Hashtable(){
+{
+                  put("foo","bar");
+                }
+              }
+);
+              confs.add(c);
+            }
+ catch (            IOException e) {
+              log.error("could not create pid %s",e,pid);
+              return;
+            }
+          }
+        }
+);
+      }
+      if (!managedServiceUpdated.await(MAXWAIT,TimeUnit.MILLISECONDS)) {
+        TestCase.fail("Detected errors logged during concurrent test");
+        break;
+      }
+      log.info("all managed services updated");
+      log.info("unregistering services concurrently");
+      for (      final ServiceRegistration sr : managedServices) {
+        executor.execute(new Runnable(){
+          public void run(){
+            sr.unregister();
+            managedServiceUnregistered.countDown();
+          }
+        }
+);
+      }
+      log.info("unregistering configuration concurrently");
+      for (      final Configuration c : confs) {
+        c.delete();
+      }
+      if (!managedServiceUnregistered.await(MAXWAIT,TimeUnit.MILLISECONDS)) {
+        TestCase.fail("Managed Servives could not be unregistered timely");
+        break;
+      }
+      if (log.errorsLogged()) {
+        TestCase.fail("Detected errors logged during concurrent test");
+        break;
+      }
+      log.info("finished one test loop");
+      if ((loop + 1) % 100 == 0) {
+        long duration=System.currentTimeMillis() - timeStamp;
+        System.out.println(String.format("Performed %d tests in %d ms.",(loop + 1),duration));
+        timeStamp=System.currentTimeMillis();
+      }
+    }
+  }
+ catch (  Throwable t) {
+    Assert.fail("Test failed: " + t.getMessage());
+  }
+ finally {
+    shutdown(executor);
+    log.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.deploymentadmin.itest.DPSignerTest </h4><pre class="type-4 type-15 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects are null
+"></span><br>
+@Test public void testSignArtifactsOk() throws Exception {
+  URL dpProps=getClass().getResource("/dp.properties");
+  assertNotNull(dpProps);
+  DeploymentPackageBuilder builder=DeploymentPackageBuilder.create("dpSignerTest1","1.0.0");
+  builder.add(builder.createLocalizationResource().setUrl(dpProps).setResourceProcessorPID(TEST_FAILING_BUNDLE_RP1).setFilename("dp.properties"));
+  SignerInfo signerInfo=CertificateUtil.createSelfSignedCert("CN=testCert",KeyType.RSA);
+  DPSigner signer=new DPSigner();
+  byte[] rawData;
+  try (ByteArrayOutputStream baos=new ByteArrayOutputStream()){
+    signer.sign(builder,signerInfo.getPrivate(),signerInfo.getCert(),baos);
+    rawData=baos.toByteArray();
+  }
+   try (ByteArrayInputStream bais=new ByteArrayInputStream(rawData);JarInputStream jis=new JarInputStream(bais,true)){
+    JarEntry entry;
+    while ((entry=jis.getNextJarEntry()) != null) {
+      assertNotNull(entry);
+      jis.closeEntry();
+    }
+    assertNotNull(jis.getManifest());
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.deploymentadmin.itest.DeploymentPackageBuilderTest </h4><pre class="type-4 type-15 type-5 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests that we can filter a resource.
+ */
+@Test public void testResourceFilterOk() throws Exception {
+  DeploymentPackageBuilder dpBuilder=DeploymentPackageBuilder.create("dp-test","1.0.0");
+  dpBuilder.add(dpBuilder.createBundleResource().setUrl(getTestBundle("bundle2"))).add(dpBuilder.createBundleResource().setVersion("1.1.0").setFilter(new JarManifestManipulatingFilter("Bundle-Version","1.1.0","Foo","bar")).setUrl(getTestBundle("bundle1")));
+  JarInputStream jis=new JarInputStream(dpBuilder.generate());
+  assertNotNull(jis);
+  Manifest manifest=jis.getManifest();
+  assertManifestHeader(manifest,"DeploymentPackage-SymbolicName","dp-test");
+  assertManifestHeader(manifest,"DeploymentPackage-Version","1.0.0");
+  String filename=getBundleName("bundle1");
+  assertManifestEntry(manifest,filename,"Name",filename);
+  assertManifestEntry(manifest,filename,"Bundle-SymbolicName","testbundles.bundle1");
+  assertManifestEntry(manifest,filename,"Bundle-Version","1.1.0");
+  filename=getBundleName("bundle2");
+  assertManifestEntry(manifest,filename,"Name",filename);
+  assertManifestEntry(manifest,filename,"Bundle-SymbolicName","testbundles.bundle2");
+  assertManifestEntry(manifest,filename,"Bundle-Version","1.0.0");
+  try {
+    byte[] buf=new byte[32 * 1024];
+    JarEntry entry;
+    while ((entry=jis.getNextJarEntry()) != null) {
+      if (entry.getName().endsWith("valid-bundle1.jar")) {
+        int read=jis.read(buf);
+        JarInputStream jis2=new JarInputStream(new ByteArrayInputStream(Arrays.copyOf(buf,read)));
+        Manifest manifest2=jis2.getManifest();
+        Attributes mainAttributes=manifest2.getMainAttributes();
+        assertEquals("1.1.0",mainAttributes.getValue("Bundle-Version"));
+        assertEquals("bar",mainAttributes.getValue("Foo"));
+        jis2.close();
+      }
+      jis.closeEntry();
+    }
+  }
+  finally {
+    jis.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.gogo.shell.HistoryTest </h4><pre class="type-15 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test_fill_history(){
+  final History his=new History();
+  for (int i=0; i < 100; i++) {
+    his.append("cmd" + i);
+  }
+  Iterator<String> hi=his.getHistory();
+  for (int i=0; i < 100; i++) {
+    TestCase.assertEquals("cmd" + i,hi.next());
+  }
+  TestCase.assertFalse(hi.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test_overflow_history(){
+  final History his=new History();
+  for (int i=-20; i < 100; i++) {
+    his.append("cmd" + i);
+  }
+  Iterator<String> hi=his.getHistory();
+  for (int i=0; i < 100; i++) {
+    TestCase.assertEquals("cmd" + i,hi.next());
+  }
+  TestCase.assertFalse(hi.hasNext());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.handler.eventadmin.test.TestEventAdminHandler </h4><pre class="type-15 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test that the received events contains the instance name of the sender.
+ */
+@Test public void testInstanceName(){
+  m_eventTracker.clearEvents();
+  Event receivedEvent;
+  for (int i=0; i < NUMBER_OF_EAH_PROVIDERS; i++) {
+    m_eahProviders[i].sellDonut();
+    receivedEvent=m_eventTracker.waitForEvent();
+    assertEquals("The instance name property of the received message must be the same as the sender instance name.",m_eahProvidersInstances[i].getInstanceName(),receivedEvent.getProperty("publisher.instance.name"));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event handler reliability by sending events with all kinds of
+ * publisher and check they are received by all kinds of subscriber.
+ */
+@Test public void testReliability(){
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    m_consumers[i].clearDonuts();
+  }
+  List sentDonuts=new ArrayList(NUMBER_OF_PROVIDERS * EahTestUtils.NUMBER_OF_TESTS);
+  for (int i=0; i < NUMBER_OF_PROVIDERS; i++) {
+    for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+      sentDonuts.add(m_providers[i].sellDonut());
+    }
+  }
+  EahTestUtils.sleep(EahTestUtils.BLACK_LIST_TIME + EahTestUtils.A_LONG_TIME);
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    List receivedDonuts=Arrays.asList(m_consumers[i].getAllDonuts());
+    assertEquals("The number of received donuts must be the same as the number of sent donuts.",sentDonuts.size(),receivedDonuts.size());
+    assertTrue("The receiver must have eaten all sent donuts.",receivedDonuts.containsAll(sentDonuts));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test the synchronism of event sending for the component.
+ * <p/>
+ * This test consists to send synchronously a big amount of donuts and to
+ * check immediately if it has been received (by all quick consumers).
+ */
+@Test public void testSynchronism(){
+  for (int i=0; i < NUMBER_OF_QUICK_CONSUMERS; i++) {
+    m_quickConsumers[i].clearDonuts();
+  }
+  Donut sentDonut;
+  Donut receivedDonut;
+  for (int i=0; i < EahTestUtils.NUMBER_OF_TESTS; i++) {
+    for (int j=0; j < NUMBER_OF_SYNCHRONOUS_PROVIDERS; j++) {
+      sentDonut=m_synchronousProviders[j].sellDonut();
+      for (int k=0; k < NUMBER_OF_QUICK_CONSUMERS; k++) {
+        receivedDonut=m_quickConsumers[k].getDonut();
+        assertEquals("The donut must have been received immediately and be the be the same as the sent one.",sentDonut,receivedDonut);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event filtering.
+ * <p/>
+ * This test send donuts with different flavours. Each filtered consumer
+ * must receive only a certain kind of donut. Of course, all donuts must
+ * have been received too.
+ */
+@Test public void testFilters(){
+  List[] sentDonuts=new List[Donut.FLAVOURS.length];
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    m_filteredConsumers[i].clearDonuts();
+    sentDonuts[i]=new ArrayList(EahTestUtils.NUMBER_OF_TESTS / Donut.FLAVOURS.length);
+  }
+  for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+    Donut donut=m_synchronousDonutEventProvider.sellDonut();
+    sentDonuts[EahTestUtils.flavourIndex(donut.getFlavour())].add(donut);
+  }
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    Donut[] receivedDonuts=m_filteredConsumers[i].getAllDonuts();
+    assertEquals("The number of received donuts must be the same as the number of sent donuts with the matching flavour.",sentDonuts[i].size(),receivedDonuts.length);
+    assertTrue("The receiver must have eaten all sent donuts matching the wanted flavour.",Arrays.asList(receivedDonuts).containsAll(sentDonuts[i]));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.handler.eventadmin.test.TestEventAdminHandlerWithNewAttributes </h4><pre class="type-15 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test the synchronism of event sending for the component.
+ * <p/>
+ * This test consists to send synchronously a big amount of donuts and to
+ * check immediately if it has been received (by all quick consumers).
+ */
+@Test public void testSynchronism(){
+  for (int i=0; i < NUMBER_OF_QUICK_CONSUMERS; i++) {
+    m_quickConsumers[i].clearDonuts();
+  }
+  Donut sentDonut;
+  Donut receivedDonut;
+  for (int i=0; i < EahTestUtils.NUMBER_OF_TESTS; i++) {
+    for (int j=0; j < NUMBER_OF_SYNCHRONOUS_PROVIDERS; j++) {
+      sentDonut=m_synchronousProviders[j].sellDonut();
+      for (int k=0; k < NUMBER_OF_QUICK_CONSUMERS; k++) {
+        receivedDonut=m_quickConsumers[k].getDonut();
+        assertEquals("The donut must have been received immediately and be the be the same as the sent one.",sentDonut,receivedDonut);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event filtering.
+ * <p/>
+ * This test send donuts with different flavours. Each filtered consumer
+ * must receive only a certain kind of donut. Of course, all donuts must
+ * have been received too.
+ */
+@Test public void testFilters(){
+  List[] sentDonuts=new List[Donut.FLAVOURS.length];
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    m_filteredConsumers[i].clearDonuts();
+    sentDonuts[i]=new ArrayList(EahTestUtils.NUMBER_OF_TESTS / Donut.FLAVOURS.length);
+  }
+  for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+    Donut donut=m_synchronousDonutEventProvider.sellDonut();
+    sentDonuts[EahTestUtils.flavourIndex(donut.getFlavour())].add(donut);
+  }
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    Donut[] receivedDonuts=m_filteredConsumers[i].getAllDonuts();
+    assertEquals("The number of received donuts must be the same as the number of sent donuts with the matching flavour.",sentDonuts[i].size(),receivedDonuts.length);
+    assertTrue("The receiver must have eaten all sent donuts matching the wanted flavour.",Arrays.asList(receivedDonuts).containsAll(sentDonuts[i]));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test that the received events contains the instance name of the sender.
+ */
+@Test public void testInstanceName(){
+  m_eventTracker.clearEvents();
+  Event receivedEvent;
+  for (int i=0; i < NUMBER_OF_EAH_PROVIDERS; i++) {
+    m_eahProviders[i].sellDonut();
+    receivedEvent=m_eventTracker.waitForEvent();
+    assertEquals("The instance name property of the received message must be the same as the sender instance name.",m_eahProvidersInstances[i].getInstanceName(),receivedEvent.getProperty("publisher.instance.name"));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event handler reliability by sending events with all kinds of
+ * publisher and check they are received by all kinds of subscriber.
+ */
+@Test public void testReliability(){
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    m_consumers[i].clearDonuts();
+  }
+  List sentDonuts=new ArrayList(NUMBER_OF_PROVIDERS * EahTestUtils.NUMBER_OF_TESTS);
+  for (int i=0; i < NUMBER_OF_PROVIDERS; i++) {
+    for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+      sentDonuts.add(m_providers[i].sellDonut());
+    }
+  }
+  EahTestUtils.sleep(EahTestUtils.BLACK_LIST_TIME + EahTestUtils.A_LONG_TIME);
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    List receivedDonuts=Arrays.asList(m_consumers[i].getAllDonuts());
+    assertEquals("The number of received donuts must be the same as the number of sent donuts.",sentDonuts.size(),receivedDonuts.size());
+    assertTrue("The receiver must have eaten all sent donuts.",receivedDonuts.containsAll(sentDonuts));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.handler.eventadmin.test.TestPublisher </h4><pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event filtering.
+ * <p/>
+ * This test send donuts with different flavours. Each filtered consumer
+ * must receive only a certain kind of donut. Of course, all donuts must
+ * have been received too.
+ */
+@Test public void testFilters(){
+  List[] sentDonuts=new List[Donut.FLAVOURS.length];
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    m_filteredConsumers[i].clearDonuts();
+    sentDonuts[i]=new ArrayList(EahTestUtils.NUMBER_OF_TESTS / Donut.FLAVOURS.length);
+  }
+  for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+    Donut donut=m_synchronousDonutEventProvider.sellDonut();
+    sentDonuts[EahTestUtils.flavourIndex(donut.getFlavour())].add(donut);
+  }
+  for (int i=0; i < Donut.FLAVOURS.length; i++) {
+    Donut[] receivedDonuts=m_filteredConsumers[i].getAllDonuts();
+    assertEquals("The number of received donuts must be the same as the number of sent donuts with the matching flavour.",sentDonuts[i].size(),receivedDonuts.length);
+    assertTrue("The receiver must have eaten all sent donuts matching the wanted flavour.",Arrays.asList(receivedDonuts).containsAll(sentDonuts[i]));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test the synchronism of event sending for the component.
+ * <p/>
+ * This test consists to send synchronously a big amount of donuts and to
+ * check immediately if it has been received (by all quick consumers).
+ */
+@Test public void testSynchronism(){
+  for (int i=0; i < NUMBER_OF_QUICK_CONSUMERS; i++) {
+    m_quickConsumers[i].clearDonuts();
+  }
+  Donut sentDonut;
+  Donut receivedDonut;
+  for (int i=0; i < EahTestUtils.NUMBER_OF_TESTS; i++) {
+    for (int j=0; j < NUMBER_OF_SYNCHRONOUS_PROVIDERS; j++) {
+      sentDonut=m_synchronousProviders[j].sellDonut();
+      for (int k=0; k < NUMBER_OF_QUICK_CONSUMERS; k++) {
+        receivedDonut=m_quickConsumers[k].getDonut();
+        assertEquals("The donut must have been received immediately and be the be the same as the sent one.",sentDonut,receivedDonut);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the event handler reliability by sending events with all kinds of
+ * publisher and check they are received by all kinds of subscriber.
+ */
+@Test public void testReliability(){
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    m_consumers[i].clearDonuts();
+  }
+  List sentDonuts=new ArrayList(NUMBER_OF_PROVIDERS * EahTestUtils.NUMBER_OF_TESTS);
+  for (int i=0; i < NUMBER_OF_PROVIDERS; i++) {
+    for (int j=0; j < EahTestUtils.NUMBER_OF_TESTS; j++) {
+      sentDonuts.add(m_providers[i].sellDonut());
+    }
+  }
+  EahTestUtils.sleep(EahTestUtils.BLACK_LIST_TIME + EahTestUtils.A_LONG_TIME);
+  for (int i=0; i < NUMBER_OF_CONSUMERS; i++) {
+    List receivedDonuts=Arrays.asList(m_consumers[i].getAllDonuts());
+    assertEquals("The number of received donuts must be the same as the number of sent donuts.",sentDonuts.size(),receivedDonuts.size());
+    assertTrue("The receiver must have eaten all sent donuts.",receivedDonuts.containsAll(sentDonuts));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test that the received events contains the instance name of the sender.
+ */
+@Test public void testInstanceName(){
+  m_eventTracker.clearEvents();
+  Event receivedEvent;
+  for (int i=0; i < NUMBER_OF_EAH_PROVIDERS; i++) {
+    m_eahProviders[i].sellDonut();
+    receivedEvent=m_eventTracker.waitForEvent();
+    assertEquals("The instance name property of the received message must be the same as the sender instance name.",m_eahProvidersInstances[i].getInstanceName(),receivedEvent.getProperty("publisher.instance.name"));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.manipulation.DirManipulationTest </h4><pre class="type-15 type-5 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test case for FELIX-3466.
+ * Checks if directory manipulation, uses the supplied manifest file as
+ * output.
+ * @throws IOException
+ */
+@Test public void testManifestLocationKept() throws IOException {
+  Pojoization pojoizator=new Pojoization();
+  File tmpDir=null, manifestFile=null, testClass=null;
+  File tmpFile=File.createTempFile("pojodir",".dir");
+  String tmpPath=tmpFile.getAbsolutePath();
+  tmpFile.delete();
+  tmpDir=new File(tmpPath);
+  tmpDir.mkdir();
+  tmpDir.deleteOnExit();
+  manifestFile=new File(tmpDir,"MANIFEST.MF");
+  new FileOutputStream(manifestFile).write("Manifest-Version: 1.0\r\n".getBytes());
+  manifestFile.deleteOnExit();
+  AnnotatedComponent safe;
+  File annotedClassPackage=new File(tmpDir,"test");
+  annotedClassPackage.deleteOnExit();
+  annotedClassPackage.mkdir();
+  testClass=new File(annotedClassPackage,"AnnotatedComponent.class");
+  testClass.deleteOnExit();
+  FileOutputStream os=new FileOutputStream(testClass);
+  os.write(ManipulatorTest.getBytesFromFile(new File("target/test-classes/test/AnnotatedComponent.class")));
+  os.close();
+  pojoizator.directoryPojoization(tmpDir,null,manifestFile,null);
+  BufferedReader fi=new BufferedReader(new FileReader(manifestFile));
+  String manifestLine;
+  while ((manifestLine=fi.readLine()) != null) {
+    if (manifestLine.contains("iPOJO-Components")) {
+      assertTrue(true);
+      return;
+    }
+  }
+  assertTrue("Directory Manipulation didn't use supplied manifest file as output",false);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.FactoryManagementTest </h4><pre class="type-4 type-15 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testOneLevelExposition(){
+  ServiceReference[] parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  ServiceContext sc=getServiceContext(empty);
+  ServiceReference[] internalFactoryReferences=ipojoHelper.getServiceReferences(sc,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories",parentsFactoryReferences.length,internalFactoryReferences.length);
+  for (int i=0; i < parentsFactoryReferences.length; i++) {
+    Factory factory=(Factory)getContext().getService(parentsFactoryReferences[i]);
+    assertTrue("Check the avaibility of " + factory.getName(),isExposed(factory,internalFactoryReferences,sc));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-6 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTwoLevelExposition(){
+  ServiceReference[] parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  ServiceContext sc1=getServiceContext(empty);
+  ServiceReference[] Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  Factory fact=ipojoHelper.getFactory(sc1,"composite.empty");
+  Properties p=new Properties();
+  p.put("instance.name","empty2");
+  ComponentInstance empty2=null;
+  try {
+    empty2=fact.createComponentInstance(p);
+  }
+ catch (  Exception e) {
+    fail("Cannot instantiate empty2 instance : " + e.getMessage());
+  }
+  ServiceContext sc2=getServiceContext(empty2);
+  ServiceReference[] Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  for (int i=0; i < Level1FactoryReferences.length; i++) {
+    Factory factory=(Factory)getContext().getService(parentsFactoryReferences[i]);
+    assertTrue("Check the avaibility of " + factory.getName(),isExposed(factory,Level2FactoryReferences,sc2));
+  }
+  empty2.dispose();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-6 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDynamism(){
+  ServiceReference[] parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  ServiceContext sc1=getServiceContext(empty);
+  ServiceReference[] Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  Factory fact=ipojoHelper.getFactory(sc1,"composite.empty");
+  Properties p=new Properties();
+  p.put("instance.name","empty2");
+  ComponentInstance empty2=null;
+  try {
+    empty2=fact.createComponentInstance(p);
+  }
+ catch (  Exception e) {
+    fail("Cannot instantiate empty2 instance : " + e.getMessage());
+  }
+  ServiceContext sc2=getServiceContext(empty2);
+  ServiceReference[] Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  for (int i=0; i < Level1FactoryReferences.length; i++) {
+    Factory factory=(Factory)getContext().getService(parentsFactoryReferences[i]);
+    assertTrue("Check the avaibility of " + factory.getName(),isExposed(factory,Level2FactoryReferences,sc2));
+  }
+  ServiceRegistration reg1=getContext().registerService(Factory.class.getName(),fake1,null);
+  parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  sc1=getServiceContext(empty);
+  Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  sc2=getServiceContext(empty2);
+  Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1.1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  ServiceRegistration reg2=getContext().registerService(Factory.class.getName(),fake2,null);
+  parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  sc1=getServiceContext(empty);
+  Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  sc2=getServiceContext(empty2);
+  Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1.1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  reg1.unregister();
+  parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  sc1=getServiceContext(empty);
+  Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  sc2=getServiceContext(empty2);
+  Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1.1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  reg2.unregister();
+  parentsFactoryReferences=osgiHelper.getServiceReferences(Factory.class.getName(),null);
+  sc1=getServiceContext(empty);
+  Level1FactoryReferences=ipojoHelper.getServiceReferences(sc1,Factory.class.getName(),null);
+  sc2=getServiceContext(empty2);
+  Level2FactoryReferences=ipojoHelper.getServiceReferences(sc2,Factory.class.getName(),null);
+  assertEquals("Check the number of available factories - 1.1",parentsFactoryReferences.length,Level1FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.2",parentsFactoryReferences.length,Level2FactoryReferences.length);
+  assertEquals("Check the number of available factories - 1.3",Level1FactoryReferences.length,Level2FactoryReferences.length);
+  empty2.dispose();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.IgnoreCaseHandlerSelectionTest </h4><pre class="type-15 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDeploy(){
+  Bundle[] bundles=bc.getBundles();
+  for (int i=0; i < bundles.length; i++) {
+    Assert.assertEquals(bundles[i].getSymbolicName() + " is not active",Bundle.ACTIVE,bundles[i].getState());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestDynamicProps </h4><pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties2(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-2");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"bar","foo"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(3));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties3(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String(""));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[0];
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[0];
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hidding (no value)",intAProp);
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties4(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-4");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Object boolProp=sr.getProperty("boolean");
+  Object strProp=sr.getProperty("string");
+  Object strAProp=sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check boolProp equality",boolProp,null);
+  assertEquals("Check strProp equality",strProp,null);
+  assertNull("Check strAProp  nullity",strAProp);
+  assertNotNull("Check intAProp not nullity",intAProp);
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < ((String[])strAProp).length; i++) {
+    if (!((String[])strAProp)[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hidding (no value)",intAProp);
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties1(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (1)",intProp,new Integer(2));
+  assertEquals("Check longProp equality (1)",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality (1)",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity (1)",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (1)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (1)");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (2)",intProp,new Integer(3));
+  assertEquals("Check longProp equality (2)",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality (2)",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity (2)",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (2)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity (2)",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (2)");
+    }
+  }
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestDynamicPropsReconfiguration </h4><pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReconfiguraitonUsingManagedServiceWithStrings() throws IOException, InterruptedException {
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[0];
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[0];
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ConfigurationAdmin admin=osgiHelper.getServiceObject(ConfigurationAdmin.class);
+  Configuration configuration=admin.getConfiguration("FooProvider-3","?");
+  Dictionary<String,Object> p3=new Hashtable<String,Object>();
+  p3.put("int","1");
+  p3.put("boolean","true");
+  p3.put("string","foo");
+  p3.put("strAProp","{foo, bar, baz}");
+  p3.put("intAProp","{ 1, 2, 3}");
+  configuration.update(p3);
+  TimeUtils.grace(200);
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hidding (no value)",intAProp);
+  p3=new Hashtable<String,Object>();
+  p3.put("int","1");
+  p3.put("boolean","true");
+  p3.put("string","foo");
+  p3.put("strAProp","{foo, bar, baz}");
+  p3.put("intAProp","{ 1, 2, 3}");
+  configuration.update(p3);
+  TimeUtils.grace(200);
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFactoryReconfNoValue(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-4");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Object boolProp=sr.getProperty("boolean");
+  Object strProp=sr.getProperty("string");
+  Object strAProp=sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",boolProp,null);
+  assertEquals("Check strProp equality",strProp,null);
+  assertNull("Check strAProp nullity",strAProp);
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ServiceReference fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  Factory fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  Properties p3=new Properties();
+  p3.put("instance.name","FooProvider-4");
+  p3.put("int",new Integer(1));
+  p3.put("boolean",new Boolean(true));
+  p3.put("string",new String("foo"));
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-4");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < ((String[])strAProp).length; i++) {
+    if (!((String[])strAProp)[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < ((String[])strAProp).length; i++) {
+    if (!((String[])strAProp)[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hidding (no value)",intAProp);
+  fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  p3=new Properties();
+  p3.put("instance.name","FooProvider-3");
+  p3.put("int",new Integer(1));
+  p3.put("boolean",new Boolean(true));
+  p3.put("string",new String("foo"));
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < ((String[])strAProp).length; i++) {
+    if (!((String[])strAProp)[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  fact=null;
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFactoryReconf(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String(""));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[0];
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[0];
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ServiceReference fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  Factory fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  Properties p3=new Properties();
+  p3.put("instance.name","FooProvider-3");
+  p3.put("int",1);
+  p3.put("boolean",true);
+  p3.put("string","foo");
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hidding (no value)",intAProp);
+  fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  p3=new Properties();
+  p3.put("instance.name","FooProvider-3");
+  p3.put("int",1);
+  p3.put("boolean",true);
+  p3.put("string","foo");
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReconfigurationUsingManagedService() throws IOException, InterruptedException {
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[0];
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[0];
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ConfigurationAdmin admin=osgiHelper.getServiceObject(ConfigurationAdmin.class);
+  Configuration configuration=admin.getConfiguration("FooProvider-3","?");
+  Dictionary<String,Object> p3=new Hashtable<String,Object>();
+  p3.put("int",1);
+  p3.put("boolean",true);
+  p3.put("string","foo");
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  configuration.update(p3);
+  TimeUtils.grace(200);
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hiding (no value)",intAProp);
+  p3=new Hashtable<String,Object>();
+  p3.put("int",1);
+  p3.put("boolean",true);
+  p3.put("string","foo");
+  p3.put("strAProp",new String[]{"foo","bar","baz"});
+  p3.put("intAProp",new int[]{1,2,3});
+  configuration.update(p3);
+  TimeUtils.grace(200);
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFactoryReconfString(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[0];
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[0];
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ServiceReference fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  Factory fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  Properties p3=new Properties();
+  p3.put("instance.name","FooProvider-3");
+  p3.put("int","1");
+  p3.put("boolean","true");
+  p3.put("string","foo");
+  p3.put("strAProp","{foo, bar, baz}");
+  p3.put("intAProp","{1, 2, 3}");
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNull("Check intAProp hiding (no value)",intAProp);
+  fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-Dyn2");
+  fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  p3=new Properties();
+  p3.put("instance.name","FooProvider-3");
+  p3.put("int","1");
+  p3.put("boolean","true");
+  p3.put("string","foo");
+  p3.put("strAProp","{foo, bar, baz}");
+  p3.put("intAProp","{ 1, 2, 3}");
+  try {
+    fact.reconfigure(p3);
+  }
+ catch (  Exception e) {
+    fail("Unable to reconfigure the instance with : " + p3);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(1));
+  assertEquals("Check longProp equality",boolProp,Boolean.TRUE);
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestPropertiesInAnonymousClass </h4><pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRunnable(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProviderAno-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (1)",intProp,new Integer(2));
+  assertEquals("Check longProp equality (1)",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality (1)",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity (1)",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (1)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (1)");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.foo());
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProviderAno-1");
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (2)",intProp,new Integer(3));
+  assertEquals("Check longProp equality (2)",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality (2)",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity (2)",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (2)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity (2)",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (2)");
+    }
+  }
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testWorkerThread(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProviderAno-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Boolean boolProp=(Boolean)sr.getProperty("boolean");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (1)",intProp,new Integer(2));
+  assertEquals("Check longProp equality (1)",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality (1)",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity (1)",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (1)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (1)");
+    }
+  }
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  assertTrue("invoke fs",fs.getBoolean());
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProviderAno-1");
+  intProp=(Integer)sr.getProperty("int");
+  boolProp=(Boolean)sr.getProperty("boolean");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality (2)",intProp,new Integer(3));
+  assertEquals("Check longProp equality (2)",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality (2)",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity (2)",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (2)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity (2)",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (2)");
+    }
+  }
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestSimpleProperties </h4><pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInstanceConfiguration(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-2");
+  assertNotNull("Check the availability of the FS service",sr);
+  FooService fs=(FooService)osgiHelper.getContext().getService(sr);
+  Properties toCheck=fs.fooProps();
+  Integer intProp=(Integer)toCheck.get("intProp");
+  Boolean boolProp=(Boolean)toCheck.get("boolProp");
+  String strProp=(String)toCheck.get("strProp");
+  String[] strAProp=(String[])toCheck.get("strAProp");
+  int[] intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"bar","foo"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  assertTrue("invoke fs",fs.foo());
+  toCheck=fs.fooProps();
+  intProp=(Integer)toCheck.get("intProp");
+  boolProp=(Boolean)toCheck.get("boolProp");
+  strProp=(String)toCheck.get("strProp");
+  strAProp=(String[])toCheck.get("strAProp");
+  intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(3));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  fs=null;
+  osgiHelper.getContext().ungetService(sr);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testComponentTypeConfiguration(){
+  ServiceReference ref=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),fooProvider1.getInstanceName());
+  assertNotNull("Check FooService availability",ref);
+  FooService fs=(FooService)osgiHelper.getContext().getService(ref);
+  Properties toCheck=fs.fooProps();
+  Integer intProp=(Integer)toCheck.get("intProp");
+  Boolean boolProp=(Boolean)toCheck.get("boolProp");
+  String strProp=(String)toCheck.get("strProp");
+  String[] strAProp=(String[])toCheck.get("strAProp");
+  int[] intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality (1)",intProp,new Integer(2));
+  assertEquals("Check longProp equality (1)",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality (1)",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity (1)",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (1) : " + strAProp[i] + " != "+ v[i]);
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (1) : " + intAProp[i] + " != "+ v2[i]);
+    }
+  }
+  assertTrue("Invoke the fs service",fs.foo());
+  toCheck=fs.fooProps();
+  intProp=(Integer)toCheck.get("intProp");
+  boolProp=(Boolean)toCheck.get("boolProp");
+  strProp=(String)toCheck.get("strProp");
+  strAProp=(String[])toCheck.get("strAProp");
+  intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality (2) (" + intProp + ")",intProp,new Integer(3));
+  assertEquals("Check longProp equality (2)",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality (2)",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity (2)",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (2)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity (2)",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (2) : " + intAProp[i] + " != "+ v2[i]);
+    }
+  }
+  fs=null;
+  osgiHelper.getContext().ungetService(ref);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNoValue(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  FooService fs=(FooService)osgiHelper.getContext().getService(sr);
+  Properties toCheck=fs.fooProps();
+  Integer intProp=(Integer)toCheck.get("intProp");
+  Boolean boolProp=(Boolean)toCheck.get("boolProp");
+  String strProp=(String)toCheck.get("strProp");
+  String[] strAProp=(String[])toCheck.get("strAProp");
+  int[] intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,new Boolean(false));
+  assertEquals("Check strProp equality",strProp,null);
+  assertNull("Check strAProp nullity",strAProp);
+  assertNull("Check intAProp  nullity",intAProp);
+  assertTrue("invoke fs",fs.foo());
+  toCheck=fs.fooProps();
+  intProp=(Integer)toCheck.get("intProp");
+  boolProp=(Boolean)toCheck.get("boolProp");
+  strProp=(String)toCheck.get("strProp");
+  strAProp=(String[])toCheck.get("strAProp");
+  intAProp=(int[])toCheck.get("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(3));
+  assertEquals("Check longProp equality",boolProp,new Boolean(true));
+  assertEquals("Check strProp equality",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  fs=null;
+  osgiHelper.getContext().ungetService(sr);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestStaticProps </h4><pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties2(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-2");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",longProp,new Long(42));
+  assertEquals("Check strProp equality",strProp,new String("bar"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"bar","foo"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties1(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",longProp,new Long(40));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestStaticPropsReconfiguration </h4><pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReconfFactory1(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",longProp,new Long(40));
+  assertEquals("Check strProp equality",strProp,new String("foo"));
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ServiceReference fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-2");
+  Dictionary reconf=new Properties();
+  reconf.put("instance.name","FooProvider-1");
+  reconf.put("int",new Integer(5));
+  reconf.put("long",new Long(43));
+  reconf.put("string",new String("toto"));
+  reconf.put("strAProp",new String[]{"foo","baz"});
+  reconf.put("intAProp",new int[]{3,2,1});
+  Factory fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  try {
+    fact.reconfigure(reconf);
+  }
+ catch (  Exception e) {
+    fail("Configuration non acceptable : " + reconf);
+  }
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  longProp=(Long)sr.getProperty("long");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality after reconfiguration",intProp,new Integer(5));
+  assertEquals("Check longProp equality after reconfiguration",longProp,new Long(43));
+  assertEquals("Check strProp equality after reconfiguration",strProp,new String("toto"));
+  assertNotNull("Check strAProp not nullity after reconfiguration",strAProp);
+  v=new String[]{"foo","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReconfFactory2(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-2");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",longProp,new Long(42));
+  assertEquals("Check strProp equality",strProp,"bar");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"bar","foo"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ServiceReference fact_ref=ipojoHelper.getServiceReferenceByName(Factory.class.getName(),"PS-FooProviderType-2");
+  Properties reconf=new Properties();
+  reconf.put("instance.name","FooProvider-2");
+  reconf.put("int",5);
+  reconf.put("long",(long)43);
+  reconf.put("string","toto");
+  reconf.put("strAProp",new String[]{"foo","baz"});
+  reconf.put("intAProp",new int[]{3,2,1});
+  Factory fact=(Factory)osgiHelper.getRawServiceObject(fact_ref);
+  try {
+    fact.reconfigure(reconf);
+  }
+ catch (  Exception e) {
+    fail("Configuration non acceptable : " + reconf);
+  }
+  intProp=(Integer)sr.getProperty("int");
+  longProp=(Long)sr.getProperty("long");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality after reconfiguration",intProp,new Integer(5));
+  assertEquals("Check longProp equality after reconfiguration",longProp,new Long(43));
+  assertEquals("Check strProp equality after reconfiguration",strProp,"toto");
+  assertNotNull("Check strAProp not nullity after reconfiguration",strAProp);
+  v=new String[]{"foo","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReconfMSF2() throws IOException, InterruptedException {
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-2");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(4));
+  assertEquals("Check longProp equality",longProp,new Long(42));
+  assertEquals("Check strProp equality",strProp,"bar");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"bar","foo"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ConfigurationAdmin admin=osgiHelper.getServiceObject(ConfigurationAdmin.class);
+  Configuration configuration=admin.getConfiguration("FooProvider-2","?");
+  Dictionary<String,Object> reconf=new Hashtable<String,Object>();
+  reconf.put("int",5);
+  reconf.put("long",(long)43);
+  reconf.put("string","toto");
+  reconf.put("strAProp",new String[]{"foo","baz"});
+  reconf.put("intAProp",new int[]{3,2,1});
+  configuration.update(reconf);
+  Thread.sleep(200);
+  intProp=(Integer)sr.getProperty("int");
+  longProp=(Long)sr.getProperty("long");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality after reconfiguration",intProp,new Integer(5));
+  assertEquals("Check longProp equality after reconfiguration",longProp,new Long(43));
+  assertEquals("Check strProp equality after reconfiguration",strProp,"toto");
+  assertNotNull("Check strAProp not nullity after reconfiguration",strAProp);
+  v=new String[]{"foo","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-15 type-5 type-6 type-2 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMSFFactory1() throws IOException, InterruptedException {
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  Integer intProp=(Integer)sr.getProperty("int");
+  Long longProp=(Long)sr.getProperty("long");
+  String strProp=(String)sr.getProperty("string");
+  String[] strAProp=(String[])sr.getProperty("strAProp");
+  int[] intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality",intProp,new Integer(2));
+  assertEquals("Check longProp equality",longProp,new Long(40));
+  assertEquals("Check strProp equality",strProp,"foo");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  ConfigurationAdmin admin=osgiHelper.getServiceObject(ConfigurationAdmin.class);
+  Configuration configuration=admin.getConfiguration("FooProvider-1","?");
+  Dictionary<String,Object> reconf=new Hashtable<String,Object>();
+  reconf.put("int",5);
+  reconf.put("long",(long)43);
+  reconf.put("string","toto");
+  reconf.put("strAProp",new String[]{"foo","baz"});
+  reconf.put("intAProp",new int[]{3,2,1});
+  configuration.update(reconf);
+  Thread.sleep(200);
+  sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-1");
+  assertNotNull("Check the availability of the FS service",sr);
+  intProp=(Integer)sr.getProperty("int");
+  longProp=(Long)sr.getProperty("long");
+  strProp=(String)sr.getProperty("string");
+  strAProp=(String[])sr.getProperty("strAProp");
+  intAProp=(int[])sr.getProperty("intAProp");
+  assertEquals("Check intProp equality after reconfiguration",intProp,new Integer(5));
+  assertEquals("Check longProp equality after reconfiguration",longProp,new Long(43));
+  assertEquals("Check strProp equality after reconfiguration",strProp,"toto");
+  assertNotNull("Check strAProp not nullity after reconfiguration",strAProp);
+  v=new String[]{"foo","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.TestUpdatedMethod </h4><pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNoValue(){
+  ServiceReference sr=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),"FooProvider-3");
+  assertNotNull("Check the availability of the FS service",sr);
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(sr);
+  Properties toCheck=fs.fooProps();
+  Integer intProp=(Integer)toCheck.get("intProp");
+  Boolean boolProp=(Boolean)toCheck.get("boolProp");
+  String strProp=(String)toCheck.get("strProp");
+  String[] strAProp=(String[])toCheck.get("strAProp");
+  int[] intAProp=(int[])toCheck.get("intAProp");
+  Integer updated=(Integer)toCheck.get("updated");
+  Dictionary dict=(Dictionary)toCheck.get("lastupdated");
+  assertEquals("Check intProp equality",intProp,new Integer(0));
+  assertEquals("Check longProp equality",boolProp,false);
+  assertEquals("Check strProp equality",strProp,null);
+  assertNull("Check strAProp nullity",strAProp);
+  assertNull("Check intAProp  nullity",intAProp);
+  assertEquals("updated count ",1,updated.intValue());
+  assertEquals("Last update",0,dict.size());
+  assertTrue("invoke fs",fs.foo());
+  toCheck=fs.fooProps();
+  intProp=(Integer)toCheck.get("intProp");
+  boolProp=(Boolean)toCheck.get("boolProp");
+  strProp=(String)toCheck.get("strProp");
+  strAProp=(String[])toCheck.get("strAProp");
+  intAProp=(int[])toCheck.get("intAProp");
+  updated=(Integer)toCheck.get("updated");
+  dict=(Dictionary)toCheck.get("lastupdated");
+  assertEquals("Check intProp equality",intProp,new Integer(3));
+  assertEquals("Check longProp equality",boolProp,true);
+  assertEquals("Check strProp equality",strProp,"bar");
+  assertNotNull("Check strAProp not nullity",strAProp);
+  String[] v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality");
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality");
+    }
+  }
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-5 type-6 type-2 type-1 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testComponentTypeConfiguration(){
+  ServiceReference ref=ipojoHelper.getServiceReferenceByName(FooService.class.getName(),fooProvider1.getInstanceName());
+  assertNotNull("Check FooService availability",ref);
+  FooService fs=(FooService)osgiHelper.getRawServiceObject(ref);
+  Properties toCheck=fs.fooProps();
+  Integer intProp=(Integer)toCheck.get("intProp");
+  Boolean boolProp=(Boolean)toCheck.get("boolProp");
+  String strProp=(String)toCheck.get("strProp");
+  String[] strAProp=(String[])toCheck.get("strAProp");
+  int[] intAProp=(int[])toCheck.get("intAProp");
+  Integer updated=(Integer)toCheck.get("updated");
+  Dictionary dict=(Dictionary)toCheck.get("lastupdated");
+  assertEquals("Check intProp equality (1)",intProp,new Integer(2));
+  assertEquals("Check longProp equality (1)",boolProp,false);
+  assertEquals("Check strProp equality (1)",strProp,"foo");
+  assertNotNull("Check strAProp not nullity (1)",strAProp);
+  String[] v=new String[]{"foo","bar"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (1) : " + strAProp[i] + " != "+ v[i]);
+    }
+  }
+  assertNotNull("Check intAProp not nullity",intAProp);
+  int[] v2=new int[]{1,2,3};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (1) : " + intAProp[i] + " != "+ v2[i]);
+    }
+  }
+  assertEquals("updated count ",1,updated.intValue());
+  assertEquals("Last updated",5,dict.size());
+  assertTrue("Invoke the fs service",fs.foo());
+  toCheck=fs.fooProps();
+  intProp=(Integer)toCheck.get("intProp");
+  boolProp=(Boolean)toCheck.get("boolProp");
+  strProp=(String)toCheck.get("strProp");
+  strAProp=(String[])toCheck.get("strAProp");
+  intAProp=(int[])toCheck.get("intAProp");
+  updated=(Integer)toCheck.get("updated");
+  dict=(Dictionary)toCheck.get("lastupdated");
+  assertEquals("Check intProp equality (2) (" + intProp + ")",intProp,new Integer(3));
+  assertEquals("Check longProp equality (2)",boolProp,true);
+  assertEquals("Check strProp equality (2)",strProp,"bar");
+  assertNotNull("Check strAProp not nullity (2)",strAProp);
+  v=new String[]{"foo","bar","baz"};
+  for (int i=0; i < strAProp.length; i++) {
+    if (!strAProp[i].equals(v[i])) {
+      fail("Check the strAProp Equality (2)");
+    }
+  }
+  assertNotNull("Check intAProp not nullity (2)",intAProp);
+  v2=new int[]{3,2,1};
+  for (int i=0; i < intAProp.length; i++) {
+    if (intAProp[i] != v2[i]) {
+      fail("Check the intAProp Equality (2) : " + intAProp[i] + " != "+ v2[i]);
+    }
+  }
+  assertEquals("updated count -2 ",1,updated.intValue());
+  assertEquals("Last update - 2",5,dict.size());
+  fs=null;
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.ipojo.runtime.core.instantiator.TestConfiguration </h4><pre class="type-4 type-15 type-6 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDefaultInstantiation() throws InvalidSyntaxException {
+  Properties props=new Properties();
+  props.put("instance.name","under");
+  ComponentInstance under=null;
+  try {
+    under=compositeFactory.createComponentInstance(props);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail("Cannot instantiate under : " + e.getMessage());
+  }
+  assertTrue("Check instance validity",under.getState() == ComponentInstance.VALID);
+  ServiceContext sc=getServiceContext(under);
+  ServiceReference[] refs=sc.getServiceReferences(FooService.class.getName(),null);
+  assertEquals(2,refs.length);
+  for (int i=0; i < refs.length; i++) {
+    assertEquals(3,((Integer)refs[i].getProperty("int")).intValue());
+    assertEquals("foo",(String)refs[i].getProperty("string"));
+  }
+  under.dispose();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-15 type-6 type-2 type-1 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConfiguredInstantiation() throws InvalidSyntaxException {
+  Properties props=new Properties();
+  props.put("instance.name","under");
+  props.put("string","bar");
+  props.put("int","25");
+  ComponentInstance under=null;
+  try {
+    under=compositeFactory.createComponentInstance(props);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    fail("Cannot instantiate under : " + e.getMessage());
+  }
+  assertTrue("Check instance validity",under.getState() == ComponentInstance.VALID);
+  ServiceContext sc=getServiceContext(under);
+  ServiceReference[] refs=sc.getServiceReferences(FooService.class.getName(),null);
+  assertEquals(2,refs.length);
+  for (int i=0; i < refs.length; i++) {
+    assertEquals(25,((Integer)refs[i].getProperty("int")).intValue());
+    assertEquals("bar",(String)refs[i].getProperty("string"));
+  }
+  under.dispose();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.resolver.test.BigResolutionTest </h4><pre class="type-15 type-2 type-11 type-16 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Is not executed with the test suite
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test @Ignore public void testResolutionSpeed() throws Exception {
+  ResolverImpl resolver=new ResolverImpl(new Logger(Logger.LOG_INFO));
+  ResolveContext rc=buildResolutionContext();
+  System.out.println("Warming up...");
+  Map<Resource,List<Wire>> wires=resolver.resolve(rc);
+  resolver.resolve(rc);
+  System.out.println("Running...");
+  RunningStat stats=new RunningStat();
+  for (int i=1; i <= 100; i++) {
+    System.gc();
+    Thread.sleep(100);
+    System.gc();
+    Thread.sleep(100);
+    long t0=System.nanoTime();
+    Map<Resource,List<Wire>> newWires=resolver.resolve(rc);
+    long t1=System.nanoTime();
+    double dt=(t1 - t0) * 1E-6;
+    System.out.println("Resolver took " + String.format("%7.2f",dt) + " ms");
+    stats.put(dt);
+    assertEquals(wires,newWires);
+    if (i % 10 == 0) {
+      System.out.println();
+      System.out.println("Summary");
+      System.out.println("    Min:    " + String.format("%7.2f",stats.getMin()) + " ms");
+      System.out.println("    Max:    " + String.format("%7.2f",stats.getMax()) + " ms");
+      System.out.println("    Avg:    " + String.format("%7.2f",stats.getAverage()) + " ms");
+      System.out.println("    StdDev: " + String.format("%7" + ".2f",stats.getStdDev() / stats.getAverage() * 100.0) + " %");
+      System.out.println();
+      stats=new RunningStat();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.scr.impl.manager.RegistrationManagerTest </h4><pre class="type-15 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testRegistrationManager() throws Exception {
+  for (int setup=0; setup < 1 << n; setup++) {
+    runTest(setup);
+    if (fail) {
+      fail("failed at " + setup);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.scr.integration.Felix3680Test </h4><pre class="type-4 type-15 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void test_concurrent_reference_bindings() throws Exception {
+  final ComponentDescriptionDTO main=findComponentDescriptorByName("org.apache.felix.scr.integration.components.felix3680.Main");
+  enableAndCheck(main);
+  delay(30);
+  disableAndCheck(main);
+  delay();
+  for (Iterator it=log.foundWarnings().iterator(); it.hasNext(); ) {
+    String message=(String)it.next();
+    if (message.startsWith("Performed ") && message.endsWith(" tests.")) {
+      continue;
+    }
+    TestCase.fail("unexpected warning or error logged: " + message);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.scr.integration.Felix3680_2Test </h4><pre class="type-4 type-15 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void test_concurrent_injection_with_bundleContext() throws Throwable {
+  for (int i=0; i < 6; i++) {
+    final ComponentDescriptionDTO main=findComponentDescriptorByName("org.apache.felix.scr.integration.components.felix3680_2.Main");
+    enableAndCheck(main);
+    delay(5);
+    disableAndCheck(main);
+    delay();
+    if (log.getFirstFrameworkThrowable() != null) {
+      throw log.getFirstFrameworkThrowable();
+    }
+    for (Iterator it=log.foundWarnings().iterator(); it.hasNext(); ) {
+      String message=(String)it.next();
+      TestCase.fail("unexpected warning or error logged: " + message);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.felix.scr.integration.Felix4984Test </h4><pre class="type-4 type-15 type-10 type-11 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * A > 1.1 > B > 0..n > A
+ * This test validates that A is bound to one B instance. See FELIX-4984 for more informations.
+ */
+@Test public void test_A11_B0n_delayed_B_first_ABoundToAtMostOneB() throws Exception {
+  Bundle bundle=findABBundle(bundleContext);
+  bundle.stop();
+  for (int i=0; i < 1000; i++) {
+    bundle.start();
+    String componentNameA="felix4984.A.1.1.dynamic";
+    ComponentConfigurationDTO componentA=findComponentConfigurationByName(componentNameA,ComponentConfigurationDTO.SATISFIED);
+    String componentNameB="felix4984.B.0.n.dynamic";
+    final ComponentConfigurationDTO componentB=findComponentConfigurationByName(componentNameB,ComponentConfigurationDTO.SATISFIED);
+    ServiceReference[] serviceReferencesB=bundleContext.getServiceReferences(B.class.getName(),"(service.pid=" + componentNameB + ")");
+    assertNotNull(serviceReferencesB);
+    TestCase.assertEquals(1,serviceReferencesB.length);
+    ServiceReference serviceReferenceB=serviceReferencesB[0];
+    Object serviceB=bundleContext.getService(serviceReferenceB);
+    assertNotNull(serviceB);
+    ServiceReference[] serviceReferencesA=bundleContext.getServiceReferences(A.class.getName(),"(service.pid=" + componentNameA + ")");
+    TestCase.assertEquals(1,serviceReferencesA.length);
+    ServiceReference serviceReferenceA=serviceReferencesA[0];
+    Object serviceA=bundleContext.getService(serviceReferenceA);
+    assertNotNull(serviceA);
+    A a=getServiceFromConfiguration(componentA,A.class);
+    assertABoundToOneB(a);
+    bundle.stop();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: test.SerialExecutorTest </h4><pre class="type-15 type-6 type-1 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSerialExecutor(){
+  info("Testing serial executor");
+  int cores=Math.max(10,Runtime.getRuntime().availableProcessors());
+  ExecutorService threadPool=null;
+  try {
+    threadPool=Executors.newFixedThreadPool(cores);
+    final SerialExecutor serial=new SerialExecutor(new Logger(null));
+    long timeStamp=System.currentTimeMillis();
+    for (int i=0; i < TESTS; i++) {
+      final CountDownLatch latch=new CountDownLatch(cores * 2);
+      final SerialTask task=new SerialTask(serial,latch);
+      for (int j=0; j < cores; j++) {
+        threadPool.execute(new Runnable(){
+          public void run(){
+            serial.execute(task);
+          }
+        }
+);
+      }
+      Assert.assertTrue("Test " + i + " did not terminate timely",latch.await(20000,TimeUnit.MILLISECONDS));
+    }
+    long now=System.currentTimeMillis();
+    System.out.println("Performed " + TESTS + " tests in "+ (now - timeStamp)+ " ms.");
+    timeStamp=now;
+  }
+ catch (  Throwable t) {
+    t.printStackTrace();
+    Assert.fail("Test failed: " + t.getMessage());
+  }
+ finally {
+    if (threadPool != null) {
+      shutdown(threadPool);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

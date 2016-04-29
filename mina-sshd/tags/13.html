@@ -1,0 +1,938 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.sshd.KeyReExchangeTest </h4><pre class="type-11 type-8 type-3 type-14 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReExchangeFromJschClient() throws Exception {
+  Assume.assumeTrue("DH Group Exchange not supported",SecurityUtils.isDHGroupExchangeSupported());
+  setUp(0L,0L,0L);
+  JSch.setConfig("kex",BuiltinDHFactories.Constants.DIFFIE_HELLMAN_GROUP_EXCHANGE_SHA1);
+  JSch sch=new JSch();
+  com.jcraft.jsch.Session s=sch.getSession(getCurrentTestName(),TEST_LOCALHOST,port);
+  try {
+    s.setUserInfo(new SimpleUserInfo(getCurrentTestName()));
+    s.connect();
+    com.jcraft.jsch.Channel c=s.openChannel(Channel.CHANNEL_SHELL);
+    c.connect();
+    try (OutputStream os=c.getOutputStream();InputStream is=c.getInputStream()){
+      String expected="this is my command\n";
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      byte[] data=new byte[bytes.length + Long.SIZE];
+      for (int i=1; i <= 10; i++) {
+        os.write(bytes);
+        os.flush();
+        int len=is.read(data);
+        String str=new String(data,0,len);
+        assertEquals("Mismatched data at iteration " + i,expected,str);
+        outputDebugMessage("Request re-key #%d",i);
+        s.rekey();
+      }
+    }
+  finally {
+      c.disconnect();
+    }
+  }
+  finally {
+    s.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.ProxyTest </h4><pre class="type-11 type-8 type-6 type-3 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSocksProxy() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    String expected=getCurrentTestName();
+    byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+    byte[] buf=new byte[bytes.length + Long.SIZE];
+    SshdSocketAddress dynamic=session.startDynamicPortForwarding(new SshdSocketAddress(TEST_LOCALHOST,0));
+    try {
+      for (int i=0; i < 10; i++) {
+        try (Socket s=new Socket(new Proxy(Proxy.Type.SOCKS,new InetSocketAddress(TEST_LOCALHOST,dynamic.getPort())))){
+          s.connect(new InetSocketAddress(TEST_LOCALHOST,echoPort));
+          s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+          try (OutputStream sockOut=s.getOutputStream();InputStream sockIn=s.getInputStream()){
+            sockOut.write(bytes);
+            sockOut.flush();
+            int l=sockIn.read(buf);
+            assertEquals("Mismatched data at iteration " + i,expected,new String(buf,0,l));
+          }
+         }
+       }
+    }
+  finally {
+      session.stopDynamicPortForwarding(dynamic);
+    }
+    try {
+      try (Socket s=new Socket(new Proxy(Proxy.Type.SOCKS,new InetSocketAddress(TEST_LOCALHOST,dynamic.getPort())))){
+        s.connect(new InetSocketAddress(TEST_LOCALHOST,echoPort));
+        s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+        s.getOutputStream().write(bytes);
+        fail("Unexpected success to write proxy data");
+      }
+     }
+ catch (    IOException e) {
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.client.config.hosts.HostConfigEntryTest </h4><pre class="type-11 type-8 type-2 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testNegatingPatternOverridesAll(){
+  String testHost="37.77.34.7";
+  String[] elements=GenericUtils.split(testHost,'.');
+  StringBuilder sb=new StringBuilder(testHost.length() + Byte.SIZE);
+  List<Pair<Pattern,Boolean>> patterns=new ArrayList<>(elements.length + 1);
+  patterns.add(HostConfigEntry.toPattern(String.valueOf(HostConfigEntry.NEGATION_CHAR_PATTERN) + testHost));
+  for (int i=0; i < elements.length; i++) {
+    sb.setLength(0);
+    for (int j=0; j < elements.length; j++) {
+      if (j > 0) {
+        sb.append('.');
+      }
+      if (i == j) {
+        sb.append(HostConfigEntry.WILDCARD_PATTERN);
+      }
+ else {
+        sb.append(elements[j]);
+      }
+    }
+    patterns.add(HostConfigEntry.toPattern(sb));
+  }
+  for (int index=0; index < patterns.size(); index++) {
+    assertFalse("Unexpected match for " + patterns,HostConfigEntry.isHostMatch(testHost,patterns));
+    Collections.shuffle(patterns);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.client.subsystem.sftp.SftpTest </h4><pre class="type-11 type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testNormalizeRemotePathsValues() throws Exception {
+  Path targetPath=detectTargetFolder();
+  Path parentPath=targetPath.getParent();
+  Path lclSftp=Utils.resolve(targetPath,SftpConstants.SFTP_SUBSYSTEM_NAME,getClass().getSimpleName(),getCurrentTestName());
+  Path testFile=assertHierarchyTargetFolderExists(lclSftp).resolve("file.txt");
+  String file=Utils.resolveRelativeRemotePath(parentPath,testFile);
+  String[] comps=GenericUtils.split(file,'/');
+  try (SshClient client=setupTestClient()){
+    client.start();
+    Factory<? extends Random> factory=client.getRandomFactory();
+    Random rnd=factory.create();
+    try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,port).verify(7L,TimeUnit.SECONDS).getSession()){
+      session.addPasswordIdentity(getCurrentTestName());
+      session.auth().verify(5L,TimeUnit.SECONDS);
+      try (SftpClient sftp=session.createSftpClient()){
+        StringBuilder sb=new StringBuilder(file.length() + comps.length);
+        String expected=sftp.canonicalPath(file);
+        for (int i=0; i < file.length(); i++) {
+          if (sb.length() > 0) {
+            sb.setLength(0);
+          }
+          sb.append(comps[0]);
+          for (int j=1; j < comps.length; j++) {
+            String name=comps[j];
+            slashify(sb,rnd);
+            sb.append(name);
+          }
+          slashify(sb,rnd);
+          if (rnd.random(Byte.SIZE) < (Byte.SIZE / 2)) {
+            sb.append('.');
+          }
+          String remotePath=sb.toString();
+          String actual=sftp.canonicalPath(remotePath);
+          assertEquals("Mismatched canonical value for " + remotePath,expected,actual);
+        }
+      }
+     }
+  finally {
+      client.stop();
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-6 type-2 type-3 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testOpen() throws Exception {
+  Path targetPath=detectTargetFolder();
+  Path parentPath=targetPath.getParent();
+  Path lclSftp=Utils.resolve(targetPath,SftpConstants.SFTP_SUBSYSTEM_NAME,getClass().getSimpleName(),getCurrentTestName());
+  Path clientFolder=lclSftp.resolve("client");
+  Path testFile=clientFolder.resolve("file.txt");
+  String file=Utils.resolveRelativeRemotePath(parentPath,testFile);
+  File javaFile=testFile.toFile();
+  assertHierarchyTargetFolderExists(javaFile.getParentFile());
+  try (SshClient client=setupTestClient()){
+    client.start();
+    try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,port).verify(7L,TimeUnit.SECONDS).getSession()){
+      session.addPasswordIdentity(getCurrentTestName());
+      session.auth().verify(5L,TimeUnit.SECONDS);
+      javaFile.createNewFile();
+      javaFile.setWritable(false,false);
+      javaFile.setReadable(false,false);
+      try (SftpClient sftp=session.createSftpClient()){
+        boolean isWindows=OsUtils.isWin32();
+        try (SftpClient.CloseableHandle h=sftp.open(file)){
+          assertTrue("Empty read should have failed on " + file,isWindows);
+        }
+ catch (        IOException e) {
+          if (isWindows) {
+            throw e;
+          }
+        }
+        try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Write))){
+          fail("Empty write should have failed on " + file);
+        }
+ catch (        IOException e) {
+        }
+        try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Truncate))){
+          assertTrue("Empty truncate should have failed on " + file,isWindows);
+        }
+ catch (        IOException e) {
+        }
+        int perms=sftp.stat(file).getPermissions();
+        int permsMask=SftpConstants.S_IWUSR | (isWindows ? 0 : SftpConstants.S_IRUSR);
+        assertEquals("Mismatched permissions for " + file + ": 0x"+ Integer.toHexString(perms),0,(perms & permsMask));
+        javaFile.setWritable(true,false);
+        try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Truncate,SftpClient.OpenMode.Write))){
+          assertTrue("Handle not marked as open for file=" + file,h.isOpen());
+        }
+         byte[] d="0123456789\n".getBytes(StandardCharsets.UTF_8);
+        try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Write))){
+          sftp.write(h,0,d,0,d.length);
+          sftp.write(h,d.length,d,0,d.length);
+        }
+         try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Write))){
+          sftp.write(h,d.length * 2,d,0,d.length);
+        }
+         try (SftpClient.CloseableHandle h=sftp.open(file,EnumSet.of(SftpClient.OpenMode.Write))){
+          byte[] overwrite="-".getBytes(StandardCharsets.UTF_8);
+          sftp.write(h,3L,overwrite,0,1);
+          d[3]=overwrite[0];
+        }
+         try (SftpClient.CloseableHandle h=sftp.open(file)){
+          assertTrue("Data read should have failed on " + file,isWindows);
+        }
+ catch (        IOException e) {
+          if (isWindows) {
+            throw e;
+          }
+        }
+        javaFile.setReadable(true,false);
+        byte[] buf=new byte[3];
+        try (SftpClient.CloseableHandle h=sftp.open(file)){
+          int l=sftp.read(h,2L,buf,0,buf.length);
+          String expected=new String(d,2,l,StandardCharsets.UTF_8);
+          String actual=new String(buf,0,l,StandardCharsets.UTF_8);
+          assertEquals("Mismatched read data",expected,actual);
+        }
+       }
+     }
+  finally {
+      client.stop();
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-10 type-6 type-3 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadBufferLimit() throws Exception {
+  Path targetPath=detectTargetFolder();
+  Path parentPath=targetPath.getParent();
+  Path lclSftp=Utils.resolve(targetPath,SftpConstants.SFTP_SUBSYSTEM_NAME,getClass().getSimpleName(),getCurrentTestName());
+  Path testFile=assertHierarchyTargetFolderExists(lclSftp).resolve("file.txt");
+  byte[] expected=new byte[1024];
+  Factory<? extends Random> factory=sshd.getRandomFactory();
+  Random rnd=factory.create();
+  rnd.fill(expected);
+  Files.write(testFile,expected);
+  try (SshClient client=setupTestClient()){
+    client.start();
+    try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,port).verify(7L,TimeUnit.SECONDS).getSession()){
+      session.addPasswordIdentity(getCurrentTestName());
+      session.auth().verify(5L,TimeUnit.SECONDS);
+      try (SftpClient sftp=session.createSftpClient()){
+        String file=Utils.resolveRelativeRemotePath(parentPath,testFile);
+        byte[] actual=new byte[expected.length];
+        int maxAllowed=actual.length / 4;
+        PropertyResolverUtils.updateProperty(sshd,SftpSubsystem.MAX_PACKET_LENGTH_PROP,maxAllowed);
+        try (CloseableHandle handle=sftp.open(file,OpenMode.Read)){
+          int readLen=sftp.read(handle,0L,actual);
+          assertEquals("Mismatched read len",maxAllowed,readLen);
+          for (int index=0; index < readLen; index++) {
+            byte expByte=expected[index], actByte=actual[index];
+            if (expByte != actByte) {
+              fail("Mismatched values at index=" + index + ": expected=0x"+ Integer.toHexString(expByte & 0xFF)+ ", actual=0x"+ Integer.toHexString(actByte & 0xFF));
+            }
+          }
+        }
+       }
+     }
+  finally {
+      client.stop();
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testWriteOffsetIgnoredForAppendMode() throws IOException {
+  Path targetPath=detectTargetFolder();
+  Path parentPath=targetPath.getParent();
+  Path lclSftp=Utils.resolve(targetPath,SftpConstants.SFTP_SUBSYSTEM_NAME,getClass().getSimpleName(),getCurrentTestName());
+  Path testFile=assertHierarchyTargetFolderExists(lclSftp).resolve("file.txt");
+  Files.deleteIfExists(testFile);
+  byte[] expectedRandom=new byte[Byte.MAX_VALUE];
+  Factory<? extends Random> factory=sshd.getRandomFactory();
+  Random rnd=factory.create();
+  rnd.fill(expectedRandom);
+  byte[] expectedText=(getClass().getName() + "#" + getCurrentTestName()).getBytes(StandardCharsets.UTF_8);
+  try (SshClient client=setupTestClient()){
+    client.start();
+    try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,port).verify(7L,TimeUnit.SECONDS).getSession()){
+      session.addPasswordIdentity(getCurrentTestName());
+      session.auth().verify(5L,TimeUnit.SECONDS);
+      try (SftpClient sftp=session.createSftpClient()){
+        String file=Utils.resolveRelativeRemotePath(parentPath,testFile);
+        try (CloseableHandle handle=sftp.open(file,OpenMode.Create,OpenMode.Write,OpenMode.Read,OpenMode.Append)){
+          sftp.write(handle,7365L,expectedRandom);
+          byte[] actualRandom=new byte[expectedRandom.length];
+          int readLen=sftp.read(handle,0L,actualRandom);
+          assertEquals("Incomplete random data read",expectedRandom.length,readLen);
+          assertArrayEquals("Mismatched read random data",expectedRandom,actualRandom);
+          sftp.write(handle,3777347L,expectedText);
+          byte[] actualText=new byte[expectedText.length];
+          readLen=sftp.read(handle,actualRandom.length,actualText);
+          assertEquals("Incomplete text data read",actualText.length,readLen);
+          assertArrayEquals("Mismatched read text data",expectedText,actualText);
+        }
+       }
+     }
+  finally {
+      client.stop();
+    }
+  }
+   byte[] actualBytes=Files.readAllBytes(testFile);
+  assertEquals("Mismatched result file size",expectedRandom.length + expectedText.length,actualBytes.length);
+  byte[] actualRandom=Arrays.copyOfRange(actualBytes,0,expectedRandom.length);
+  assertArrayEquals("Mismatched random part",expectedRandom,actualRandom);
+  byte[] actualText=Arrays.copyOfRange(actualBytes,expectedRandom.length,actualBytes.length);
+  assertArrayEquals("Mismatched text part",expectedText,actualText);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.channel.ChannelPipedInputStreamTest </h4><pre class="type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testAvailable() throws IOException {
+  try (ChannelPipedInputStream stream=createTestStream()){
+    byte[] b=getCurrentTestName().getBytes(StandardCharsets.UTF_8);
+    stream.receive(b,0,b.length);
+    assertEquals("Mismatched reported available size after receive",b.length,stream.available());
+    stream.eof();
+    assertEquals("Mismatched reported available size after EOF",b.length,stream.available());
+    byte[] readBytes=new byte[b.length + Long.SIZE];
+    assertEquals("Mismatched reported read size",b.length,stream.read(readBytes));
+    assertStreamEquals(b,readBytes);
+    assertEquals("Unexpected data still available",-1,stream.available());
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.compression.CompressionTest </h4><pre class="type-11 type-8 type-3 type-14 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCompression() throws Exception {
+  Assume.assumeTrue("Skip unsupported compression " + factory,factory.isSupported());
+  JSch sch=new JSch();
+  com.jcraft.jsch.Session s=sch.getSession(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort());
+  s.setUserInfo(new SimpleUserInfo(getCurrentTestName()));
+  s.connect();
+  try {
+    com.jcraft.jsch.Channel c=s.openChannel(Channel.CHANNEL_SHELL);
+    c.connect();
+    try (OutputStream os=c.getOutputStream();InputStream is=c.getInputStream()){
+      String STR="this is my command\n";
+      byte[] bytes=STR.getBytes(StandardCharsets.UTF_8);
+      byte[] data=new byte[bytes.length + Long.SIZE];
+      for (int i=1; i <= 10; i++) {
+        os.write(bytes);
+        os.flush();
+        int len=is.read(data);
+        String str=new String(data,0,len,StandardCharsets.UTF_8);
+        assertEquals("Mismatched read data at iteration #" + i,STR,str);
+      }
+    }
+  finally {
+      c.disconnect();
+    }
+  }
+  finally {
+    s.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.forward.PortForwardingLoadTest </h4><pre class="type-11 type-8 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testLocalForwardingPayload() throws Exception {
+  final int NUM_ITERATIONS=100;
+  final String PAYLOAD_TMP="This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. ";
+  StringBuilder sb=new StringBuilder(PAYLOAD_TMP.length() * 1000);
+  for (int i=0; i < 1000; i++) {
+    sb.append(PAYLOAD_TMP);
+  }
+  final String PAYLOAD=sb.toString();
+  Session session=createSession();
+  try (final ServerSocket ss=new ServerSocket()){
+    ss.setReuseAddress(true);
+    ss.bind(new InetSocketAddress((InetAddress)null,0));
+    int forwardedPort=ss.getLocalPort();
+    int sinkPort=session.setPortForwardingL(0,TEST_LOCALHOST,forwardedPort);
+    final AtomicInteger conCount=new AtomicInteger(0);
+    Thread tAcceptor=new Thread(getCurrentTestName() + "Acceptor"){
+      @SuppressWarnings("synthetic-access") @Override public void run(){
+        try {
+          byte[] buf=new byte[8192];
+          log.info("Started...");
+          for (int i=0; i < NUM_ITERATIONS; ++i) {
+            try (Socket s=ss.accept()){
+              conCount.incrementAndGet();
+              try (InputStream sockIn=s.getInputStream();ByteArrayOutputStream baos=new ByteArrayOutputStream()){
+                int l;
+                while ((baos.size() < PAYLOAD.length()) && ((l=sockIn.read(buf)) > 0)) {
+                  baos.write(buf,0,l);
+                }
+                assertEquals("Mismatched received data at iteration #" + i,PAYLOAD,baos.toString());
+                try (InputStream inputCopy=new ByteArrayInputStream(baos.toByteArray());OutputStream sockOut=s.getOutputStream()){
+                  while ((l=sockIn.read(buf)) > 0) {
+                    sockOut.write(buf,0,l);
+                  }
+                }
+               }
+             }
+           }
+          log.info("Done");
+        }
+ catch (        Exception e) {
+          log.error("Failed to complete run loop",e);
+        }
+      }
+    }
+;
+    tAcceptor.start();
+    Thread.sleep(50);
+    byte[] buf=new byte[8192];
+    byte[] bytes=PAYLOAD.getBytes(StandardCharsets.UTF_8);
+    for (int i=0; i < NUM_ITERATIONS; i++) {
+      log.info("Iteration {}",Integer.valueOf(i));
+      try (Socket s=new Socket(TEST_LOCALHOST,sinkPort);OutputStream sockOut=s.getOutputStream()){
+        s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+        sockOut.write(bytes);
+        sockOut.flush();
+        try (InputStream sockIn=s.getInputStream();ByteArrayOutputStream baos=new ByteArrayOutputStream(bytes.length)){
+          int l;
+          while ((baos.size() < PAYLOAD.length()) && ((l=sockIn.read(buf)) > 0)) {
+            baos.write(buf,0,l);
+          }
+          assertEquals("Mismatched payload at iteration #" + i,PAYLOAD,baos.toString());
+        }
+       }
+ catch (      Exception e) {
+        log.error("Error in iteration #" + i,e);
+      }
+    }
+    session.delPortForwardingL(sinkPort);
+    ss.close();
+    tAcceptor.join(TimeUnit.SECONDS.toMillis(5L));
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.forward.PortForwardingTest </h4><pre class="type-11 type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testLocalForwardingNativeBigPayload() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    String expected=getCurrentTestName();
+    byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+    byte[] buf=new byte[bytes.length + Long.SIZE];
+    SshdSocketAddress local=new SshdSocketAddress("",0);
+    SshdSocketAddress remote=new SshdSocketAddress(TEST_LOCALHOST,echoPort);
+    SshdSocketAddress bound=session.startLocalPortForwarding(local,remote);
+    try (Socket s=new Socket(bound.getHostName(),bound.getPort());OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      for (int i=0; i < 1000; i++) {
+        output.write(bytes);
+        output.flush();
+        int n=input.read(buf);
+        String res=new String(buf,0,n);
+        assertEquals("Mismatched data at iteration #" + i,expected,res);
+      }
+    }
+  finally {
+      session.stopLocalPortForwarding(bound);
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRemoteForwardingNativeBigPayload() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    SshdSocketAddress remote=new SshdSocketAddress("",0);
+    SshdSocketAddress local=new SshdSocketAddress(TEST_LOCALHOST,echoPort);
+    SshdSocketAddress bound=session.startRemotePortForwarding(remote,local);
+    try (Socket s=new Socket(bound.getHostName(),bound.getPort());OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      for (int i=0; i < 1000; i++) {
+        output.write(bytes);
+        output.flush();
+        int n=input.read(buf);
+        String res=new String(buf,0,n);
+        assertEquals("Mismatched data at iteration #" + i,expected,res);
+      }
+    }
+  finally {
+      session.stopRemotePortForwarding(remote);
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRemoteForwardingSecondTimeInSameSession() throws Exception {
+  Session session=createSession();
+  try {
+    int forwardedPort=Utils.getFreePort();
+    session.setPortForwardingR(forwardedPort,TEST_LOCALHOST,echoPort);
+    waitForForwardingRequest(TcpipForwardHandler.REQUEST,TimeUnit.SECONDS.toMillis(5L));
+    session.delPortForwardingR(TEST_LOCALHOST,forwardedPort);
+    waitForForwardingRequest(CancelTcpipForwardHandler.REQUEST,TimeUnit.SECONDS.toMillis(5L));
+    session.setPortForwardingR(forwardedPort,TEST_LOCALHOST,echoPort);
+    waitForForwardingRequest(TcpipForwardHandler.REQUEST,TimeUnit.SECONDS.toMillis(5L));
+    try (Socket s=new Socket(TEST_LOCALHOST,forwardedPort);OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      output.write(bytes);
+      output.flush();
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      int n=input.read(buf);
+      String res=new String(buf,0,n,StandardCharsets.UTF_8);
+      assertEquals("Mismatched data",expected,res);
+    }
+  finally {
+      session.delPortForwardingR(TEST_LOCALHOST,forwardedPort);
+    }
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRemoteForwarding() throws Exception {
+  Session session=createSession();
+  try {
+    int forwardedPort=Utils.getFreePort();
+    session.setPortForwardingR(forwardedPort,TEST_LOCALHOST,echoPort);
+    waitForForwardingRequest(TcpipForwardHandler.REQUEST,TimeUnit.SECONDS.toMillis(5L));
+    try (Socket s=new Socket(TEST_LOCALHOST,forwardedPort);OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      output.write(bytes);
+      output.flush();
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      int n=input.read(buf);
+      String res=new String(buf,0,n,StandardCharsets.UTF_8);
+      assertEquals("Mismatched data",expected,res);
+    }
+  finally {
+      session.delPortForwardingR(forwardedPort);
+    }
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testLocalForwardingNative() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    SshdSocketAddress local=new SshdSocketAddress("",0);
+    SshdSocketAddress remote=new SshdSocketAddress(TEST_LOCALHOST,echoPort);
+    SshdSocketAddress bound=session.startLocalPortForwarding(local,remote);
+    try (Socket s=new Socket(bound.getHostName(),bound.getPort());OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      output.write(bytes);
+      output.flush();
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      int n=input.read(buf);
+      String res=new String(buf,0,n);
+      assertEquals("Mismatched data",expected,res);
+    }
+  finally {
+      session.stopLocalPortForwarding(bound);
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testForwardingChannel() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    SshdSocketAddress local=new SshdSocketAddress("",0);
+    SshdSocketAddress remote=new SshdSocketAddress(TEST_LOCALHOST,echoPort);
+    try (ChannelDirectTcpip channel=session.createDirectTcpipChannel(local,remote)){
+      channel.open().verify(9L,TimeUnit.SECONDS);
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      try (OutputStream output=channel.getInvertedIn();InputStream input=channel.getInvertedOut()){
+        output.write(bytes);
+        output.flush();
+        byte[] buf=new byte[bytes.length + Long.SIZE];
+        int n=input.read(buf);
+        String res=new String(buf,0,n);
+        assertEquals("Mismatched data",expected,res);
+      }
+       channel.close(false);
+    }
+   }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testLocalForwarding() throws Exception {
+  Session session=createSession();
+  try {
+    int forwardedPort=Utils.getFreePort();
+    session.setPortForwardingL(forwardedPort,TEST_LOCALHOST,echoPort);
+    try (Socket s=new Socket(TEST_LOCALHOST,forwardedPort);OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      output.write(bytes);
+      output.flush();
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      int n=input.read(buf);
+      String res=new String(buf,0,n);
+      assertEquals("Mismatched data",expected,res);
+    }
+  finally {
+      session.delPortForwardingL(forwardedPort);
+    }
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-3 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRemoteForwardingNative() throws Exception {
+  try (ClientSession session=createNativeSession()){
+    SshdSocketAddress remote=new SshdSocketAddress("",0);
+    SshdSocketAddress local=new SshdSocketAddress(TEST_LOCALHOST,echoPort);
+    SshdSocketAddress bound=session.startRemotePortForwarding(remote,local);
+    try (Socket s=new Socket(bound.getHostName(),bound.getPort());OutputStream output=s.getOutputStream();InputStream input=s.getInputStream()){
+      s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+      String expected=getCurrentTestName();
+      byte[] bytes=expected.getBytes(StandardCharsets.UTF_8);
+      output.write(bytes);
+      output.flush();
+      byte[] buf=new byte[bytes.length + Long.SIZE];
+      int n=input.read(buf);
+      String res=new String(buf,0,n);
+      assertEquals("Mismatched data",expected,res);
+    }
+  finally {
+      session.stopRemotePortForwarding(remote);
+    }
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.kex.AbstractDHTest </h4><pre class="type-11 type-8 type-10 type-6 type-15 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStripLeadingZeroes(){
+  byte[] data={3,7,7,3,4,7};
+  for (int index=1; index <= data.length; index++) {
+    assertSame("Unexpected sub-array generation for " + Arrays.toString(data),data,AbstractDH.stripLeadingZeroes(data));
+    if (index < data.length) {
+      data[index]=0;
+    }
+  }
+  Arrays.fill(data,(byte)0);
+  try {
+    byte[] stripped=AbstractDH.stripLeadingZeroes(data);
+    fail("Unexpected success for all zeroes data: " + Arrays.toString(stripped));
+  }
+ catch (  IllegalArgumentException expected) {
+  }
+  for (int index=data.length - 1; index > 0; index--) {
+    data[index]=(byte)index;
+    byte[] stripped=AbstractDH.stripLeadingZeroes(data);
+    String ds=Arrays.toString(data), ss=Arrays.toString(stripped);
+    assertEquals("Mismatched stripped (" + ss + ") length for "+ ds,data.length - index,stripped.length);
+    for (int i=index, j=0; j < stripped.length; i++, j++) {
+      if (data[i] != stripped[j]) {
+        fail("Mismatched values at stripped index = " + j + ": data="+ ds+ ", stripped="+ ss);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.util.buffer.BufferUtilsTest </h4><pre class="type-8 type-3 type-15 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetCompactClone(){
+  byte[] expected=getCurrentTestName().getBytes(StandardCharsets.UTF_8);
+  final int OFFSET=Byte.SIZE / 2;
+  byte[] data=new byte[expected.length + 2 * OFFSET];
+  Random rnd=new Random(System.nanoTime());
+  rnd.nextBytes(data);
+  System.arraycopy(expected,0,data,OFFSET,expected.length);
+  Buffer buf=ByteArrayBuffer.getCompactClone(data,OFFSET,expected.length);
+  assertEquals("Mismatched cloned buffer read position",0,buf.rpos());
+  assertEquals("Mismatched cloned buffer available size",expected.length,buf.available());
+  byte[] actual=buf.array();
+  assertNotSame("Original data not cloned",data,actual);
+  assertArrayEquals("Mismatched cloned contents",expected,actual);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.sshd.common.util.io.LimitInputStreamTest </h4><pre class="type-8 type-6 type-2 type-3 type-7 type-13 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadLimit() throws IOException {
+  Path targetPath=detectTargetFolder();
+  Path rootFolder=assertHierarchyTargetFolderExists(targetPath.resolve(getClass().getSimpleName()));
+  Path inputFile=rootFolder.resolve(getCurrentTestName() + ".bin");
+  byte[] data=(getClass().getName() + "#" + getCurrentTestName()).getBytes(StandardCharsets.UTF_8);
+  Files.write(inputFile,data);
+  try (InputStream in=Files.newInputStream(inputFile)){
+    int maxLen=data.length / 2;
+    byte[] expected=new byte[maxLen];
+    System.arraycopy(data,0,expected,0,expected.length);
+    byte[] actual=new byte[expected.length];
+    try (LimitInputStream limited=new LimitInputStream(in,expected.length)){
+      assertTrue("Limited stream not marked as open",limited.isOpen());
+      assertEquals("Mismatched initial available data size",expected.length,limited.available());
+      int readLen=limited.read(actual);
+      assertEquals("Incomplete actual data read",actual.length,readLen);
+      assertArrayEquals("Mismatched read data",expected,actual);
+      assertEquals("Mismatched remaining available data size",0,limited.available());
+      readLen=limited.read();
+      assertTrue("Unexpected success to read one more byte: " + readLen,readLen < 0);
+      readLen=limited.read(actual);
+      assertTrue("Unexpected success to read extra buffer: " + readLen,readLen < 0);
+      limited.close();
+      assertFalse("Limited stream still marked as open",limited.isOpen());
+      try {
+        readLen=limited.read();
+        fail("Unexpected one byte read success after close");
+      }
+ catch (      IOException e) {
+      }
+      try {
+        readLen=limited.read(actual);
+        fail("Unexpected buffer read success after close: " + readLen);
+      }
+ catch (      IOException e) {
+      }
+      try {
+        readLen=limited.read(actual);
+        fail("Unexpected buffer read success after close: " + readLen);
+      }
+ catch (      IOException e) {
+      }
+      try {
+        readLen=(int)limited.skip(Byte.SIZE);
+        fail("Unexpected skip success after close: " + readLen);
+      }
+ catch (      IOException e) {
+      }
+      try {
+        readLen=limited.available();
+        fail("Unexpected available success after close: " + readLen);
+      }
+ catch (      IOException e) {
+      }
+    }
+     int readLen=in.read(actual);
+    assertEquals("Incomplete extra data read",Math.min(actual.length,data.length - expected.length),readLen);
+  }
+ }
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

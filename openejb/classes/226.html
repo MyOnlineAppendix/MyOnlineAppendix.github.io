@@ -1,0 +1,252 @@
+<h3 style="margin:0px">Class: org.apache.openejb.server.discovery.MulticastPulseAgentTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void afterClass() throws Exception {
+  agent.stop();
+  executor.shutdownNow();
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Most of this code is identical to org.apache.openejb.client.MulticastPulseClient#discoverURIs
+ * <p/>
+ * The MulticastPulseClient class is not shared or available here so the test has to emulate it.
+ * @throws Exception On error
+ */
+@Test public void test() throws Exception {
+  final InetAddress ia;
+  try {
+    ia=InetAddress.getByName(host);
+  }
+ catch (  UnknownHostException e) {
+    throw new Exception(host + " is not a valid address",e);
+  }
+  if (null == ia || !ia.isMulticastAddress()) {
+    throw new Exception(host + " is not a valid multicast address");
+  }
+  final MulticastSocket[] clientSockets=MulticastPulseAgent.getSockets(host,port);
+  if (clientSockets.length < 1) {
+    System.out.println("Cannnot perform multipulse test without a valid interface");
+    return;
+  }
+  final byte[] bytes=(MulticastPulseAgent.CLIENT + forGroup).getBytes(utf8);
+  final DatagramPacket request=new DatagramPacket(bytes,bytes.length,new InetSocketAddress(ia,port));
+  final AtomicBoolean running=new AtomicBoolean(true);
+  final Timer timer=new Timer(true);
+  final Set<URI> set=new TreeSet<URI>(new Comparator<URI>(){
+    @Override public int compare(    final URI uri1,    final URI uri2){
+      URI u1=URI.create(uri1.getSchemeSpecificPart());
+      URI u2=URI.create(uri2.getSchemeSpecificPart());
+      u1=URI.create(u1.getSchemeSpecificPart());
+      u2=URI.create(u2.getSchemeSpecificPart());
+      int i=compare(u1.getHost(),u2.getHost());
+      if (i == 0) {
+        i=uri1.compareTo(uri2);
+      }
+      return i;
+    }
+    private int compare(    final String h1,    final String h2){
+      try {
+        if (IPAddressUtil.isIPv4LiteralAddress(h1)) {
+          if (IPAddressUtil.isIPv6LiteralAddress(h2.replace("[","").replace("]",""))) {
+            return -1;
+          }
+        }
+ else         if (IPAddressUtil.isIPv6LiteralAddress(h1.replace("[","").replace("]",""))) {
+          if (IPAddressUtil.isIPv4LiteralAddress(h2)) {
+            return 1;
+          }
+        }
+ else         if (0 != h1.compareTo(h2)) {
+          return -1;
+        }
+      }
+ catch (      Throwable e) {
+      }
+      return h1.compareTo(h2);
+    }
+  }
+);
+  final ReentrantLock setLock=new ReentrantLock();
+  final ArrayList<Future> futures=new ArrayList<Future>();
+  final CountDownLatch latch=new CountDownLatch(clientSockets.length);
+  for (  final MulticastSocket socket : clientSockets) {
+    futures.add(executor.submit(new Runnable(){
+      @Override public void run(){
+        String name="Unknown interface";
+        try {
+          name=socket.getNetworkInterface().getDisplayName();
+        }
+ catch (        Throwable e) {
+        }
+        System.out.println("Entered MulticastPulse client thread on: " + name);
+        final DatagramPacket response=new DatagramPacket(new byte[2048],2048);
+        latch.countDown();
+        while (running.get()) {
+          try {
+            socket.receive(response);
+            final SocketAddress sa=response.getSocketAddress();
+            if (null != sa && (sa instanceof InetSocketAddress)) {
+              int len=response.getLength();
+              if (len > 2048) {
+                len=2048;
+              }
+              String s=new String(response.getData(),0,len);
+              if (s.startsWith(MulticastPulseAgent.SERVER)) {
+                s=(s.replace(MulticastPulseAgent.SERVER,""));
+                final String group=s.substring(0,s.indexOf(':'));
+                s=s.substring(group.length() + 1);
+                if (!"*".equals(forGroup) && !forGroup.equals(group)) {
+                  continue;
+                }
+                final String services=s.substring(0,s.lastIndexOf('|'));
+                s=s.substring(services.length() + 1);
+                final String[] serviceList=services.split("\\|");
+                final String[] hosts=s.split(",");
+                System.out.println(String.format("\n" + name + " received Server pulse:\n\tGroup: %1$s\n\tServices: %2$s\n\tServer: %3$s\n",group,services,s));
+                for (                final String svc : serviceList) {
+                  if (MulticastPulseAgent.EMPTY.equals(svc)) {
+                    continue;
+                  }
+                  final URI serviceUri;
+                  try {
+                    serviceUri=URI.create(svc);
+                  }
+ catch (                  Throwable e) {
+                    continue;
+                  }
+                  if (schemes.contains(serviceUri.getScheme())) {
+                    final String serverHost=((InetSocketAddress)response.getSocketAddress()).getAddress().getHostAddress();
+                    final String serviceHost=serviceUri.getHost();
+                    if (MulticastPulseAgent.isLocalAddress(serviceHost,false)) {
+                      if (!MulticastPulseAgent.isLocalAddress(serverHost,false)) {
+                        continue;
+                      }
+                    }
+                    final String fullsvc=("mp-" + serverHost + ":"+ group+ ":"+ svc);
+                    setLock.lock();
+                    try {
+                      if (fullsvc.contains("0.0.0.0")) {
+                        for (                        final String h : hosts) {
+                          if (!h.replace("[","").startsWith("2001:0:")) {
+                            set.add(URI.create(fullsvc.replace("0.0.0.0",ipFormat(h))));
+                          }
+                        }
+                      }
+ else                       if (fullsvc.contains("[::]")) {
+                        for (                        final String h : hosts) {
+                          if (!h.replace("[","").startsWith("2001:0:")) {
+                            set.add(URI.create(fullsvc.replace("[::]",ipFormat(h))));
+                          }
+                        }
+                      }
+ else {
+                        set.add(URI.create(fullsvc));
+                      }
+                    }
+ catch (                    Throwable e) {
+                    }
+ finally {
+                      setLock.unlock();
+                    }
+                  }
+ else {
+                    System.out.println("Reject service: " + serviceUri.toASCIIString() + " - Not looking for scheme: "+ serviceUri.getScheme());
+                  }
+                }
+              }
+            }
+          }
+ catch (          Throwable e) {
+          }
+        }
+        System.out.println("Exit MulticastPulse client thread on: " + name);
+        System.out.flush();
+      }
+    }
+));
+  }
+  System.out.println("Wait for threads to start");
+  int timeout=5000;
+  try {
+    if (latch.await(15,TimeUnit.SECONDS)) {
+      System.out.println("Threads have started");
+      for (      final MulticastSocket socket : clientSockets) {
+        try {
+          socket.send(request);
+        }
+ catch (        Throwable e) {
+        }
+      }
+    }
+ else {
+      timeout=1;
+      System.out.println("Giving up on threads");
+    }
+  }
+ catch (  InterruptedException e) {
+    timeout=1;
+  }
+  timer.schedule(new TimerTask(){
+    @Override public void run(){
+      running.set(false);
+      for (      final Future future : futures) {
+        try {
+          future.cancel(true);
+        }
+ catch (        Throwable e) {
+        }
+      }
+      for (      final MulticastSocket socket : clientSockets) {
+        try {
+          socket.leaveGroup(ia);
+        }
+ catch (        Throwable e) {
+        }
+        try {
+          socket.close();
+        }
+ catch (        Throwable e) {
+        }
+      }
+    }
+  }
+,timeout);
+  for (  final Future future : futures) {
+    try {
+      future.get();
+    }
+ catch (    Throwable e) {
+    }
+  }
+  System.out.println();
+  System.out.flush();
+  final ArrayList<String> list=new ArrayList<String>();
+  final TreeSet<URI> uris=new TreeSet<URI>(set);
+  for (  final URI uri : uris) {
+    final String astr=uri.toASCIIString();
+    System.out.println("MultiPulse discovered: " + astr);
+    if (list.contains(astr)) {
+      System.out.println("Duplicate uri: " + uri);
+    }
+    org.junit.Assert.assertTrue(!list.contains(astr));
+    list.add(astr);
+  }
+  System.out.println("Multipulse complete");
+  org.junit.Assert.assertTrue(timeout == 1 || set.size() > 0);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

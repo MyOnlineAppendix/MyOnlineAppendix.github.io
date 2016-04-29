@@ -1,0 +1,199 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.io.sstable.IndexSummaryTest (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-7 type-13 type-4 type-2 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testDownsample(){
+  final int NUM_KEYS=4096;
+  final int INDEX_INTERVAL=128;
+  final int ORIGINAL_NUM_ENTRIES=NUM_KEYS / INDEX_INTERVAL;
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(NUM_KEYS,INDEX_INTERVAL);
+  List<DecoratedKey> keys=random.left;
+  IndexSummary original=random.right;
+  for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++)   assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(original.getKey(i)));
+  List<Integer> samplePattern=Downsampling.getSamplingPattern(BASE_SAMPLING_LEVEL);
+  int downsamplingRound=1;
+  for (int samplingLevel=BASE_SAMPLING_LEVEL - 1; samplingLevel >= 1; samplingLevel--) {
+    try (IndexSummary downsampled=downsample(original,samplingLevel,128,partitioner)){
+      assertEquals(entriesAtSamplingLevel(samplingLevel,original.getMaxNumberOfEntries()),downsampled.size());
+      int sampledCount=0;
+      List<Integer> skipStartPoints=samplePattern.subList(0,downsamplingRound);
+      for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++) {
+        if (!shouldSkip(i,skipStartPoints)) {
+          assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+          sampledCount++;
+        }
+      }
+      testPosition(original,downsampled,keys);
+      downsamplingRound++;
+    }
+   }
+  IndexSummary previous=original;
+  downsamplingRound=1;
+  for (int downsampleLevel=BASE_SAMPLING_LEVEL - 1; downsampleLevel >= 1; downsampleLevel--) {
+    IndexSummary downsampled=downsample(previous,downsampleLevel,128,partitioner);
+    if (previous != original)     previous.close();
+    assertEquals(entriesAtSamplingLevel(downsampleLevel,original.getMaxNumberOfEntries()),downsampled.size());
+    int sampledCount=0;
+    List<Integer> skipStartPoints=samplePattern.subList(0,downsamplingRound);
+    for (int i=0; i < ORIGINAL_NUM_ENTRIES; i++) {
+      if (!shouldSkip(i,skipStartPoints)) {
+        assertEquals(keys.get(i * INDEX_INTERVAL).getKey(),ByteBuffer.wrap(downsampled.getKey(sampledCount)));
+        sampledCount++;
+      }
+    }
+    testPosition(original,downsampled,keys);
+    previous=downsampled;
+    downsamplingRound++;
+  }
+  previous.close();
+  original.close();
+}
+
+</code></pre>
+
+<pre class="type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBinarySearch(){
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(100,1);
+  for (int i=0; i < 100; i++)   assertEquals(i,random.right.binarySearch(random.left.get(i)));
+  random.right.close();
+}
+
+</code></pre>
+
+<pre class="type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGetPosition(){
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(100,2);
+  for (int i=0; i < 50; i++)   assertEquals(i * 2,random.right.getPosition(i));
+  random.right.close();
+}
+
+</code></pre>
+
+<pre class="type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testOriginalIndexLookup(){
+  for (int i=BASE_SAMPLING_LEVEL; i >= 1; i--)   assertEquals(i,Downsampling.getOriginalIndexes(i).size());
+  ArrayList<Integer> full=new ArrayList<>();
+  for (int i=0; i < BASE_SAMPLING_LEVEL; i++)   full.add(i);
+  assertEquals(full,Downsampling.getOriginalIndexes(BASE_SAMPLING_LEVEL));
+  assertEquals(full.subList(0,full.size() - 1),Downsampling.getOriginalIndexes(BASE_SAMPLING_LEVEL - 1));
+  assertEquals(128,BASE_SAMPLING_LEVEL);
+  assertEquals(Arrays.asList(0,32,64,96),Downsampling.getOriginalIndexes(4));
+  assertEquals(Arrays.asList(0,64),Downsampling.getOriginalIndexes(2));
+  assertEquals(Arrays.asList(0),Downsampling.getOriginalIndexes(1));
+}
+
+</code></pre>
+
+<pre class="type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGetKey(){
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(100,1);
+  for (int i=0; i < 100; i++)   assertEquals(random.left.get(i).getKey(),ByteBuffer.wrap(random.right.getKey(i)));
+  random.right.close();
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAddEmptyKey() throws Exception {
+  IPartitioner p=new RandomPartitioner();
+  try (IndexSummaryBuilder builder=new IndexSummaryBuilder(1,1,BASE_SAMPLING_LEVEL)){
+    builder.maybeAddEntry(p.decorateKey(ByteBufferUtil.EMPTY_BYTE_BUFFER),0);
+    IndexSummary summary=builder.build(p);
+    assertEquals(1,summary.size());
+    assertEquals(0,summary.getPosition(0));
+    assertArrayEquals(new byte[0],summary.getKey(0));
+    DataOutputBuffer dos=new DataOutputBuffer();
+    IndexSummary.serializer.serialize(summary,dos,false);
+    DataInputStream dis=new DataInputStream(new ByteArrayInputStream(dos.toByteArray()));
+    IndexSummary loaded=IndexSummary.serializer.deserialize(dis,p,false,1,1);
+    assertEquals(1,loaded.size());
+    assertEquals(summary.getPosition(0),loaded.getPosition(0));
+    assertArrayEquals(summary.getKey(0),summary.getKey(0));
+    summary.close();
+    loaded.close();
+  }
+ }
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDownsamplePatterns(){
+  assertEquals(Arrays.asList(0),Downsampling.getSamplingPattern(0));
+  assertEquals(Arrays.asList(0),Downsampling.getSamplingPattern(1));
+  assertEquals(Arrays.asList(1,0),Downsampling.getSamplingPattern(2));
+  assertEquals(Arrays.asList(3,1,2,0),Downsampling.getSamplingPattern(4));
+  assertEquals(Arrays.asList(7,3,5,1,6,2,4,0),Downsampling.getSamplingPattern(8));
+  assertEquals(Arrays.asList(15,7,11,3,13,5,9,1,14,6,10,2,12,4,8,0),Downsampling.getSamplingPattern(16));
+}
+
+</code></pre>
+
+<pre class="type-6 type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSerialization() throws IOException {
+  Pair<List<DecoratedKey>,IndexSummary> random=generateRandomIndex(100,1);
+  DataOutputBuffer dos=new DataOutputBuffer();
+  IndexSummary.serializer.serialize(random.right,dos,false);
+  dos.writeUTF("JUNK");
+  dos.writeUTF("JUNK");
+  FileUtils.closeQuietly(dos);
+  DataInputStream dis=new DataInputStream(new ByteArrayInputStream(dos.toByteArray()));
+  IndexSummary is=IndexSummary.serializer.deserialize(dis,partitioner,false,1,1);
+  for (int i=0; i < 100; i++)   assertEquals(i,is.binarySearch(random.left.get(i)));
+  assertEquals(dis.readUTF(),"JUNK");
+  assertEquals(dis.readUTF(),"JUNK");
+  is.close();
+  FileUtils.closeQuietly(dis);
+  random.right.close();
+}
+
+</code></pre>
+
+<pre class="type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGetNumberOfSkippedEntriesAfterIndex(){
+  int indexInterval=128;
+  for (int i=0; i < BASE_SAMPLING_LEVEL; i++)   assertEquals(indexInterval,Downsampling.getEffectiveIndexIntervalAfterIndex(i,BASE_SAMPLING_LEVEL,indexInterval));
+  for (int i=0; i < BASE_SAMPLING_LEVEL - 2; i++)   assertEquals(indexInterval,Downsampling.getEffectiveIndexIntervalAfterIndex(i,BASE_SAMPLING_LEVEL - 1,indexInterval));
+  assertEquals(indexInterval * 2,Downsampling.getEffectiveIndexIntervalAfterIndex(BASE_SAMPLING_LEVEL - 2,BASE_SAMPLING_LEVEL - 1,indexInterval));
+  assertEquals(128,BASE_SAMPLING_LEVEL);
+  assertEquals(64 * indexInterval,Downsampling.getEffectiveIndexIntervalAfterIndex(0,2,indexInterval));
+  assertEquals(64 * indexInterval,Downsampling.getEffectiveIndexIntervalAfterIndex(1,2,indexInterval));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

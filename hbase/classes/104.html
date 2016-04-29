@@ -1,0 +1,243 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.client.TestReplicaWithCluster (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@SuppressWarnings("deprecation") @Test(timeout=300000) public void testReplicaAndReplication() throws Exception {
+  HTableDescriptor hdt=HTU.createTableDescriptor("testReplicaAndReplication");
+  hdt.setRegionReplication(NB_SERVERS);
+  HColumnDescriptor fam=new HColumnDescriptor(row);
+  fam.setScope(HConstants.REPLICATION_SCOPE_GLOBAL);
+  hdt.addFamily(fam);
+  hdt.addCoprocessor(SlowMeCopro.class.getName());
+  HTU.getHBaseAdmin().createTable(hdt,HBaseTestingUtility.KEYS_FOR_HBA_CREATE_TABLE);
+  Configuration conf2=HBaseConfiguration.create(HTU.getConfiguration());
+  conf2.set(HConstants.HBASE_CLIENT_INSTANCE_ID,String.valueOf(-1));
+  conf2.set(HConstants.ZOOKEEPER_ZNODE_PARENT,"/2");
+  MiniZooKeeperCluster miniZK=HTU.getZkCluster();
+  HTU2=new HBaseTestingUtility(conf2);
+  HTU2.setZkCluster(miniZK);
+  HTU2.startMiniCluster(NB_SERVERS);
+  LOG.info("Setup second Zk");
+  HTU2.getHBaseAdmin().createTable(hdt,HBaseTestingUtility.KEYS_FOR_HBA_CREATE_TABLE);
+  ReplicationAdmin admin=new ReplicationAdmin(HTU.getConfiguration());
+  admin.addPeer("2",HTU2.getClusterKey());
+  admin.close();
+  Put p=new Put(row);
+  p.addColumn(row,row,row);
+  final Table table=HTU.getConnection().getTable(hdt.getTableName());
+  table.put(p);
+  HTU.getHBaseAdmin().flush(table.getName());
+  LOG.info("Put & flush done on the first cluster. Now doing a get on the same cluster.");
+  Waiter.waitFor(HTU.getConfiguration(),1000,new Waiter.Predicate<Exception>(){
+    @Override public boolean evaluate() throws Exception {
+      try {
+        SlowMeCopro.cdl.set(new CountDownLatch(1));
+        Get g=new Get(row);
+        g.setConsistency(Consistency.TIMELINE);
+        Result r=table.get(g);
+        Assert.assertTrue(r.isStale());
+        return !r.isEmpty();
+      }
+  finally {
+        SlowMeCopro.cdl.get().countDown();
+        SlowMeCopro.sleepTime.set(0);
+      }
+    }
+  }
+);
+  table.close();
+  LOG.info("stale get on the first cluster done. Now for the second.");
+  final Table table2=HTU.getConnection().getTable(hdt.getTableName());
+  Waiter.waitFor(HTU.getConfiguration(),1000,new Waiter.Predicate<Exception>(){
+    @Override public boolean evaluate() throws Exception {
+      try {
+        SlowMeCopro.cdl.set(new CountDownLatch(1));
+        Get g=new Get(row);
+        g.setConsistency(Consistency.TIMELINE);
+        Result r=table2.get(g);
+        Assert.assertTrue(r.isStale());
+        return !r.isEmpty();
+      }
+  finally {
+        SlowMeCopro.cdl.get().countDown();
+        SlowMeCopro.sleepTime.set(0);
+      }
+    }
+  }
+);
+  table2.close();
+  HTU.getHBaseAdmin().disableTable(hdt.getTableName());
+  HTU.deleteTable(hdt.getTableName());
+  HTU2.getHBaseAdmin().disableTable(hdt.getTableName());
+  HTU2.deleteTable(hdt.getTableName());
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=30000) public void testCreateDeleteTable() throws IOException {
+  HTableDescriptor hdt=HTU.createTableDescriptor("testCreateDeleteTable");
+  hdt.setRegionReplication(NB_SERVERS);
+  hdt.addCoprocessor(SlowMeCopro.class.getName());
+  Table table=HTU.createTable(hdt,new byte[][]{f},null);
+  Put p=new Put(row);
+  p.addColumn(f,row,row);
+  table.put(p);
+  Get g=new Get(row);
+  Result r=table.get(g);
+  Assert.assertFalse(r.isStale());
+  try {
+    SlowMeCopro.cdl.set(new CountDownLatch(1));
+    g=new Get(row);
+    g.setConsistency(Consistency.TIMELINE);
+    r=table.get(g);
+    Assert.assertTrue(r.isStale());
+    SlowMeCopro.cdl.get().countDown();
+  }
+  finally {
+    SlowMeCopro.cdl.get().countDown();
+    SlowMeCopro.sleepTime.set(0);
+  }
+  HTU.getHBaseAdmin().disableTable(hdt.getTableName());
+  HTU.deleteTable(hdt.getTableName());
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=120000) public void testChangeTable() throws Exception {
+  HTableDescriptor hdt=HTU.createTableDescriptor("testChangeTable");
+  hdt.setRegionReplication(NB_SERVERS);
+  hdt.addCoprocessor(SlowMeCopro.class.getName());
+  Table table=HTU.createTable(hdt,new byte[][]{f},null);
+  Put p=new Put(row);
+  p.addColumn(f,row,row);
+  table.put(p);
+  Get g=new Get(row);
+  Result r=table.get(g);
+  Assert.assertFalse(r.isStale());
+  HTableDescriptor bHdt=HTU.getHBaseAdmin().getTableDescriptor(hdt.getTableName());
+  HColumnDescriptor hcd=new HColumnDescriptor(row);
+  hdt.addFamily(hcd);
+  HTU.getHBaseAdmin().disableTable(hdt.getTableName());
+  HTU.getHBaseAdmin().modifyTable(hdt.getTableName(),hdt);
+  HTU.getHBaseAdmin().enableTable(hdt.getTableName());
+  HTableDescriptor nHdt=HTU.getHBaseAdmin().getTableDescriptor(hdt.getTableName());
+  Assert.assertEquals("fams=" + Arrays.toString(nHdt.getColumnFamilies()),bHdt.getColumnFamilies().length + 1,nHdt.getColumnFamilies().length);
+  p=new Put(row);
+  p.addColumn(row,row,row);
+  table.put(p);
+  g=new Get(row);
+  r=table.get(g);
+  Assert.assertFalse(r.isStale());
+  try {
+    SlowMeCopro.cdl.set(new CountDownLatch(1));
+    g=new Get(row);
+    g.setConsistency(Consistency.TIMELINE);
+    r=table.get(g);
+    Assert.assertTrue(r.isStale());
+  }
+  finally {
+    SlowMeCopro.cdl.get().countDown();
+    SlowMeCopro.sleepTime.set(0);
+  }
+  Admin admin=HTU.getHBaseAdmin();
+  nHdt=admin.getTableDescriptor(hdt.getTableName());
+  Assert.assertEquals("fams=" + Arrays.toString(nHdt.getColumnFamilies()),bHdt.getColumnFamilies().length + 1,nHdt.getColumnFamilies().length);
+  admin.disableTable(hdt.getTableName());
+  admin.deleteTable(hdt.getTableName());
+  admin.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=30000) public void testBulkLoad() throws IOException {
+  LOG.debug("Creating test table");
+  HTableDescriptor hdt=HTU.createTableDescriptor("testBulkLoad");
+  hdt.setRegionReplication(NB_SERVERS);
+  hdt.addCoprocessor(SlowMeCopro.class.getName());
+  Table table=HTU.createTable(hdt,new byte[][]{f},null);
+  LOG.debug("Creating test data");
+  Path dir=HTU.getDataTestDirOnTestFS("testBulkLoad");
+  final int numRows=10;
+  final byte[] qual=Bytes.toBytes("qual");
+  final byte[] val=Bytes.toBytes("val");
+  final List<Pair<byte[],String>> famPaths=new ArrayList<Pair<byte[],String>>();
+  for (  HColumnDescriptor col : hdt.getColumnFamilies()) {
+    Path hfile=new Path(dir,col.getNameAsString());
+    TestHRegionServerBulkLoad.createHFile(HTU.getTestFileSystem(),hfile,col.getName(),qual,val,numRows);
+    famPaths.add(new Pair<byte[],String>(col.getName(),hfile.toString()));
+  }
+  LOG.debug("Loading test data");
+  @SuppressWarnings("deprecation") final HConnection conn=HTU.getHBaseAdmin().getConnection();
+  RegionServerCallable<Void> callable=new RegionServerCallable<Void>(conn,hdt.getTableName(),TestHRegionServerBulkLoad.rowkey(0)){
+    @Override public Void call(    int timeout) throws Exception {
+      LOG.debug("Going to connect to server " + getLocation() + " for row "+ Bytes.toStringBinary(getRow()));
+      byte[] regionName=getLocation().getRegionInfo().getRegionName();
+      BulkLoadHFileRequest request=RequestConverter.buildBulkLoadHFileRequest(famPaths,regionName,true);
+      getStub().bulkLoadHFile(null,request);
+      return null;
+    }
+  }
+;
+  RpcRetryingCallerFactory factory=new RpcRetryingCallerFactory(HTU.getConfiguration());
+  RpcRetryingCaller<Void> caller=factory.<Void>newCaller();
+  caller.callWithRetries(callable,10000);
+  LOG.debug("Verifying data load");
+  for (int i=0; i < numRows; i++) {
+    byte[] row=TestHRegionServerBulkLoad.rowkey(i);
+    Get g=new Get(row);
+    Result r=table.get(g);
+    Assert.assertFalse(r.isStale());
+  }
+  LOG.debug("Verifying replica queries");
+  try {
+    SlowMeCopro.cdl.set(new CountDownLatch(1));
+    for (int i=0; i < numRows; i++) {
+      byte[] row=TestHRegionServerBulkLoad.rowkey(i);
+      Get g=new Get(row);
+      g.setConsistency(Consistency.TIMELINE);
+      Result r=table.get(g);
+      Assert.assertTrue(r.isStale());
+    }
+    SlowMeCopro.cdl.get().countDown();
+  }
+  finally {
+    SlowMeCopro.cdl.get().countDown();
+    SlowMeCopro.sleepTime.set(0);
+  }
+  HTU.getHBaseAdmin().disableTable(hdt.getTableName());
+  HTU.deleteTable(hdt.getTableName());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void afterClass() throws Exception {
+  if (HTU2 != null)   HTU2.shutdownMiniCluster();
+  HTU.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

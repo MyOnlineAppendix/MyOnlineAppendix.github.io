@@ -1,0 +1,785 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.bookkeeper.bookie.BookieInitializationTest </h4><pre class="type-2 type-6 type-3 type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify the bookie reg. Restarting bookie server will wait for the session
+ * timeout when previous reg node exists in zk. On zNode delete event,
+ * should continue startup
+ */
+@Test(timeout=20000) public void testBookieRegistration() throws Exception {
+  File tmpDir=createTempDir("bookie","test");
+  final ServerConfiguration conf=TestBKConfiguration.newServerConfiguration().setZkServers(null).setJournalDirName(tmpDir.getPath()).setLedgerDirNames(new String[]{tmpDir.getPath()});
+  final String bkRegPath=conf.getZkAvailableBookiesPath() + "/" + InetAddress.getLocalHost().getHostAddress()+ ":"+ conf.getBookiePort();
+  MockBookie b=new MockBookie(conf);
+  b.zk=zkc;
+  b.testRegisterBookie(conf);
+  Stat bkRegNode1=zkc.exists(bkRegPath,false);
+  Assert.assertNotNull("Bookie registration node doesn't exists!",bkRegNode1);
+  createNewZKClient();
+  b.zk=newzk;
+  new Thread(){
+    @Override public void run(){
+      try {
+        Thread.sleep(conf.getZkTimeout() / 3);
+        zkc.delete(bkRegPath,-1);
+      }
+ catch (      Exception e) {
+        LOG.error("Failed to delete the znode :" + bkRegPath,e);
+      }
+    }
+  }
+.start();
+  try {
+    b.testRegisterBookie(conf);
+  }
+ catch (  IOException e) {
+    Throwable t=e.getCause();
+    if (t instanceof KeeperException) {
+      KeeperException ke=(KeeperException)t;
+      Assert.assertTrue("ErrorCode:" + ke.code() + ", Registration node exists",ke.code() != KeeperException.Code.NODEEXISTS);
+    }
+    throw e;
+  }
+  Stat bkRegNode2=newzk.exists(bkRegPath,false);
+  Assert.assertNotNull("Bookie registration has been failed",bkRegNode2);
+  Assert.assertTrue("Bookie is referring to old registration znode:" + bkRegNode1 + ", New ZNode:"+ bkRegNode2,bkRegNode1.getEphemeralOwner() != bkRegNode2.getEphemeralOwner());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-6 type-8 type-3 type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify the bookie registration, it should throw
+ * KeeperException.NodeExistsException if the znode still exists even after
+ * the zk session timeout.
+ */
+@Test(timeout=30000) public void testRegNodeExistsAfterSessionTimeOut() throws Exception {
+  File tmpDir=createTempDir("bookie","test");
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration().setZkServers(null).setJournalDirName(tmpDir.getPath()).setLedgerDirNames(new String[]{tmpDir.getPath()});
+  String bkRegPath=conf.getZkAvailableBookiesPath() + "/" + InetAddress.getLocalHost().getHostAddress()+ ":"+ conf.getBookiePort();
+  MockBookie b=new MockBookie(conf);
+  b.zk=zkc;
+  b.testRegisterBookie(conf);
+  Stat bkRegNode1=zkc.exists(bkRegPath,false);
+  Assert.assertNotNull("Bookie registration node doesn't exists!",bkRegNode1);
+  createNewZKClient();
+  b.zk=newzk;
+  try {
+    b.testRegisterBookie(conf);
+    fail("Should throw NodeExistsException as the znode is not getting expired");
+  }
+ catch (  IOException e) {
+    Throwable t=e.getCause();
+    if (t instanceof KeeperException) {
+      KeeperException ke=(KeeperException)t;
+      Assert.assertTrue("ErrorCode:" + ke.code() + ", Registration node doesn't exists",ke.code() == KeeperException.Code.NODEEXISTS);
+      Stat bkRegNode2=newzk.exists(bkRegPath,false);
+      Assert.assertNotNull("Bookie registration has been failed",bkRegNode2);
+      Assert.assertTrue("Bookie wrongly registered. Old registration znode:" + bkRegNode1 + ", New znode:"+ bkRegNode2,bkRegNode1.getEphemeralOwner() == bkRegNode2.getEphemeralOwner());
+      return;
+    }
+    throw e;
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.bookie.LedgerCacheTest </h4><pre class="type-11 type-6 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=30000) public void testPageEviction() throws Exception {
+  int numLedgers=10;
+  byte[] masterKey="blah".getBytes();
+  conf.setOpenFileLimit(999999).setPageLimit(3);
+  newLedgerCache();
+  try {
+    for (int i=1; i <= numLedgers; i++) {
+      ledgerCache.setMasterKey((long)i,masterKey);
+      ledgerCache.putEntryOffset(i,0,i * 8);
+      ledgerCache.putEntryOffset(i,1,i * 8);
+    }
+    ledgerCache.flushLedger(true);
+    ledgerCache.flushLedger(true);
+    for (int i=1; i <= numLedgers / 2; i++) {
+      ledgerCache.deleteLedger(i);
+    }
+    newLedgerCache();
+    for (int i=1; i <= numLedgers; i++) {
+      try {
+        ledgerCache.putEntryOffset(i,1,i * 8);
+      }
+ catch (      NoLedgerException nsle) {
+        if (i <= numLedgers / 2) {
+        }
+ else {
+          LOG.error("Error put entry offset : ",nsle);
+          fail("Should not reach here.");
+        }
+      }
+    }
+  }
+ catch (  Exception e) {
+    LOG.error("Got Exception.",e);
+    fail("Failed to add entry.");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.bookie.TestSyncThread </h4><pre class="type-2 type-11 type-6 type-8 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that sync thread suspension works.
+ * i.e. when we suspend the syncthread, nothing
+ * will be synced.
+ */
+@Test(timeout=60000) public void testSyncThreadSuspension() throws Exception {
+  int flushInterval=100;
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration();
+  CheckpointSource checkpointSource=new DummyCheckpointSource();
+  LedgerDirsListener listener=new DummyLedgerDirsListener();
+  final AtomicInteger checkpointCount=new AtomicInteger(0);
+  LedgerStorage storage=new DummyLedgerStorage(){
+    @Override public Checkpoint checkpoint(    Checkpoint checkpoint) throws IOException {
+      checkpointCount.incrementAndGet();
+      return checkpoint;
+    }
+  }
+;
+  final SyncThread t=new SyncThread(conf,listener,storage,checkpointSource);
+  t.start();
+  while (checkpointCount.get() == 0) {
+    Thread.sleep(flushInterval);
+  }
+  t.suspendSync();
+  Thread.sleep(flushInterval);
+  int count=checkpointCount.get();
+  for (int i=0; i < 10; i++) {
+    assertEquals("Checkpoint count shouldn't change",count,checkpointCount.get());
+  }
+  t.resumeSync();
+  int i=0;
+  while (checkpointCount.get() == count) {
+    Thread.sleep(flushInterval);
+    i++;
+    if (i > 100) {
+      fail("Checkpointing never resumed");
+    }
+  }
+  t.shutdown();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.client.BookieRecoveryTest </h4><pre class="type-2 type-6 type-8 type-3 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that when we try to recover a ledger which doesn't have
+ * the password stored in the configuration, we don't succeed
+ */
+@Test(timeout=60000) public void ensurePasswordUsedForOldLedgers() throws Exception {
+  if (MSLedgerManagerFactory.class.getName().equals(ledgerManagerFactory)) {
+    return;
+  }
+  zkUtil.getZooKeeperClient().delete("/ledgers/LAYOUT",-1);
+  byte[] passwdCorrect="AAAAAA".getBytes();
+  byte[] passwdBad="BBBBBB".getBytes();
+  DigestType digestCorrect=digestType;
+  DigestType digestBad=digestCorrect == DigestType.MAC ? DigestType.CRC32 : DigestType.MAC;
+  org.apache.bk_v4_1_0.bookkeeper.client.BookKeeper.DigestType digestCorrect410=org.apache.bk_v4_1_0.bookkeeper.client.BookKeeper.DigestType.valueOf(digestType.toString());
+  org.apache.bk_v4_1_0.bookkeeper.conf.ClientConfiguration c=new org.apache.bk_v4_1_0.bookkeeper.conf.ClientConfiguration();
+  c.setZkServers(zkUtil.getZooKeeperConnectString()).setLedgerManagerType(ledgerManagerFactory.equals("org.apache.bookkeeper.meta.FlatLedgerManagerFactory") ? "flat" : "hierarchical");
+  org.apache.bk_v4_1_0.bookkeeper.client.BookKeeper bkc41=new org.apache.bk_v4_1_0.bookkeeper.client.BookKeeper(c);
+  bkc41.close();
+  restartBookies();
+  bkc41=new org.apache.bk_v4_1_0.bookkeeper.client.BookKeeper(c);
+  org.apache.bk_v4_1_0.bookkeeper.client.LedgerHandle lh41=bkc41.createLedger(3,2,digestCorrect410,passwdCorrect);
+  long ledgerId=lh41.getId();
+  for (int i=0; i < 100; i++) {
+    lh41.addEntry("foobar".getBytes());
+  }
+  lh41.close();
+  bkc41.close();
+  startNewBookie();
+  int removeIndex=0;
+  BookieSocketAddress bookieSrc=bs.get(removeIndex).getLocalAddress();
+  bs.get(removeIndex).shutdown();
+  bs.remove(removeIndex);
+  LedgerHandle lh=bkc.openLedgerNoRecovery(ledgerId,digestCorrect,passwdCorrect);
+  assertFalse("Should be entries missing",verifyFullyReplicated(lh,100));
+  lh.close();
+  ClientConfiguration adminConf;
+  BookKeeperAdmin bka;
+  if (digestCorrect == DigestType.MAC) {
+    adminConf=new ClientConfiguration();
+    adminConf.setZkServers(zkUtil.getZooKeeperConnectString());
+    adminConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);
+    adminConf.setBookieRecoveryDigestType(digestCorrect);
+    adminConf.setBookieRecoveryPasswd(passwdBad);
+    bka=new BookKeeperAdmin(adminConf);
+    try {
+      bka.recoverBookieData(bookieSrc,null);
+      fail("Shouldn't be able to recover with wrong password");
+    }
+ catch (    BKException bke) {
+    }
+ finally {
+      bka.close();
+    }
+  }
+  adminConf=new ClientConfiguration();
+  adminConf.setZkServers(zkUtil.getZooKeeperConnectString());
+  adminConf.setLedgerManagerFactoryClassName(ledgerManagerFactory);
+  adminConf.setBookieRecoveryDigestType(digestBad);
+  adminConf.setBookieRecoveryPasswd(passwdCorrect);
+  bka=new BookKeeperAdmin(adminConf);
+  try {
+    bka.recoverBookieData(bookieSrc,null);
+    fail("Shouldn't be able to recover with wrong digest");
+  }
+ catch (  BKException bke) {
+  }
+ finally {
+    bka.close();
+  }
+  lh=bkc.openLedgerNoRecovery(ledgerId,digestCorrect,passwdCorrect);
+  assertFalse("Should be entries missing",verifyFullyReplicated(lh,100));
+  lh.close();
+  adminConf.setBookieRecoveryDigestType(digestCorrect);
+  adminConf.setBookieRecoveryPasswd(passwdCorrect);
+  bka=new BookKeeperAdmin(adminConf);
+  bka.recoverBookieData(bookieSrc,null);
+  bka.close();
+  lh=bkc.openLedgerNoRecovery(ledgerId,digestCorrect,passwdCorrect);
+  assertTrue("Should have recovered everything",verifyFullyReplicated(lh,100));
+  lh.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.client.BookieWriteLedgerTest </h4><pre class="type-11 type-6 type-3 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Verify the functionality LedgerHandleAdv asyncAddEntry with duplicate
+ * entryIds
+ * @throws Exception
+ */
+@Test(timeout=60000) public void testLedgerCreateAdvSyncAsyncAddDuplicateEntryIds() throws Exception {
+  long ledgerId;
+  SyncObj syncObj1=new SyncObj();
+  SyncObj syncObj2=new SyncObj();
+  lh=bkc.createLedgerAdv(5,3,2,digestType,ledgerPassword);
+  ledgerId=lh.getId();
+  LOG.info("Ledger ID: " + ledgerId);
+  for (int i=numEntriesToWrite - 1; i >= 0; i--) {
+    ByteBuffer entry=ByteBuffer.allocate(4);
+    entry.putInt(rng.nextInt(maxInt));
+    entry.position(0);
+    try {
+      entries1.add(0,entry.array());
+    }
+ catch (    Exception e) {
+      e.printStackTrace();
+    }
+    lh.asyncAddEntry(i,entry.array(),0,entry.capacity(),this,syncObj1);
+    if (rng.nextBoolean()) {
+      lh.asyncAddEntry(i,entry.array(),0,entry.capacity(),this,syncObj2);
+synchronized (syncObj2) {
+        while (syncObj2.counter < 1) {
+          syncObj2.wait();
+        }
+        assertEquals(BKException.Code.DuplicateEntryIdException,syncObj2.rc);
+      }
+    }
+  }
+synchronized (syncObj1) {
+    while (syncObj1.counter < numEntriesToWrite) {
+      syncObj1.wait();
+    }
+    assertEquals(BKException.Code.OK,syncObj1.rc);
+  }
+  lh.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.client.LedgerRecoveryTest </h4><pre class="type-2 type-6 type-8 type-3 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify that it doesn't break the recovery when changing ensemble in
+ * recovery add.
+ */
+@Test(timeout=60000) public void testEnsembleChangeDuringRecovery() throws Exception {
+  LedgerHandle lh=bkc.createLedger(numBookies,2,2,digestType,"".getBytes());
+  int numEntries=(numBookies * 3) + 1;
+  final AtomicInteger numPendingAdds=new AtomicInteger(numEntries);
+  final CountDownLatch addDone=new CountDownLatch(1);
+  for (int i=0; i < numEntries; i++) {
+    lh.asyncAddEntry("data".getBytes(),new AddCallback(){
+      @Override public void addComplete(      int rc,      LedgerHandle lh,      long entryId,      Object ctx){
+        if (BKException.Code.OK != rc) {
+          addDone.countDown();
+          return;
+        }
+        if (numPendingAdds.decrementAndGet() == 0) {
+          addDone.countDown();
+        }
+      }
+    }
+,null);
+  }
+  addDone.await(10,TimeUnit.SECONDS);
+  if (numPendingAdds.get() > 0) {
+    fail("Failed to add " + numEntries + " to ledger handle "+ lh.getId());
+  }
+  BookieSocketAddress bookie1=lh.getLedgerMetadata().currentEnsemble.get(0);
+  ServerConfiguration conf1=killBookie(bookie1);
+  BookieSocketAddress bookie2=lh.getLedgerMetadata().currentEnsemble.get(1);
+  ServerConfiguration conf2=killBookie(bookie2);
+  startDeadBookie(conf1);
+  startDeadBookie(conf2);
+  startNewBookie();
+  startNewBookie();
+  LedgerHandle recoveredLh=bkc.openLedger(lh.getId(),digestType,"".getBytes());
+  assertEquals("Fenced ledger should have correct lastAddConfirmed",lh.getLastAddConfirmed(),recoveredLh.getLastAddConfirmed());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.client.TestLedgerFragmentReplication </h4><pre class="type-6 type-8 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests that fragment re-replication fails on last unclosed ledger
+ * fragments.
+ */
+@Test(timeout=60000) public void testReplicateLFFailsOnlyOnLastUnClosedFragments() throws Exception {
+  byte[] data="TestLedgerFragmentReplication".getBytes();
+  LedgerHandle lh=bkc.createLedger(3,3,TEST_DIGEST_TYPE,TEST_PSSWD);
+  for (int i=0; i < 10; i++) {
+    lh.addEntry(data);
+  }
+  BookieSocketAddress replicaToKill=lh.getLedgerMetadata().getEnsembles().get(0L).get(0);
+  startNewBookie();
+  LOG.info("Killing Bookie",replicaToKill);
+  killBookie(replicaToKill);
+  for (int i=0; i < 10; i++) {
+    lh.addEntry(data);
+  }
+  BookieSocketAddress replicaToKill2=lh.getLedgerMetadata().getEnsembles().get(0L).get(1);
+  int startNewBookie2=startNewBookie();
+  LOG.info("Killing Bookie",replicaToKill2);
+  killBookie(replicaToKill2);
+  BookieSocketAddress newBkAddr=new BookieSocketAddress(InetAddress.getLocalHost().getHostAddress(),startNewBookie2);
+  LOG.info("New Bookie addr :" + newBkAddr);
+  Set<LedgerFragment> result=getFragmentsToReplicate(lh);
+  BookKeeperAdmin admin=new BookKeeperAdmin(baseClientConf);
+  int unclosedCount=0;
+  for (  LedgerFragment lf : result) {
+    if (lf.isClosed()) {
+      admin.replicateLedgerFragment(lh,lf,newBkAddr);
+    }
+ else {
+      unclosedCount++;
+      try {
+        admin.replicateLedgerFragment(lh,lf,newBkAddr);
+        fail("Shouldn't be able to rereplicate unclosed ledger");
+      }
+ catch (      BKException bke) {
+      }
+    }
+  }
+  assertEquals("Should be only one unclosed fragment",1,unclosedCount);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.client.TestSpeculativeRead </h4><pre class="type-2 type-6 type-3 type-4 type-7 type-13 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Unit test for the speculative read scheduling method
+ */
+@Test(timeout=60000) public void testSpeculativeReadScheduling() throws Exception {
+  long id=getLedgerToRead(3,2);
+  int timeout=1000;
+  BookKeeper bkspec=createClient(timeout);
+  LedgerHandle l=bkspec.openLedger(id,digestType,passwd);
+  ArrayList<BookieSocketAddress> ensemble=l.getLedgerMetadata().getEnsembles().get(0L);
+  Set<BookieSocketAddress> allHosts=new HashSet<BookieSocketAddress>(ensemble);
+  Set<BookieSocketAddress> noHost=new HashSet<BookieSocketAddress>();
+  Set<BookieSocketAddress> secondHostOnly=new HashSet<BookieSocketAddress>();
+  secondHostOnly.add(ensemble.get(1));
+  PendingReadOp.LedgerEntryRequest req0=null, req2=null, req4=null;
+  try {
+    LatchCallback latch0=new LatchCallback();
+    PendingReadOp op=new PendingReadOp(l,bkspec.scheduler,0,5,latch0,null);
+    req0=op.new LedgerEntryRequest(ensemble,l.getId(),0);
+    assertTrue("Should have sent to first",req0.maybeSendSpeculativeRead(allHosts).equals(ensemble.get(0)));
+    assertNull("Should not have sent another",req0.maybeSendSpeculativeRead(allHosts));
+    req2=op.new LedgerEntryRequest(ensemble,l.getId(),2);
+    assertTrue("Should have sent to third",req2.maybeSendSpeculativeRead(noHost).equals(ensemble.get(2)));
+    assertTrue("Should have sent to first",req2.maybeSendSpeculativeRead(secondHostOnly).equals(ensemble.get(0)));
+    req4=op.new LedgerEntryRequest(ensemble,l.getId(),4);
+    assertTrue("Should have sent to second",req4.maybeSendSpeculativeRead(noHost).equals(ensemble.get(1)));
+    assertNull("Should not have sent another",req4.maybeSendSpeculativeRead(secondHostOnly));
+  }
+  finally {
+    for (    PendingReadOp.LedgerEntryRequest req : new PendingReadOp.LedgerEntryRequest[]{req0,req2,req4}) {
+      if (req != null) {
+        int i=0;
+        while (!req.isComplete()) {
+          if (i++ > 10) {
+            break;
+          }
+          Thread.sleep(1000);
+        }
+        assertTrue("Request should be done",req0.isComplete());
+      }
+    }
+    l.close();
+    bkspec.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.replication.BookieAutoRecoveryTest </h4><pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that if a empty ledger loses the bookie not in the quorum for entry 0, it will
+ * still be openable when it loses enough bookies to lose a whole quorum.
+ */
+@Test(timeout=10000) public void testEmptyLedgerLosesQuorumEventually() throws Exception {
+  LedgerHandle lh=bkc.createLedger(3,2,2,DigestType.CRC32,PASSWD);
+  CountDownLatch latch=new CountDownLatch(1);
+  String urZNode=getUrLedgerZNode(lh);
+  watchUrLedgerNode(urZNode,latch);
+  BookieSocketAddress replicaToKill=LedgerHandleAdapter.getLedgerMetadata(lh).getEnsembles().get(0L).get(2);
+  LOG.info("Killing last bookie, {}, in ensemble {}",replicaToKill,LedgerHandleAdapter.getLedgerMetadata(lh).getEnsembles().get(0L));
+  killBookie(replicaToKill);
+  getAuditor(10,TimeUnit.SECONDS).submitAuditTask().get();
+  assertTrue("Should be marked as underreplicated",latch.await(5,TimeUnit.SECONDS));
+  latch=new CountDownLatch(1);
+  Stat s=watchUrLedgerNode(urZNode,latch);
+  if (s != null) {
+    assertTrue("Should be marked as replicated",latch.await(10,TimeUnit.SECONDS));
+  }
+  replicaToKill=LedgerHandleAdapter.getLedgerMetadata(lh).getEnsembles().get(0L).get(1);
+  LOG.info("Killing second bookie, {}, in ensemble {}",replicaToKill,LedgerHandleAdapter.getLedgerMetadata(lh).getEnsembles().get(0L));
+  killBookie(replicaToKill);
+  getAuditor(10,TimeUnit.SECONDS).submitAuditTask().get();
+  assertTrue("Should be marked as underreplicated",latch.await(5,TimeUnit.SECONDS));
+  latch=new CountDownLatch(1);
+  s=watchUrLedgerNode(urZNode,latch);
+  if (s != null) {
+    assertTrue("Should be marked as replicated",latch.await(5,TimeUnit.SECONDS));
+  }
+  bkc.openLedger(lh.getId(),DigestType.CRC32,PASSWD);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.bookkeeper.test.BookieZKExpireTest </h4><pre class="type-2 type-11 type-6 type-8 type-3 type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@SuppressWarnings("deprecation") @Test(timeout=60000) public void testBookieServerZKExpireBehaviour() throws Exception {
+  BookieServer server=null;
+  try {
+    File f=createTempDir("bookieserver","test");
+    HashSet<Thread> threadset=new HashSet<Thread>();
+    int threadCount=Thread.activeCount();
+    Thread threads[]=new Thread[threadCount * 2];
+    threadCount=Thread.enumerate(threads);
+    for (int i=0; i < threadCount; i++) {
+      if (threads[i].getName().indexOf("SendThread") != -1) {
+        threadset.add(threads[i]);
+      }
+    }
+    ServerConfiguration conf=newServerConfiguration(PortManager.nextFreePort(),zkUtil.getZooKeeperConnectString(),f,new File[]{f});
+    server=new BookieServer(conf);
+    server.start();
+    int secondsToWait=5;
+    while (!server.isRunning()) {
+      Thread.sleep(1000);
+      if (secondsToWait-- <= 0) {
+        fail("Bookie never started");
+      }
+    }
+    Thread sendthread=null;
+    threadCount=Thread.activeCount();
+    threads=new Thread[threadCount * 2];
+    threadCount=Thread.enumerate(threads);
+    for (int i=0; i < threadCount; i++) {
+      if (threads[i].getName().indexOf("SendThread") != -1 && !threadset.contains(threads[i])) {
+        sendthread=threads[i];
+        break;
+      }
+    }
+    assertNotNull("Send thread not found",sendthread);
+    sendthread.suspend();
+    Thread.sleep(2 * conf.getZkTimeout());
+    sendthread.resume();
+    Thread.sleep(3000);
+    assertTrue("Bookie should not shutdown on losing zk session",server.isBookieRunning());
+    assertTrue("Bookie Server should not shutdown on losing zk session",server.isRunning());
+  }
+  finally {
+    server.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hedwig.server.persistence.TestBookKeeperPersistenceManager </h4><pre class="type-6 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=60000) public void testScanMessagesOnTwoLedgers() throws Exception {
+  stopCluster();
+  startCluster(readDelay);
+  ByteString topic=ByteString.copyFromUtf8("TestScanMessagesOnTwoLedgers");
+  List<Message> msgs=new ArrayList<Message>();
+  acquireTopic(topic);
+  msgs.addAll(publishMessages(topic,1));
+  releaseTopic(topic);
+  acquireTopic(topic);
+  msgs.addAll(publishMessages(topic,3));
+  LinkedBlockingQueue<Boolean> statusQueue=new LinkedBlockingQueue<Boolean>();
+  RangeScanRequest nextScan=new RangeScanRequest(topic,3,2,Long.MAX_VALUE,new RangeScanVerifier(subMessages(msgs,2,3),null),statusQueue);
+  manager.scanMessages(new RangeScanRequest(topic,1,2,Long.MAX_VALUE,new RangeScanVerifier(subMessages(msgs,0,1),nextScan),statusQueue));
+  Boolean b=statusQueue.poll(10 * readDelay,TimeUnit.MILLISECONDS);
+  if (b == null) {
+    fail("One scan request doesn't finish");
+  }
+  b=statusQueue.poll(10 * readDelay,TimeUnit.MILLISECONDS);
+  if (b == null) {
+    fail("One scan request doesn't finish");
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-6 type-8 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReadWhenTopicChangeLedger() throws Exception {
+  final ByteString topic=ByteString.copyFromUtf8("testReadWhenTopicChangeLedger");
+  LinkedList<Message> msgs=new LinkedList<Message>();
+  acquireTopic(topic);
+  msgs.addAll(publishMessages(topic,maxEntriesPerLedger));
+  Thread.sleep(2000);
+  LinkedBlockingQueue<Boolean> statusQueue=new LinkedBlockingQueue<Boolean>();
+  RangeScanRequest scan=new RangeScanRequest(topic,maxEntriesPerLedger + 1,1,Long.MAX_VALUE,new RangeScanVerifier(msgs,null),statusQueue);
+  manager.scanMessages(scan);
+  Boolean b=statusQueue.poll(10 * readDelay,TimeUnit.MILLISECONDS);
+  if (b == null) {
+    fail("Scan request timeout");
+  }
+  assertFalse("Expect none message is scanned on the new created ledger",b);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hedwig.server.persistence.TestBookkeeperPersistenceManagerWhiteBox </h4><pre class="type-2 type-11 type-6 type-3 type-4 type-7 type-9 type-13 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testSyncChangeLedgers() throws Exception {
+  int NUM_MESSAGES_TO_TEST=101;
+  int SIZE_OF_MESSAGES_TO_TEST=100;
+  int index=0;
+  List<Message> messages=HelperMethods.getRandomPublishedMessages(NUM_MESSAGES_TO_TEST,SIZE_OF_MESSAGES_TO_TEST);
+  bkpm=new BookkeeperPersistenceManager(bktb.bk,mm,tm,new ChangeLedgerServerConfiguration(),scheduler);
+  StubCallback<Void> stubCallback=new StubCallback<Void>();
+  bkpm.acquiredTopic(topic,stubCallback,null);
+  assertNull(ConcurrencyUtils.take(stubCallback.queue).right());
+  assertEquals(0,bkpm.topicInfos.get(topic).ledgerRanges.size());
+  while (index < messages.size()) {
+    logger.debug("Persist message {}",(index + 1));
+    StubCallback<MessageSeqId> persistCallback=new StubCallback<MessageSeqId>();
+    bkpm.persistMessage(new PersistRequest(topic,messages.get(index),persistCallback,null));
+    assertEquals(index + 1,ConcurrencyUtils.take(persistCallback.queue).left().getLocalComponent());
+    index++;
+    if (index % maxEntriesPerLedger == 1) {
+      assertEquals(index / maxEntriesPerLedger,bkpm.topicInfos.get(topic).ledgerRanges.size());
+    }
+  }
+  assertEquals(NUM_MESSAGES_TO_TEST / maxEntriesPerLedger,bkpm.topicInfos.get(topic).ledgerRanges.size());
+  StubScanCallback scanCallback=new StubScanCallback();
+  bkpm.scanMessages(new RangeScanRequest(topic,1,NUM_MESSAGES_TO_TEST,Long.MAX_VALUE,scanCallback,null));
+  for (int i=0; i < messages.size(); i++) {
+    Message scannedMessage=ConcurrencyUtils.take(scanCallback.queue).left();
+    assertTrue(messages.get(i).getBody().equals(scannedMessage.getBody()));
+    assertEquals(i + 1,scannedMessage.getMsgId().getLocalComponent());
+  }
+  assertTrue(StubScanCallback.END_MESSAGE == ConcurrencyUtils.take(scanCallback.queue).left());
+  bkpm.topicInfos.clear();
+  stubCallback=new StubCallback<Void>();
+  bkpm.acquiredTopic(topic,stubCallback,null);
+  assertNull(ConcurrencyUtils.take(stubCallback.queue).right());
+  assertEquals(NUM_MESSAGES_TO_TEST / maxEntriesPerLedger + 1,bkpm.topicInfos.get(topic).ledgerRanges.size());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hedwig.server.topics.TestMMTopicManager </h4><pre class="type-11 type-6 type-8 type-3 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testGetOwnerMulti() throws Exception {
+  ServerConfiguration conf1=new CustomServerConfiguration(conf.getServerPort() + 1), conf2=new CustomServerConfiguration(conf.getServerPort() + 2);
+  MMTopicManager tm1=new MMTopicManager(conf1,zk,metadataManagerFactory,scheduler), tm2=new MMTopicManager(conf2,zk,metadataManagerFactory,scheduler);
+  tm.getOwner(topic,false,addrCbq,null);
+  HedwigSocketAddress owner=check(addrCbq.take());
+  for (int i=0; i < 100; ++i) {
+    tm.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+    tm1.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+    tm2.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+  }
+  for (int i=0; i < 100; ++i) {
+    if (!owner.equals(me))     break;
+    tm.getOwner(mkTopic(i),false,addrCbq,null);
+    owner=check(addrCbq.take());
+    if (i == 99)     Assert.fail("Never chose another owner");
+  }
+  tm1.stop();
+  tm2.stop();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hedwig.server.topics.TestZkTopicManager </h4><pre class="type-11 type-6 type-8 type-3 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testGetOwnerMulti() throws Exception {
+  ServerConfiguration cfg1=new CustomServerConfiguration(cfg.getServerPort() + 1), cfg2=new CustomServerConfiguration(cfg.getServerPort() + 2);
+  ZkTopicManager tm1=new ZkTopicManager(zk,cfg1,scheduler), tm2=new ZkTopicManager(zk,cfg2,scheduler);
+  tm.getOwner(topic,false,addrCbq,null);
+  HedwigSocketAddress owner=check(addrCbq.take());
+  if (owner.getPort() == cfg1.getServerPort())   tm1.getOwner(topic,true,addrCbq,null);
+ else   if (owner.getPort() == cfg2.getServerPort())   tm2.getOwner(topic,true,addrCbq,null);
+  if (owner.getPort() != cfg.getServerPort())   Assert.assertEquals(owner,check(addrCbq.take()));
+  for (int i=0; i < 100; ++i) {
+    tm.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+    tm1.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+    tm2.getOwner(topic,false,addrCbq,null);
+    Assert.assertEquals(owner,check(addrCbq.take()));
+  }
+  for (int i=0; i < 100; ++i) {
+    if (!owner.equals(me))     break;
+    tm.getOwner(mkTopic(i),false,addrCbq,null);
+    owner=check(addrCbq.take());
+    if (i == 99)     Assert.fail("Never chose another owner");
+  }
+  for (int i=0; i < 100; ++i) {
+    tm.getOwner(mkTopic(100),true,addrCbq,null);
+    Assert.assertEquals(me,check(addrCbq.take()));
+  }
+  tm1.stop();
+  tm2.stop();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

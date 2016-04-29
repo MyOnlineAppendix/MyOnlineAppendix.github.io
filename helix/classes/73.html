@@ -1,0 +1,182 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestFullAutoNodeTagging (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testUntag() throws Exception {
+  final int NUM_PARTICIPANTS=2;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=1;
+  final String RESOURCE_NAME="TestResource0";
+  final String TAG="ASSIGNABLE";
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  final String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestResource",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"OnlineOffline",RebalanceMode.FULL_AUTO,true);
+  final HelixAdmin helixAdmin=new ZKHelixAdmin(_zkclient);
+  IdealState idealState=helixAdmin.getResourceIdealState(clusterName,RESOURCE_NAME);
+  idealState.setInstanceGroupTag(TAG);
+  helixAdmin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  final HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  final PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    helixAdmin.addInstanceTag(clusterName,instanceName,TAG);
+  }
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+  }
+  Verifier v=new Verifier(){
+    @Override public boolean verify() throws Exception {
+      ExternalView externalView=HelixTestUtil.pollForProperty(ExternalView.class,accessor,keyBuilder.externalView(RESOURCE_NAME),true);
+      if (externalView == null) {
+        return false;
+      }
+      Set<String> taggedInstances=Sets.newHashSet(helixAdmin.getInstancesInClusterWithTag(clusterName,TAG));
+      Set<String> partitionSet=externalView.getPartitionSet();
+      if (partitionSet.size() != NUM_PARTITIONS) {
+        return false;
+      }
+      for (      String partitionName : partitionSet) {
+        Map<String,String> stateMap=externalView.getStateMap(partitionName);
+        if (stateMap.size() != NUM_REPLICAS) {
+          return false;
+        }
+        for (        String participantName : stateMap.keySet()) {
+          if (!taggedInstances.contains(participantName)) {
+            return false;
+          }
+          String state=stateMap.get(participantName);
+          if (!state.equalsIgnoreCase("ONLINE")) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+  }
+;
+  boolean initialResult=TestHelper.verify(v,10 * 1000);
+  Assert.assertTrue(initialResult);
+  helixAdmin.removeInstanceTag(clusterName,"localhost_12918",TAG);
+  boolean finalResult=TestHelper.verify(v,10 * 1000);
+  Assert.assertTrue(finalResult);
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Ensure that no assignments happen when there are no tagged nodes, but the resource is tagged
+ */
+@Test public void testResourceTaggedFirst() throws Exception {
+  final int NUM_PARTICIPANTS=10;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=2;
+  final String RESOURCE_NAME="TestDB0";
+  final String TAG="ASSIGNABLE";
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"MasterSlave",RebalanceMode.FULL_AUTO,true);
+  HelixAdmin helixAdmin=new ZKHelixAdmin(_zkaddr);
+  IdealState idealState=helixAdmin.getResourceIdealState(clusterName,RESOURCE_NAME);
+  idealState.setInstanceGroupTag(TAG);
+  helixAdmin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+  }
+  Thread.sleep(1000);
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new HelixTestUtil.EmptyZkVerifier(clusterName,RESOURCE_NAME,_zkclient));
+  Assert.assertTrue(result,"External view and current state must be empty");
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    participants[i].syncStop();
+  }
+  controller.syncStop();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-14 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Basic test for tagging behavior. 10 participants, of which 4 are tagged. Launch all 10,
+ * checking external view every time a tagged node is started. Then shut down all 10, checking
+ * external view every time a tagged node is killed.
+ */
+@Test public void testSafeAssignment() throws Exception {
+  final int NUM_PARTICIPANTS=10;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=2;
+  final String RESOURCE_NAME="TestDB0";
+  final String TAG="ASSIGNABLE";
+  final String[] TAGGED_NODES={"localhost_12920","localhost_12922","localhost_12924","localhost_12925"};
+  Set<String> taggedNodes=Sets.newHashSet(TAGGED_NODES);
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"MasterSlave",RebalanceMode.FULL_AUTO,true);
+  HelixAdmin helixAdmin=new ZKHelixAdmin(_zkaddr);
+  for (  String taggedNode : TAGGED_NODES) {
+    helixAdmin.addInstanceTag(clusterName,taggedNode,TAG);
+  }
+  IdealState idealState=helixAdmin.getResourceIdealState(clusterName,RESOURCE_NAME);
+  idealState.setInstanceGroupTag(TAG);
+  helixAdmin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+    if (taggedNodes.contains(instanceName)) {
+      Thread.sleep(500);
+      boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+      Assert.assertTrue(result);
+      result=ClusterStateVerifier.verifyByZkCallback(new TaggedZkVerifier(clusterName,RESOURCE_NAME,TAGGED_NODES,false));
+      Assert.assertTrue(result,"initial assignment with all tagged nodes live is invalid");
+    }
+  }
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    String participantName=participants[i].getInstanceName();
+    participants[i].syncStop();
+    if (taggedNodes.contains(participantName)) {
+      taggedNodes.remove(participantName);
+      Thread.sleep(500);
+      boolean result=ClusterStateVerifier.verifyByZkCallback(new TaggedZkVerifier(clusterName,RESOURCE_NAME,TAGGED_NODES,taggedNodes.isEmpty()));
+      Assert.assertTrue(result,"incorrect state after removing " + participantName + ", "+ taggedNodes+ " remain");
+    }
+  }
+  controller.syncStop();
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

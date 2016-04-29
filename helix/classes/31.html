@@ -1,0 +1,225 @@
+<h3 style="margin:0px">Class: org.apache.helix.controller.stages.TestRebalancePipeline (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDuplicateMsg(){
+  String clusterName=TestUtil.getTestName();
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupEmptyCluster(_zkclient,clusterName);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  HelixManager manager=new DummyClusterManager(clusterName,accessor);
+  ClusterEvent event=new ClusterEvent("testEvent");
+  event.addAttribute("helixmanager",manager);
+  final String resourceName="testResource_dup";
+  String[] resourceGroups=new String[]{resourceName};
+  HelixTestUtil.setupIdealState(_baseAccessor,clusterName,new int[]{0,1},resourceGroups,1,2);
+  HelixTestUtil.setupInstances(_baseAccessor,clusterName,new int[]{0,1});
+  HelixTestUtil.setupLiveInstances(_baseAccessor,clusterName,new int[]{0,1});
+  HelixTestUtil.setupStateModel(_baseAccessor,clusterName);
+  Pipeline dataRefresh=new Pipeline();
+  dataRefresh.addStage(new ReadClusterDataStage());
+  Pipeline rebalancePipeline=new Pipeline();
+  rebalancePipeline.addStage(new ResourceComputationStage());
+  rebalancePipeline.addStage(new CurrentStateComputationStage());
+  rebalancePipeline.addStage(new BestPossibleStateCalcStage());
+  rebalancePipeline.addStage(new MessageGenerationStage());
+  rebalancePipeline.addStage(new MessageSelectionStage());
+  rebalancePipeline.addStage(new MessageThrottleStage());
+  rebalancePipeline.addStage(new TaskAssignmentStage());
+  setCurrentState(clusterName,"localhost_0",resourceName,resourceName + "_0","session_0","OFFLINE");
+  setCurrentState(clusterName,"localhost_1",resourceName,resourceName + "_0","session_1","SLAVE");
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  MessageOutput msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  List<Message> messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),1,"Should output 1 message: OFFLINE-SLAVE for node0");
+  Message message=messages.get(0);
+  Assert.assertEquals(message.getTypedFromState().toString(),"OFFLINE");
+  Assert.assertEquals(message.getTypedToState().toString(),"SLAVE");
+  Assert.assertEquals(message.getTgtName(),"localhost_0");
+  setCurrentState(clusterName,"localhost_0",resourceName,resourceName + "_0","session_1","SLAVE");
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),0,"Should NOT output 1 message: SLAVE-MASTER for node1");
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMasterXfer(){
+  String clusterName=TestUtil.getTestName();
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupEmptyCluster(_zkclient,clusterName);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  HelixManager manager=new DummyClusterManager(clusterName,accessor);
+  ClusterEvent event=new ClusterEvent("testEvent");
+  event.addAttribute("helixmanager",manager);
+  final String resourceName="testResource_xfer";
+  String[] resourceGroups=new String[]{resourceName};
+  HelixTestUtil.setupIdealState(_baseAccessor,clusterName,new int[]{0,1},resourceGroups,1,2);
+  HelixTestUtil.setupInstances(_baseAccessor,clusterName,new int[]{1});
+  HelixTestUtil.setupLiveInstances(_baseAccessor,clusterName,new int[]{1});
+  HelixTestUtil.setupStateModel(_baseAccessor,clusterName);
+  Pipeline dataRefresh=new Pipeline();
+  dataRefresh.addStage(new ReadClusterDataStage());
+  Pipeline rebalancePipeline=new Pipeline();
+  rebalancePipeline.addStage(new ResourceComputationStage());
+  rebalancePipeline.addStage(new CurrentStateComputationStage());
+  rebalancePipeline.addStage(new BestPossibleStateCalcStage());
+  rebalancePipeline.addStage(new MessageGenerationStage());
+  rebalancePipeline.addStage(new MessageSelectionStage());
+  rebalancePipeline.addStage(new MessageThrottleStage());
+  rebalancePipeline.addStage(new TaskAssignmentStage());
+  setCurrentState(clusterName,"localhost_1",resourceName,resourceName + "_0","session_1","SLAVE");
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  MessageOutput msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  List<Message> messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),1,"Should output 1 message: SLAVE-MASTER for node1");
+  Message message=messages.get(0);
+  Assert.assertEquals(message.getTypedFromState().toString(),"SLAVE");
+  Assert.assertEquals(message.getTypedToState().toString(),"MASTER");
+  Assert.assertEquals(message.getTgtName(),"localhost_1");
+  HelixTestUtil.setupInstances(_baseAccessor,clusterName,new int[]{0});
+  HelixTestUtil.setupLiveInstances(_baseAccessor,clusterName,new int[]{0});
+  setCurrentState(clusterName,"localhost_0",resourceName,resourceName + "_0","session_0","SLAVE");
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),0,"Should NOT output 1 message: SLAVE-MASTER for node0");
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testChangeIdealStateWithPendingMsg(){
+  String clusterName=TestUtil.getTestName();
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupEmptyCluster(_zkclient,clusterName);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  HelixManager manager=new DummyClusterManager(clusterName,accessor);
+  ClusterEvent event=new ClusterEvent("testEvent");
+  event.addAttribute("helixmanager",manager);
+  ClusterDataCache cache=new ClusterDataCache();
+  event.addAttribute("ClusterDataCache",cache);
+  final String resourceName="testResource_pending";
+  String[] resourceGroups=new String[]{resourceName};
+  HelixTestUtil.setupIdealState(_baseAccessor,clusterName,new int[]{0,1},resourceGroups,1,2);
+  HelixTestUtil.setupInstances(_baseAccessor,clusterName,new int[]{0,1});
+  HelixTestUtil.setupLiveInstances(_baseAccessor,clusterName,new int[]{0,1});
+  HelixTestUtil.setupStateModel(_baseAccessor,clusterName);
+  Pipeline dataRefresh=new Pipeline();
+  dataRefresh.addStage(new ReadClusterDataStage());
+  Pipeline rebalancePipeline=new Pipeline();
+  rebalancePipeline.addStage(new ResourceComputationStage());
+  rebalancePipeline.addStage(new CurrentStateComputationStage());
+  rebalancePipeline.addStage(new BestPossibleStateCalcStage());
+  rebalancePipeline.addStage(new MessageGenerationStage());
+  rebalancePipeline.addStage(new MessageSelectionStage());
+  rebalancePipeline.addStage(new MessageThrottleStage());
+  rebalancePipeline.addStage(new TaskAssignmentStage());
+  setCurrentState(clusterName,"localhost_0",resourceName,resourceName + "_0","session_0","OFFLINE");
+  setCurrentState(clusterName,"localhost_1",resourceName,resourceName + "_0","session_1","SLAVE");
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  MessageOutput msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  List<Message> messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),1,"Should output 1 message: OFFLINE-SLAVE for node0");
+  Message message=messages.get(0);
+  Assert.assertEquals(message.getTypedFromState().toString(),"OFFLINE");
+  Assert.assertEquals(message.getTypedToState().toString(),"SLAVE");
+  Assert.assertEquals(message.getTgtName(),"localhost_0");
+  HelixAdmin admin=new ZKHelixAdmin(_zkclient);
+  admin.dropResource(clusterName,resourceName);
+  List<IdealState> idealStates=accessor.getChildValues(accessor.keyBuilder().idealStates());
+  cache.setIdealStates(idealStates);
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),1,"Should output only 1 message: OFFLINE->DROPPED for localhost_1");
+  message=messages.get(0);
+  Assert.assertEquals(message.getTypedFromState().toString(),"SLAVE");
+  Assert.assertEquals(message.getTypedToState().toString(),"OFFLINE");
+  Assert.assertEquals(message.getTgtName(),"localhost_1");
+  Builder keyBuilder=accessor.keyBuilder();
+  List<String> msgIds=accessor.getChildNames(keyBuilder.messages("localhost_0"));
+  accessor.removeProperty(keyBuilder.message("localhost_0",msgIds.get(0)));
+  HelixTestUtil.runPipeline(event,dataRefresh);
+  HelixTestUtil.runPipeline(event,rebalancePipeline);
+  msgSelOutput=event.getAttribute(AttributeName.MESSAGES_SELECTED.toString());
+  messages=msgSelOutput.getMessages(ResourceId.from(resourceName),PartitionId.from(resourceName + "_0"));
+  Assert.assertEquals(messages.size(),1,"Should output 1 message: OFFLINE->DROPPED for localhost_0");
+  message=messages.get(0);
+  Assert.assertEquals(message.getTypedFromState().toString(),"OFFLINE");
+  Assert.assertEquals(message.getTypedToState().toString(),"DROPPED");
+  Assert.assertEquals(message.getTgtName(),"localhost_0");
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMsgTriggeredRebalance() throws Exception {
+  String clusterName=TestUtil.getTestName();
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupEmptyCluster(_zkclient,clusterName);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  final String resourceName="testResource_dup";
+  String[] resourceGroups=new String[]{resourceName};
+  HelixTestUtil.setupIdealState(_baseAccessor,clusterName,new int[]{0,1},resourceGroups,1,2);
+  HelixTestUtil.setupStateModel(_baseAccessor,clusterName);
+  HelixTestUtil.setupInstances(_baseAccessor,clusterName,new int[]{0,1});
+  HelixTestUtil.setupLiveInstances(_baseAccessor,clusterName,new int[]{0,1});
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_0");
+  controller.syncStart();
+  Thread.sleep(1000);
+  Builder keyBuilder=accessor.keyBuilder();
+  List<String> messages=accessor.getChildNames(keyBuilder.messages("localhost_0"));
+  Assert.assertEquals(messages.size(),1);
+  messages=accessor.getChildNames(keyBuilder.messages("localhost_1"));
+  Assert.assertEquals(messages.size(),1);
+  setCurrentState(clusterName,"localhost_0",resourceName,resourceName + "_0","session_0","SLAVE");
+  setCurrentState(clusterName,"localhost_1",resourceName,resourceName + "_0","session_1","SLAVE");
+  Thread.sleep(1000);
+  messages=accessor.getChildNames(keyBuilder.messages("localhost_0"));
+  Assert.assertEquals(messages.size(),1);
+  messages=accessor.getChildNames(keyBuilder.messages("localhost_1"));
+  Assert.assertEquals(messages.size(),1);
+  messages=accessor.getChildNames(keyBuilder.messages("localhost_0"));
+  accessor.removeProperty(keyBuilder.message("localhost_0",messages.get(0)));
+  Thread.sleep(1000);
+  messages=accessor.getChildNames(keyBuilder.messages("localhost_0"));
+  Assert.assertEquals(messages.size(),1);
+  ZNRecord msg=accessor.getProperty(keyBuilder.message("localhost_0",messages.get(0))).getRecord();
+  String toState=msg.getSimpleField(Attributes.TO_STATE.toString());
+  Assert.assertEquals(toState,"MASTER");
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

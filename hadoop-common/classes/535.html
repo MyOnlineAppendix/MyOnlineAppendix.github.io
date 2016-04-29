@@ -1,0 +1,80 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestParallelImageWrite (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * check if DFS remains in proper condition after a restart 
+ */
+@Test public void testRestartDFS() throws Exception {
+  final Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FSNamesystem fsn=null;
+  int numNamenodeDirs;
+  DFSTestUtil files=new DFSTestUtil.Builder().setName("TestRestartDFS").setNumFiles(200).build();
+  final String dir="/srcdat";
+  final Path rootpath=new Path("/");
+  final Path dirpath=new Path(dir);
+  long rootmtime;
+  FileStatus rootstatus;
+  FileStatus dirstatus;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).format(true).numDataNodes(NUM_DATANODES).build();
+    String[] nameNodeDirs=conf.getStrings(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,new String[]{});
+    numNamenodeDirs=nameNodeDirs.length;
+    assertTrue("failed to get number of Namenode StorageDirs",numNamenodeDirs != 0);
+    FileSystem fs=cluster.getFileSystem();
+    files.createFiles(fs,dir);
+    rootmtime=fs.getFileStatus(rootpath).getModificationTime();
+    rootstatus=fs.getFileStatus(dirpath);
+    dirstatus=fs.getFileStatus(dirpath);
+    fs.setOwner(rootpath,rootstatus.getOwner() + "_XXX",null);
+    fs.setOwner(dirpath,null,dirstatus.getGroup() + "_XXX");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+  try {
+    conf.setInt(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_TXNS_KEY,1);
+    cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(NUM_DATANODES).build();
+    fsn=cluster.getNamesystem();
+    FileSystem fs=cluster.getFileSystem();
+    assertTrue("Filesystem corrupted after restart.",files.checkFiles(fs,dir));
+    final FileStatus newrootstatus=fs.getFileStatus(rootpath);
+    assertEquals(rootmtime,newrootstatus.getModificationTime());
+    assertEquals(rootstatus.getOwner() + "_XXX",newrootstatus.getOwner());
+    assertEquals(rootstatus.getGroup(),newrootstatus.getGroup());
+    final FileStatus newdirstatus=fs.getFileStatus(dirpath);
+    assertEquals(dirstatus.getOwner(),newdirstatus.getOwner());
+    assertEquals(dirstatus.getGroup() + "_XXX",newdirstatus.getGroup());
+    rootmtime=fs.getFileStatus(rootpath).getModificationTime();
+    final String checkAfterRestart=checkImages(fsn,numNamenodeDirs);
+    files.cleanup(fs,dir);
+    files.createFiles(fs,dir);
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    cluster.getNameNodeRpc().saveNamespace();
+    final String checkAfterModify=checkImages(fsn,numNamenodeDirs);
+    assertFalse("Modified namespace should change fsimage contents. " + "was: " + checkAfterRestart + " now: "+ checkAfterModify,checkAfterRestart.equals(checkAfterModify));
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+    files.cleanup(fs,dir);
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,594 @@
+<h3 style="margin:0px">Class: org.apache.helix.webapp.TestHelixAdminScenariosRest (12 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testStartCluster() throws Exception {
+  final String clusterName="clusterTestStartCluster";
+  final String controllerClusterName="controllerClusterTestStartCluster";
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  Map<String,MockMultiClusterController> multiClusterControllers=new HashMap<String,MockMultiClusterController>();
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",6,null);
+  addResource(clusterName,"db_11",8);
+  rebalanceResource(clusterName,"db_11");
+  addCluster(controllerClusterName);
+  addInstancesToCluster(controllerClusterName,"controller_900",2,null);
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  for (int i=0; i < 2; i++) {
+    String controllerName="controller_900" + i;
+    MockMultiClusterController multiClusterController=new MockMultiClusterController(_zkaddr,controllerClusterName,controllerName);
+    multiClusterController.syncStart();
+    multiClusterControllers.put(controllerName,multiClusterController);
+  }
+  Thread.sleep(100);
+  String clusterUrl=getClusterUrl(clusterName);
+  assertSuccessPostOperation(clusterUrl,activateClusterCmd("nonExistCluster",true),true);
+  clusterUrl=getClusterUrl("nonExistCluster");
+  assertSuccessPostOperation(clusterUrl,activateClusterCmd(controllerClusterName,true),true);
+  clusterUrl=getClusterUrl(clusterName);
+  assertSuccessPostOperation(clusterUrl,activateClusterCmd(controllerClusterName,true),false);
+  Thread.sleep(500);
+  deleteUrl(clusterUrl,true);
+  HelixDataAccessor accessor=multiClusterControllers.get("controller_9001").getHelixDataAccessor();
+  LiveInstance controllerLeader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  Assert.assertTrue(controllerLeader.getInstanceName().startsWith("controller_900"));
+  accessor=participants.get("localhost_1232").getHelixDataAccessor();
+  LiveInstance leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  for (int i=0; i < 5; i++) {
+    if (leader != null) {
+      break;
+    }
+    Thread.sleep(1000);
+    leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  }
+  Assert.assertTrue(leader.getInstanceName().startsWith("controller_900"));
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new MasterNbInExtViewVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  Thread.sleep(1000);
+  for (  MockMultiClusterController controller : multiClusterControllers.values()) {
+    controller.syncStop();
+  }
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testGetInstances() throws IOException {
+  final String clusterName="TestTagAwareness_testGetResources";
+  final String[] TAGS={"tag1","tag2"};
+  final String URL_BASE="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/instances";
+  _setupTool.addCluster(clusterName,true);
+  HelixAdmin admin=_setupTool.getClusterManagementTool();
+  InstanceConfig instance1=new InstanceConfig("localhost_1");
+  instance1.addTag(TAGS[0]);
+  admin.addInstance(clusterName,instance1);
+  InstanceConfig instance2=new InstanceConfig("localhost_2");
+  instance2.addTag(TAGS[1]);
+  admin.addInstance(clusterName,instance2);
+  InstanceConfig instance3=new InstanceConfig("localhost_3");
+  instance3.addTag(TAGS[0]);
+  instance3.addTag(TAGS[1]);
+  admin.addInstance(clusterName,instance3);
+  InstanceConfig instance4=new InstanceConfig("localhost_4");
+  admin.addInstance(clusterName,instance4);
+  Reference resourceRef=new Reference(URL_BASE);
+  Request request=new Request(Method.GET,resourceRef);
+  Response response=_gClient.handle(request);
+  ListInstancesWrapper responseWrapper=ClusterRepresentationUtil.JsonToObject(ListInstancesWrapper.class,response.getEntityAsText());
+  Map<String,List<String>> tagInfo=responseWrapper.tagInfo;
+  Assert.assertTrue(tagInfo.containsKey(TAGS[0]));
+  Assert.assertTrue(tagInfo.containsKey(TAGS[1]));
+  Assert.assertTrue(tagInfo.get(TAGS[0]).contains("localhost_1"));
+  Assert.assertFalse(tagInfo.get(TAGS[0]).contains("localhost_2"));
+  Assert.assertTrue(tagInfo.get(TAGS[0]).contains("localhost_3"));
+  Assert.assertFalse(tagInfo.get(TAGS[0]).contains("localhost_4"));
+  Assert.assertFalse(tagInfo.get(TAGS[1]).contains("localhost_1"));
+  Assert.assertTrue(tagInfo.get(TAGS[1]).contains("localhost_2"));
+  Assert.assertTrue(tagInfo.get(TAGS[1]).contains("localhost_3"));
+  Assert.assertFalse(tagInfo.get(TAGS[1]).contains("localhost_4"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAddCluster() throws Exception {
+  String url="http://localhost:" + ADMIN_PORT + "/clusters";
+  String response=assertSuccessPostOperation(url,addClusterCmd("clusterTest"),false);
+  Assert.assertTrue(response.contains("clusterTest"));
+  response=assertSuccessPostOperation(url,addClusterCmd("/ClusterTest"),true);
+  response=assertSuccessPostOperation(url,addClusterCmd("Klazt3rz"),false);
+  Assert.assertTrue(response.contains("Klazt3rz"));
+  response=assertSuccessPostOperation(url,addClusterCmd("\\ClusterTest"),false);
+  Assert.assertTrue(response.contains("\\ClusterTest"));
+  response=assertSuccessPostOperation(url,addClusterCmd("clusterTest"),true);
+  Assert.assertTrue(ZKUtil.isClusterSetup("Klazt3rz",_zkclient));
+  Assert.assertTrue(ZKUtil.isClusterSetup("clusterTest",_zkclient));
+  Assert.assertTrue(ZKUtil.isClusterSetup("\\ClusterTest",_zkclient));
+  String clusterUrl=getClusterUrl("\\ClusterTest");
+  deleteUrl(clusterUrl,false);
+  String clustersUrl="http://localhost:" + ADMIN_PORT + "/clusters";
+  response=getUrl(clustersUrl);
+  clusterUrl=getClusterUrl("clusterTest1");
+  deleteUrl(clusterUrl,false);
+  response=getUrl(clustersUrl);
+  Assert.assertFalse(response.contains("clusterTest1"));
+  clusterUrl=getClusterUrl("clusterTest");
+  deleteUrl(clusterUrl,false);
+  response=getUrl(clustersUrl);
+  Assert.assertFalse(response.contains("clusterTest"));
+  clusterUrl=getClusterUrl("clusterTestOK");
+  deleteUrl(clusterUrl,false);
+  Assert.assertFalse(_zkclient.exists("/clusterTest"));
+  Assert.assertFalse(_zkclient.exists("/clusterTest1"));
+  Assert.assertFalse(_zkclient.exists("/clusterTestOK"));
+  response=assertSuccessPostOperation(url,addClusterCmd("clusterTest1"),false);
+  response=getUrl(clustersUrl);
+  Assert.assertTrue(response.contains("clusterTest1"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testInstanceOperations() throws Exception {
+  final String clusterName="clusterTestInstanceOperations";
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",6,null);
+  addResource(clusterName,"db_11",8);
+  rebalanceResource(clusterName,"db_11");
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_9900");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  HelixDataAccessor accessor;
+  String instanceUrl=getInstanceUrl(clusterName,"localhost_1232");
+  deleteUrl(instanceUrl,true);
+  String response=assertSuccessPostOperation(instanceUrl,enableInstanceCmd(false),false);
+  Assert.assertTrue(response.contains("false"));
+  deleteUrl(instanceUrl,true);
+  String instancesUrl=getClusterUrl(clusterName) + "/instances";
+  response=assertSuccessPostOperation(instancesUrl,swapInstanceCmd("localhost_1232","localhost_12320"),true);
+  participants.get("localhost_1232").syncStop();
+  response=assertSuccessPostOperation(instancesUrl,addInstanceCmd("localhost_12320"),false);
+  Assert.assertTrue(response.contains("localhost_12320"));
+  response=assertSuccessPostOperation(instancesUrl,swapInstanceCmd("localhost_1232","localhost_12320"),false);
+  Assert.assertTrue(response.contains("localhost_12320"));
+  Assert.assertFalse(response.contains("localhost_1232\""));
+  accessor=participants.get("localhost_1231").getHelixDataAccessor();
+  String path=accessor.keyBuilder().instanceConfig("localhost_1232").getPath();
+  Assert.assertFalse(_zkclient.exists(path));
+  MockParticipant newParticipant=new MockParticipant(_zkaddr,clusterName,"localhost_12320");
+  newParticipant.syncStart();
+  participants.put("localhost_12320",newParticipant);
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new MasterNbInExtViewVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEnablePartitions() throws IOException, InterruptedException {
+  final String clusterName="clusterTestEnablePartitions";
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",6,null);
+  addResource(clusterName,"db_11",22);
+  rebalanceResource(clusterName,"db_11");
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_9900");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  HelixDataAccessor accessor=participants.get("localhost_1231").getHelixDataAccessor();
+  String hostName="localhost_1231";
+  String instanceUrl=getInstanceUrl(clusterName,hostName);
+  ExternalView ev=accessor.getProperty(accessor.keyBuilder().externalView("db_11"));
+  String response=assertSuccessPostOperation(instanceUrl,enablePartitionCmd("db_11","db_11_0;db_11_11",false),false);
+  Assert.assertTrue(response.contains("DISABLED_PARTITION"));
+  Assert.assertTrue(response.contains("db_11_0"));
+  Assert.assertTrue(response.contains("db_11_11"));
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  ev=accessor.getProperty(accessor.keyBuilder().externalView("db_11"));
+  Assert.assertEquals(ev.getStateMap("db_11_0").get(hostName),"OFFLINE");
+  Assert.assertEquals(ev.getStateMap("db_11_11").get(hostName),"OFFLINE");
+  response=assertSuccessPostOperation(instanceUrl,enablePartitionCmd("db_11","db_11_0;db_11_11",true),false);
+  Assert.assertFalse(response.contains("db_11_0"));
+  Assert.assertFalse(response.contains("db_11_11"));
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  ev=accessor.getProperty(accessor.keyBuilder().externalView("db_11"));
+  Assert.assertEquals(ev.getStateMap("db_11_0").get(hostName),"MASTER");
+  Assert.assertEquals(ev.getStateMap("db_11_11").get(hostName),"SLAVE");
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetResources() throws IOException {
+  final String clusterName="TestTagAwareness_testGetResources";
+  final String TAG="tag";
+  final String URL_BASE="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/resourceGroups";
+  _setupTool.addCluster(clusterName,true);
+  HelixAdmin admin=_setupTool.getClusterManagementTool();
+  IdealState taggedResource=new IdealState("taggedResource");
+  taggedResource.setInstanceGroupTag(TAG);
+  taggedResource.setStateModelDefRef("OnlineOffline");
+  admin.addResource(clusterName,taggedResource.getId(),taggedResource);
+  IdealState untaggedResource=new IdealState("untaggedResource");
+  untaggedResource.setStateModelDefRef("OnlineOffline");
+  admin.addResource(clusterName,untaggedResource.getId(),untaggedResource);
+  Reference resourceRef=new Reference(URL_BASE);
+  Request request=new Request(Method.GET,resourceRef);
+  Response response=_gClient.handle(request);
+  ZNRecord responseRecord=ClusterRepresentationUtil.JsonToObject(ZNRecord.class,response.getEntityAsText());
+  Assert.assertNotNull(responseRecord.getMapField("ResourceTags"));
+  Assert.assertEquals(TAG,responseRecord.getMapField("ResourceTags").get(taggedResource.getId()));
+  Assert.assertFalse(responseRecord.getMapField("ResourceTags").containsKey(untaggedResource.getId()));
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAddInstance() throws Exception {
+  final String clusterName="clusterTestAddInstance";
+  addCluster(clusterName);
+  String clusterUrl=getClusterUrl(clusterName);
+  String instancesUrl=clusterUrl + "/instances";
+  addInstancesToCluster(clusterName,"localhost:123",3,null);
+  String instances="localhost:1233;localhost:1234;localhost:1235;localhost:1236";
+  String response=assertSuccessPostOperation(instancesUrl,addInstanceCmd(instances),false);
+  for (int i=3; i <= 6; i++) {
+    Assert.assertTrue(response.contains("localhost_123" + i));
+  }
+  String instanceUrl=instancesUrl + "/localhost_1236";
+  deleteUrl(instanceUrl,true);
+  response=getUrl(instancesUrl);
+  Assert.assertTrue(response.contains("localhost_1236"));
+  instanceUrl=instancesUrl + "/localhost_12367";
+  deleteUrl(instanceUrl,true);
+  response=getUrl(instancesUrl);
+  Assert.assertFalse(response.contains("localhost_12367"));
+  instanceUrl=instancesUrl + "/localhost_1236";
+  response=assertSuccessPostOperation(instanceUrl,enableInstanceCmd(false),false);
+  Assert.assertTrue(response.contains("false"));
+  deleteUrl(instanceUrl,false);
+  final String controllerClusterName="controllerClusterTestAddInstance";
+  addCluster(controllerClusterName);
+  String controllers="controller:9000;controller:9001";
+  String controllerUrl=getClusterUrl(controllerClusterName) + "/instances";
+  response=assertSuccessPostOperation(controllerUrl,addInstanceCmd(controllers),false);
+  Assert.assertTrue(response.contains("controller_9000"));
+  Assert.assertTrue(response.contains("controller_9001"));
+  response=assertSuccessPostOperation(instancesUrl,addInstanceCmd("localhost:1234"),true);
+  for (int i=0; i < 4; i++) {
+    instanceUrl=instancesUrl + "/localhost_123" + i;
+    response=assertSuccessPostOperation(instanceUrl,addInstanceTagCmd(_tag1),false);
+    Assert.assertTrue(response.contains(_tag1));
+  }
+  instanceUrl=instancesUrl + "/localhost_1233";
+  response=assertSuccessPostOperation(instanceUrl,removeInstanceTagCmd(_tag1),false);
+  Assert.assertFalse(response.contains(_tag1));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDeactivateCluster() throws Exception {
+  final String clusterName="clusterTestDeactivateCluster";
+  final String controllerClusterName="controllerClusterTestDeactivateCluster";
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  Map<String,MockMultiClusterController> multiClusterControllers=new HashMap<String,MockMultiClusterController>();
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",6,null);
+  addResource(clusterName,"db_11",16);
+  rebalanceResource(clusterName,"db_11");
+  addCluster(controllerClusterName);
+  addInstancesToCluster(controllerClusterName,"controller_900",2,null);
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  for (int i=0; i < 2; i++) {
+    String controllerName="controller_900" + i;
+    MockMultiClusterController multiClusterController=new MockMultiClusterController(_zkaddr,controllerClusterName,controllerName);
+    multiClusterController.syncStart();
+    multiClusterControllers.put(controllerName,multiClusterController);
+  }
+  String clusterUrl=getClusterUrl(clusterName);
+  assertSuccessPostOperation(clusterUrl,activateClusterCmd(controllerClusterName,true),false);
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName));
+  Assert.assertTrue(verifyResult);
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  assertSuccessPostOperation(clusterUrl,activateClusterCmd(controllerClusterName,false),false);
+  Thread.sleep(6000);
+  Assert.assertFalse(_zkclient.exists("/" + controllerClusterName + "/IDEALSTATES/"+ clusterName));
+  HelixDataAccessor accessor=participants.get("localhost_1231").getHelixDataAccessor();
+  String path=accessor.keyBuilder().controllerLeader().getPath();
+  Assert.assertFalse(_zkclient.exists(path));
+  deleteUrl(clusterUrl,true);
+  Assert.assertTrue(_zkclient.exists("/" + clusterName));
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+  deleteUrl(clusterUrl,false);
+  Assert.assertFalse(_zkclient.exists("/" + clusterName));
+  for (  MockMultiClusterController controller : multiClusterControllers.values()) {
+    controller.syncStop();
+  }
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRebalanceResource() throws Exception {
+  final String clusterName="clusterTestRebalanceResource";
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",3,_tag1);
+  addResource(clusterName,"db_11",44);
+  String resourceUrl=getResourceUrl(clusterName,"db_11");
+  String idealStateUrl=resourceUrl + "/idealState";
+  String response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(3,null,null),false);
+  ZNRecord record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_11"));
+  Assert.assertEquals(record.getListField("db_11_0").size(),3);
+  Assert.assertEquals(record.getMapField("db_11_0").size(),3);
+  deleteUrl(resourceUrl,false);
+  final String reourcesUrl="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/resourceGroups";
+  response=getUrl(reourcesUrl);
+  Assert.assertFalse(response.contains("db_11"));
+  addResource(clusterName,"db_11",48);
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(3,null,null),false);
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_11"));
+  Assert.assertEquals(record.getListField("db_11_0").size(),3);
+  Assert.assertEquals(record.getMapField("db_11_0").size(),3);
+  addResource(clusterName,"db_22",55);
+  resourceUrl=getResourceUrl(clusterName,"db_22");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,"alias",null),false);
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_22"));
+  Assert.assertEquals(record.getListField("alias_0").size(),2);
+  Assert.assertEquals(record.getMapField("alias_0").size(),2);
+  Assert.assertTrue((((String)(record.getMapFields().keySet().toArray()[0]))).startsWith("alias_"));
+  Assert.assertFalse(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  addResource(clusterName,"db_33",44);
+  resourceUrl=getResourceUrl(clusterName,"db_33");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,null,_tag1),false);
+  Assert.assertTrue(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  Assert.assertTrue(response.contains(_tag1));
+  for (int i=0; i < 6; i++) {
+    String instance="localhost_123" + i;
+    if (i < 3) {
+      Assert.assertTrue(response.contains(instance));
+    }
+ else {
+      Assert.assertFalse(response.contains(instance));
+    }
+  }
+  addResource(clusterName,"db_44",44);
+  resourceUrl=getResourceUrl(clusterName,"db_44");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,"alias",_tag1),false);
+  Assert.assertTrue(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  Assert.assertTrue(response.contains(_tag1));
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue((((String)(record.getMapFields().keySet().toArray()[0]))).startsWith("alias_"));
+  for (int i=0; i < 6; i++) {
+    String instance="localhost_123" + i;
+    if (i < 3) {
+      Assert.assertTrue(response.contains(instance));
+    }
+ else {
+      Assert.assertFalse(response.contains(instance));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testExpandCluster() throws Exception {
+  final String clusterName="clusterTestExpandCluster";
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",6,null);
+  addResource(clusterName,"db_11",22);
+  rebalanceResource(clusterName,"db_11");
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_9900");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  String clusterUrl=getClusterUrl(clusterName);
+  String instancesUrl=clusterUrl + "/instances";
+  String instances="localhost:12331;localhost:12341;localhost:12351;localhost:12361";
+  String response=assertSuccessPostOperation(instancesUrl,addInstanceCmd(instances),false);
+  String[] hosts=instances.split(";");
+  for (  String host : hosts) {
+    Assert.assertTrue(response.contains(host.replace(':','_')));
+  }
+  response=assertSuccessPostOperation(clusterUrl,expandClusterCmd(),false);
+  for (int i=3; i <= 6; i++) {
+    String instanceName="localhost_123" + i + "1";
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new MasterNbInExtViewVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAddResource() throws Exception {
+  final String clusterName="clusterTestAddResource";
+  addCluster(clusterName);
+  String reourcesUrl="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/resourceGroups";
+  String response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_22","MasterSlave",144),false);
+  Assert.assertTrue(response.contains("db_22"));
+  response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_11","MasterSlave",44),false);
+  Assert.assertTrue(response.contains("db_11"));
+  response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_22","OnlineOffline",55),true);
+  String resourceUrl=getResourceUrl(clusterName,"db_11");
+  deleteUrl(resourceUrl,false);
+  Assert.assertFalse(_zkclient.exists("/" + clusterName + "/IDEALSTATES/db_11"));
+  response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_11","MasterSlave",44),false);
+  Assert.assertTrue(response.contains("db_11"));
+  Assert.assertTrue(_zkclient.exists("/" + clusterName + "/IDEALSTATES/db_11"));
+  response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_33","MasterSlave",44),false);
+  Assert.assertTrue(response.contains("db_33"));
+  response=assertSuccessPostOperation(reourcesUrl,addResourceCmd("db_44","MasterSlave",44),false);
+  Assert.assertTrue(response.contains("db_44"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDropAddResource() throws Exception {
+  final String clusterName="clusterTestDropAddResource";
+  addCluster(clusterName);
+  addResource(clusterName,"db_11",22);
+  addInstancesToCluster(clusterName,"localhost_123",6,null);
+  rebalanceResource(clusterName,"db_11");
+  ZNRecord record=_setupTool.getClusterManagementTool().getResourceIdealState(clusterName,"db_11").getRecord();
+  String x=ObjectToJson(record);
+  FileWriter fos=new FileWriter("/tmp/temp.log");
+  PrintWriter pw=new PrintWriter(fos);
+  pw.write(x);
+  pw.close();
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_9900");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  for (int i=0; i < 6; i++) {
+    String instanceName="localhost_123" + i;
+    MockParticipant participant=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participant.syncStart();
+    participants.put(instanceName,participant);
+  }
+  boolean verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  String resourceUrl=getResourceUrl(clusterName,"db_11");
+  deleteUrl(resourceUrl,false);
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  addResource(clusterName,"db_11",22);
+  String idealStateUrl=getResourceUrl(clusterName,"db_11") + "/idealState";
+  Map<String,String> extraform=new HashMap<String,String>();
+  extraform.put(JsonParameters.NEW_IDEAL_STATE,x);
+  assertSuccessPostOperation(idealStateUrl,addIdealStateCmd(),extraform,false);
+  verifyResult=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(verifyResult);
+  ZNRecord record2=_setupTool.getClusterManagementTool().getResourceIdealState(clusterName,"db_11").getRecord();
+  Assert.assertTrue(record2.equals(record));
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

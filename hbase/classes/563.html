@@ -1,0 +1,91 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.wal.TestLogRollPeriod (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that the LogRoller perform the roll with some data in the log
+ */
+@Test(timeout=60000) public void testWithEdits() throws Exception {
+  final TableName tableName=TableName.valueOf("TestLogRollPeriodWithEdits");
+  final String family="cf";
+  TEST_UTIL.createTable(tableName,family);
+  try {
+    HRegionServer server=TEST_UTIL.getRSForFirstRegionInTable(tableName);
+    WAL log=server.getWAL(null);
+    final Table table=TEST_UTIL.getConnection().getTable(tableName);
+    Thread writerThread=new Thread("writer"){
+      @Override public void run(){
+        try {
+          long row=0;
+          while (!interrupted()) {
+            Put p=new Put(Bytes.toBytes(String.format("row%d",row)));
+            p.addColumn(Bytes.toBytes(family),Bytes.toBytes("col"),Bytes.toBytes(row));
+            table.put(p);
+            row++;
+            Thread.sleep(LOG_ROLL_PERIOD / 16);
+          }
+        }
+ catch (        Exception e) {
+          LOG.warn(e);
+        }
+      }
+    }
+;
+    try {
+      writerThread.start();
+      checkMinLogRolls(log,5);
+    }
+  finally {
+      writerThread.interrupt();
+      writerThread.join();
+      table.close();
+    }
+  }
+  finally {
+    TEST_UTIL.deleteTable(tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that the LogRoller perform the roll even if there are no edits
+ */
+@Test public void testNoEdits() throws Exception {
+  TableName tableName=TableName.valueOf("TestLogRollPeriodNoEdits");
+  TEST_UTIL.createTable(tableName,"cf");
+  try {
+    Table table=TEST_UTIL.getConnection().getTable(tableName);
+    try {
+      HRegionServer server=TEST_UTIL.getRSForFirstRegionInTable(tableName);
+      WAL log=server.getWAL(null);
+      checkMinLogRolls(log,5);
+    }
+  finally {
+      table.close();
+    }
+  }
+  finally {
+    TEST_UTIL.deleteTable(tableName);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,983 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestAssignmentManagerOnCluster (21 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(20)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(19)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test disabled region is ignored by SSH
+ */
+@Test(timeout=60000) public void testAssignDisabledRegionBySSH() throws Exception {
+  TableName table=TableName.valueOf("testAssignDisabledRegionBySSH");
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  MyMaster master;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    master=(MyMaster)cluster.getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    ServerName metaServer=regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+    ServerName oldServerName=null;
+    while (true) {
+      assertTrue(am.waitForAssignment(hri));
+      RegionState state=regionStates.getRegionState(hri);
+      oldServerName=state.getServerName();
+      if (!ServerName.isSameHostnameAndPort(oldServerName,metaServer)) {
+        MyRegionServer.abortedServer=oldServerName;
+        break;
+      }
+      int i=cluster.getServerWithMeta();
+      HRegionServer rs=cluster.getRegionServer(i == 0 ? 1 : 0);
+      oldServerName=rs.getServerName();
+      master.move(hri.getEncodedNameAsBytes(),Bytes.toBytes(oldServerName.getServerName()));
+    }
+    assertTrue(regionStates.isRegionOnline(hri));
+    assertEquals(oldServerName,regionStates.getRegionServerOfRegion(hri));
+    master.disableTable(hri.getTable(),HConstants.NO_NONCE,HConstants.NO_NONCE);
+    cluster.killRegionServer(oldServerName);
+    cluster.waitForRegionServerToStop(oldServerName,-1);
+    ServerManager serverManager=master.getServerManager();
+    while (!serverManager.isServerDead(oldServerName) || serverManager.getDeadServers().areDeadServersInProgress()) {
+      Thread.sleep(100);
+    }
+    TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+    assertTrue(regionStates.isRegionOffline(hri));
+  }
+  finally {
+    MyRegionServer.abortedServer=null;
+    TEST_UTIL.deleteTable(table);
+    cluster.startRegionServer();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=60000) public void testSSHWhenDisablingTableRegionsInOpeningOrPendingOpenState() throws Exception {
+  final TableName table=TableName.valueOf("testSSHWhenDisablingTableRegionsInOpeningOrPendingOpenState");
+  AssignmentManager am=TEST_UTIL.getHBaseCluster().getMaster().getAssignmentManager();
+  HRegionInfo hri=null;
+  ServerName serverName=null;
+  try {
+    hri=createTableAndGetOneRegion(table);
+    serverName=am.getRegionStates().getRegionServerOfRegion(hri);
+    ServerName destServerName=null;
+    HRegionServer destServer=null;
+    for (int i=0; i < 3; i++) {
+      destServer=TEST_UTIL.getHBaseCluster().getRegionServer(i);
+      if (!destServer.getServerName().equals(serverName)) {
+        destServerName=destServer.getServerName();
+        break;
+      }
+    }
+    am.regionOffline(hri);
+    am.getRegionStates().updateRegionState(hri,RegionState.State.PENDING_OPEN,destServerName);
+    am.getTableStateManager().setTableState(table,TableState.State.DISABLING);
+    List<HRegionInfo> toAssignRegions=am.cleanOutCrashedServerReferences(destServerName);
+    assertTrue("Regions to be assigned should be empty.",toAssignRegions.isEmpty());
+    assertTrue("Regions to be assigned should be empty.",am.getRegionStates().getRegionState(hri).isOffline());
+  }
+  finally {
+    if (hri != null && serverName != null) {
+      am.regionOnline(hri,serverName);
+    }
+    am.getTableStateManager().setTableState(table,TableState.State.ENABLED);
+    TEST_UTIL.getHBaseAdmin().disableTable(table);
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests region open failed
+ */
+@Test(timeout=60000) public void testOpenFailed() throws Exception {
+  TableName table=TableName.valueOf("testOpenFailed");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    MyLoadBalancer.controledRegion=hri.getEncodedName();
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    assertFalse(am.waitForAssignment(hri));
+    RegionState state=am.getRegionStates().getRegionState(hri);
+    assertEquals(RegionState.State.FAILED_OPEN,state.getState());
+    assertNull(state.getServerName());
+    MyLoadBalancer.controledRegion=null;
+    master.assignRegion(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+  }
+  finally {
+    MyLoadBalancer.controledRegion=null;
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * This tests region close hanging
+ */
+@Test(timeout=60000) public void testCloseHang() throws Exception {
+  TableName table=TableName.valueOf("testCloseHang");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    assertTrue(am.waitForAssignment(hri));
+    ServerName sn=am.getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,sn,6000);
+    MyRegionObserver.postCloseEnabled.set(true);
+    am.unassign(hri);
+    MyRegionObserver.postCloseEnabled.set(false);
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+  }
+  finally {
+    MyRegionObserver.postCloseEnabled.set(false);
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-10 type-11 type-7 type-8 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests offlining a region
+ */
+@Test(timeout=60000) public void testOfflineRegion() throws Exception {
+  TableName table=TableName.valueOf("testOfflineRegion");
+  try {
+    HRegionInfo hri=createTableAndGetOneRegion(table);
+    RegionStates regionStates=TEST_UTIL.getHBaseCluster().getMaster().getAssignmentManager().getRegionStates();
+    ServerName serverName=regionStates.getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+    admin.offline(hri.getRegionName());
+    long timeoutTime=System.currentTimeMillis() + 800;
+    while (true) {
+      if (regionStates.getRegionByStateOfTable(table).get(RegionState.State.OFFLINE).contains(hri))       break;
+      long now=System.currentTimeMillis();
+      if (now > timeoutTime) {
+        fail("Failed to offline the region in time");
+        break;
+      }
+      Thread.sleep(10);
+    }
+    RegionState regionState=regionStates.getRegionState(hri);
+    assertTrue(regionState.isOffline());
+  }
+  finally {
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests restarting meta regionserver
+ */
+@Test(timeout=180000) public void testRestartMetaRegionServer() throws Exception {
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  boolean stoppedARegionServer=false;
+  try {
+    HMaster master=cluster.getMaster();
+    RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+    ServerName metaServerName=regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+    if (master.getServerName().equals(metaServerName)) {
+      metaServerName=cluster.getLiveRegionServerThreads().get(0).getRegionServer().getServerName();
+      master.move(HRegionInfo.FIRST_META_REGIONINFO.getEncodedNameAsBytes(),Bytes.toBytes(metaServerName.getServerName()));
+      TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+    }
+    RegionState metaState=MetaTableLocator.getMetaRegionState(master.getZooKeeper());
+    assertEquals("Meta should be not in transition",metaState.getState(),RegionState.State.OPEN);
+    assertNotEquals("Meta should be moved off master",metaState.getServerName(),master.getServerName());
+    assertEquals("Meta should be on the meta server",metaState.getServerName(),metaServerName);
+    cluster.killRegionServer(metaServerName);
+    stoppedARegionServer=true;
+    cluster.waitForRegionServerToStop(metaServerName,60000);
+    final ServerName oldServerName=metaServerName;
+    final ServerManager serverManager=master.getServerManager();
+    TEST_UTIL.waitFor(120000,200,new Waiter.Predicate<Exception>(){
+      @Override public boolean evaluate() throws Exception {
+        return serverManager.isServerDead(oldServerName) && !serverManager.areDeadServersInProgress();
+      }
+    }
+);
+    TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+    assertTrue("Meta should be assigned",regionStates.isRegionOnline(HRegionInfo.FIRST_META_REGIONINFO));
+    metaState=MetaTableLocator.getMetaRegionState(master.getZooKeeper());
+    assertEquals("Meta should be not in transition",metaState.getState(),RegionState.State.OPEN);
+    assertEquals("Meta should be assigned",metaState.getServerName(),regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO));
+    assertNotEquals("Meta should be assigned on a different server",metaState.getServerName(),metaServerName);
+  }
+  finally {
+    if (stoppedARegionServer) {
+      cluster.startRegionServer();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test force unassign/assign a region of a disabled table
+ */
+@Test(timeout=60000) public void testAssignDisabledRegion() throws Exception {
+  TableName table=TableName.valueOf("testAssignDisabledRegion");
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  MyMaster master=null;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    master=(MyMaster)cluster.getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    assertTrue(am.waitForAssignment(hri));
+    admin.disableTable(table);
+    assertTrue(regionStates.isRegionOffline(hri));
+    am.assign(hri,true);
+    assertTrue(regionStates.isRegionOffline(hri));
+    am.unassign(hri);
+    assertTrue(regionStates.isRegionOffline(hri));
+  }
+  finally {
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test force unassign/assign a region hosted on a dead server
+ */
+@Test(timeout=60000) public void testAssignRacingWithSSH() throws Exception {
+  TableName table=TableName.valueOf("testAssignRacingWithSSH");
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  MyMaster master=null;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    master=(MyMaster)cluster.getMaster();
+    master.assignRegion(hri);
+    master.enableSSH(false);
+    AssignmentManager am=master.getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    ServerName metaServer=regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+    while (true) {
+      assertTrue(am.waitForAssignment(hri));
+      RegionState state=regionStates.getRegionState(hri);
+      ServerName oldServerName=state.getServerName();
+      if (!ServerName.isSameHostnameAndPort(oldServerName,metaServer)) {
+        cluster.killRegionServer(oldServerName);
+        cluster.waitForRegionServerToStop(oldServerName,-1);
+        break;
+      }
+      int i=cluster.getServerWithMeta();
+      HRegionServer rs=cluster.getRegionServer(i == 0 ? 1 : 0);
+      oldServerName=rs.getServerName();
+      master.move(hri.getEncodedNameAsBytes(),Bytes.toBytes(oldServerName.getServerName()));
+    }
+    am.assign(hri,true);
+    RegionState state=regionStates.getRegionState(hri);
+    assertTrue(state.isFailedClose());
+    am.unassign(hri);
+    state=regionStates.getRegionState(hri);
+    assertTrue(state.isFailedClose());
+    master.enableSSH(true);
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnlyOnServer(hri,serverName,6000);
+  }
+  finally {
+    if (master != null) {
+      master.enableSSH(true);
+    }
+    TEST_UTIL.deleteTable(table);
+    cluster.startRegionServer();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-10 type-11 type-7 type-8 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests moving a region
+ */
+@Test(timeout=50000) public void testMoveRegion() throws Exception {
+  TableName table=TableName.valueOf("testMoveRegion");
+  try {
+    HRegionInfo hri=createTableAndGetOneRegion(table);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+    ServerName serverName=regionStates.getRegionServerOfRegion(hri);
+    ServerManager serverManager=master.getServerManager();
+    ServerName destServerName=null;
+    List<JVMClusterUtil.RegionServerThread> regionServers=TEST_UTIL.getHBaseCluster().getLiveRegionServerThreads();
+    for (    JVMClusterUtil.RegionServerThread regionServer : regionServers) {
+      HRegionServer destServer=regionServer.getRegionServer();
+      destServerName=destServer.getServerName();
+      if (!destServerName.equals(serverName) && serverManager.isServerOnline(destServerName)) {
+        break;
+      }
+    }
+    assertTrue(destServerName != null && !destServerName.equals(serverName));
+    TEST_UTIL.getHBaseAdmin().move(hri.getEncodedNameAsBytes(),Bytes.toBytes(destServerName.getServerName()));
+    long timeoutTime=System.currentTimeMillis() + 30000;
+    while (true) {
+      ServerName sn=regionStates.getRegionServerOfRegion(hri);
+      if (sn != null && sn.equals(destServerName)) {
+        TEST_UTIL.assertRegionOnServer(hri,sn,200);
+        break;
+      }
+      long now=System.currentTimeMillis();
+      if (now > timeoutTime) {
+        fail("Failed to move the region in time: " + regionStates.getRegionState(hri));
+      }
+      regionStates.waitForUpdate(50);
+    }
+  }
+  finally {
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * This tests region assignment on a simulated restarted server
+ */
+@Test(timeout=120000) public void testAssignRegionOnRestartedServer() throws Exception {
+  TableName table=TableName.valueOf("testAssignRegionOnRestartedServer");
+  TEST_UTIL.getMiniHBaseCluster().getConf().setInt("hbase.assignment.maximum.attempts",20);
+  TEST_UTIL.getMiniHBaseCluster().stopMaster(0);
+  TEST_UTIL.getMiniHBaseCluster().startMaster();
+  ServerName deadServer=null;
+  HMaster master=null;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    final HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    master=TEST_UTIL.getHBaseCluster().getMaster();
+    Set<ServerName> onlineServers=master.serverManager.getOnlineServers().keySet();
+    assertFalse("There should be some servers online",onlineServers.isEmpty());
+    ServerName destServer=onlineServers.iterator().next();
+    deadServer=ServerName.valueOf(destServer.getHostname(),destServer.getPort(),destServer.getStartcode() - 100L);
+    master.serverManager.recordNewServerWithLock(deadServer,ServerLoad.EMPTY_SERVERLOAD);
+    final AssignmentManager am=master.getAssignmentManager();
+    RegionPlan plan=new RegionPlan(hri,null,deadServer);
+    am.addPlan(hri.getEncodedName(),plan);
+    master.assignRegion(hri);
+    TEST_UTIL.waitFor(60000,new Waiter.Predicate<Exception>(){
+      @Override public boolean evaluate() throws Exception {
+        return !am.getRegionStates().isRegionInTransition(hri);
+      }
+    }
+);
+    assertFalse("Region should be assigned",am.getRegionStates().isRegionInTransition(hri));
+  }
+  finally {
+    if (deadServer != null) {
+      master.serverManager.expireServer(deadServer);
+    }
+    TEST_UTIL.deleteTable(table);
+    TEST_UTIL.getMiniHBaseCluster().getConf().setInt("hbase.assignment.maximum.attempts",3);
+    ServerName masterServerName=TEST_UTIL.getMiniHBaseCluster().getMaster().getServerName();
+    TEST_UTIL.getMiniHBaseCluster().stopMaster(masterServerName);
+    TEST_UTIL.getMiniHBaseCluster().startMaster();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests region open failure which is not recoverable
+ */
+@Test(timeout=60000) public void testOpenFailedUnrecoverable() throws Exception {
+  TableName table=TableName.valueOf("testOpenFailedUnrecoverable");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    FileSystem fs=FileSystem.get(conf);
+    Path tableDir=FSUtils.getTableDir(FSUtils.getRootDir(conf),table);
+    Path regionDir=new Path(tableDir,hri.getEncodedName());
+    fs.create(regionDir,true);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    assertFalse(am.waitForAssignment(hri));
+    RegionState state=am.getRegionStates().getRegionState(hri);
+    assertEquals(RegionState.State.FAILED_OPEN,state.getState());
+    assertNotNull(state.getServerName());
+    fs.delete(regionDir,true);
+    master.assignRegion(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+  }
+  finally {
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * This tests region assignment
+ */
+@Test(timeout=60000) public void testAssignRegion() throws Exception {
+  TableName table=TableName.valueOf("testAssignRegion");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    am.waitForAssignment(hri);
+    RegionStates regionStates=am.getRegionStates();
+    ServerName serverName=regionStates.getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+    TEST_UTIL.getHBaseAdmin().assign(hri.getRegionName());
+    master.getAssignmentManager().waitForAssignment(hri);
+    RegionState newState=regionStates.getRegionState(hri);
+    assertTrue(newState.isOpened());
+  }
+  finally {
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests region close failed
+ */
+@Test(timeout=60000) public void testCloseFailed() throws Exception {
+  TableName table=TableName.valueOf("testCloseFailed");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    assertTrue(am.waitForAssignment(hri));
+    ServerName sn=am.getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,sn,6000);
+    MyRegionObserver.preCloseEnabled.set(true);
+    am.unassign(hri);
+    RegionState state=am.getRegionStates().getRegionState(hri);
+    assertEquals(RegionState.State.FAILED_CLOSE,state.getState());
+    MyRegionObserver.preCloseEnabled.set(false);
+    am.unassign(hri);
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+  }
+  finally {
+    MyRegionObserver.preCloseEnabled.set(false);
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test SSH waiting for extra region server for assignment
+ */
+@Test(timeout=300000) public void testSSHWaitForServerToAssignRegion() throws Exception {
+  TableName table=TableName.valueOf("testSSHWaitForServerToAssignRegion");
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  boolean startAServer=false;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    HMaster master=cluster.getMaster();
+    final ServerManager serverManager=master.getServerManager();
+    MyLoadBalancer.countRegionServers=Integer.valueOf(serverManager.countOfRegionServers());
+    HRegionServer rs=TEST_UTIL.getRSForFirstRegionInTable(table);
+    assertNotNull("First region should be assigned",rs);
+    final ServerName serverName=rs.getServerName();
+    int counter=MyLoadBalancer.counter.get() + 5;
+    cluster.killRegionServer(serverName);
+    startAServer=true;
+    cluster.waitForRegionServerToStop(serverName,-1);
+    while (counter > MyLoadBalancer.counter.get()) {
+      Thread.sleep(1000);
+    }
+    cluster.startRegionServer();
+    startAServer=false;
+    TEST_UTIL.waitFor(120000,1000,new Waiter.Predicate<Exception>(){
+      @Override public boolean evaluate() throws Exception {
+        return serverManager.isServerDead(serverName) && !serverManager.areDeadServersInProgress();
+      }
+    }
+);
+    TEST_UTIL.waitUntilNoRegionsInTransition(300000);
+    rs=TEST_UTIL.getRSForFirstRegionInTable(table);
+    assertTrue("First region should be re-assigned to a different server",rs != null && !serverName.equals(rs.getServerName()));
+  }
+  finally {
+    MyLoadBalancer.countRegionServers=null;
+    TEST_UTIL.deleteTable(table);
+    if (startAServer) {
+      cluster.startRegionServer();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that region state transition call is idempotent
+ */
+@Test(timeout=60000) public void testReportRegionStateTransition() throws Exception {
+  TableName table=TableName.valueOf("testReportRegionStateTransition");
+  try {
+    MyRegionServer.simulateRetry=true;
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    am.waitForAssignment(hri);
+    RegionStates regionStates=am.getRegionStates();
+    ServerName serverName=regionStates.getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,serverName,200);
+    admin.disableTable(table);
+    assertTrue(regionStates.isRegionOffline(hri));
+    List<HRegionInfo> regions=TEST_UTIL.getHBaseAdmin().getOnlineRegions(serverName);
+    assertTrue(!regions.contains(hri));
+  }
+  finally {
+    MyRegionServer.simulateRetry=false;
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests assign a region while it's closing.
+ */
+@Test(timeout=60000) public void testAssignWhileClosing() throws Exception {
+  TableName table=TableName.valueOf("testAssignWhileClosing");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    assertTrue(am.waitForAssignment(hri));
+    ServerName sn=am.getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnServer(hri,sn,6000);
+    MyRegionObserver.preCloseEnabled.set(true);
+    am.unassign(hri);
+    RegionState state=am.getRegionStates().getRegionState(hri);
+    assertEquals(RegionState.State.FAILED_CLOSE,state.getState());
+    MyRegionObserver.preCloseEnabled.set(false);
+    am.unassign(hri);
+    am.assign(hri,true);
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnlyOnServer(hri,serverName,200);
+  }
+  finally {
+    MyRegionObserver.preCloseEnabled.set(false);
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-11 type-7 type-8 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * If a table is deleted, we should not be able to move it anymore.
+ * Otherwise, the region will be brought back.
+ * @throws Exception
+ */
+@Test(timeout=50000) public void testMoveRegionOfDeletedTable() throws Exception {
+  TableName table=TableName.valueOf("testMoveRegionOfDeletedTable");
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  try {
+    HRegionInfo hri=createTableAndGetOneRegion(table);
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    AssignmentManager am=master.getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    ServerName serverName=regionStates.getRegionServerOfRegion(hri);
+    ServerName destServerName=null;
+    for (int i=0; i < 3; i++) {
+      HRegionServer destServer=TEST_UTIL.getHBaseCluster().getRegionServer(i);
+      if (!destServer.getServerName().equals(serverName)) {
+        destServerName=destServer.getServerName();
+        break;
+      }
+    }
+    assertTrue(destServerName != null && !destServerName.equals(serverName));
+    TEST_UTIL.deleteTable(table);
+    try {
+      admin.move(hri.getEncodedNameAsBytes(),Bytes.toBytes(destServerName.getServerName()));
+      fail("We should not find the region");
+    }
+ catch (    IOException ioe) {
+      assertTrue(ioe instanceof UnknownRegionException);
+    }
+    am.balance(new RegionPlan(hri,serverName,destServerName));
+    assertFalse("The region should not be in transition",regionStates.isRegionInTransition(hri));
+  }
+  finally {
+    if (admin.tableExists(table)) {
+      TEST_UTIL.deleteTable(table);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test concurrent updates to meta when meta is not on master
+ * @throws Exception
+ */
+@Test(timeout=30000) public void testUpdatesRemoteMeta() throws Exception {
+  conf.setInt("hbase.regionstatestore.meta.connection",3);
+  final RegionStateStore rss=new RegionStateStore(new MyRegionServer(conf,new ZkCoordinatedStateManager()));
+  rss.start();
+  Thread[] th=new Thread[10];
+  List<String> nameList=new ArrayList<String>();
+  List<TableName> tableNameList=new ArrayList<TableName>();
+  for (int i=0; i < th.length; i++) {
+    th[i]=new Thread(){
+      @Override public void run(){
+        HRegionInfo[] hri=new HRegionInfo[10];
+        ServerName serverName=ServerName.valueOf("dummyhost",1000,1234);
+        for (int i=0; i < 10; i++) {
+          hri[i]=new HRegionInfo(TableName.valueOf(Thread.currentThread().getName() + "_" + i));
+          RegionState newState=new RegionState(hri[i],RegionState.State.OPEN,serverName);
+          RegionState oldState=new RegionState(hri[i],RegionState.State.PENDING_OPEN,serverName);
+          rss.updateRegionState(1,newState,oldState);
+        }
+      }
+    }
+;
+    th[i].start();
+    nameList.add(th[i].getName());
+  }
+  for (int i=0; i < th.length; i++) {
+    th[i].join();
+  }
+  for (  String name : nameList) {
+    for (int i=0; i < 10; i++) {
+      tableNameList.add(TableName.valueOf(name + "_" + i));
+    }
+  }
+  List<Result> metaRows=MetaTableAccessor.fullScanRegions(admin.getConnection());
+  int count=0;
+  for (  Result result : metaRows) {
+    if (tableNameList.contains(HRegionInfo.getTable(result.getRow()))) {
+      count++;
+      if (count == 100) {
+        break;
+      }
+    }
+  }
+  assertTrue(count == 100);
+  rss.stop();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests region close racing with open
+ */
+@Test(timeout=60000) public void testOpenCloseRacing() throws Exception {
+  TableName table=TableName.valueOf("testOpenCloseRacing");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    meta.close();
+    MyRegionObserver.postOpenEnabled.set(true);
+    MyRegionObserver.postOpenCalled=false;
+    HMaster master=TEST_UTIL.getHBaseCluster().getMaster();
+    master.assignRegion(hri);
+    long end=EnvironmentEdgeManager.currentTime() + 20000;
+    while (!MyRegionObserver.postOpenCalled) {
+      assertFalse("Timed out waiting for postOpen to be called",EnvironmentEdgeManager.currentTime() > end);
+      Thread.sleep(300);
+    }
+    AssignmentManager am=master.getAssignmentManager();
+    am.unassign(hri);
+    RegionState state=am.getRegionStates().getRegionState(hri);
+    ServerName oldServerName=state.getServerName();
+    assertTrue(state.isOpening() && oldServerName != null);
+    MyRegionObserver.postOpenEnabled.set(false);
+    ServerName destServerName=null;
+    int numRS=TEST_UTIL.getHBaseCluster().getLiveRegionServerThreads().size();
+    for (int i=0; i < numRS; i++) {
+      HRegionServer destServer=TEST_UTIL.getHBaseCluster().getRegionServer(i);
+      if (!destServer.getServerName().equals(oldServerName)) {
+        destServerName=destServer.getServerName();
+        break;
+      }
+    }
+    assertNotNull(destServerName);
+    assertFalse("Region should be assigned on a new region server",oldServerName.equals(destServerName));
+    List<HRegionInfo> regions=new ArrayList<HRegionInfo>();
+    regions.add(hri);
+    am.assign(destServerName,regions);
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnlyOnServer(hri,serverName,6000);
+  }
+  finally {
+    MyRegionObserver.postOpenEnabled.set(false);
+    TEST_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test offlined region is assigned by SSH
+ */
+@Test(timeout=60000) public void testAssignOfflinedRegionBySSH() throws Exception {
+  TableName table=TableName.valueOf("testAssignOfflinedRegionBySSH");
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  MyMaster master=null;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    admin.createTable(desc);
+    Table meta=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+    HRegionInfo hri=new HRegionInfo(desc.getTableName(),Bytes.toBytes("A"),Bytes.toBytes("Z"));
+    MetaTableAccessor.addRegionToMeta(meta,hri);
+    master=(MyMaster)cluster.getMaster();
+    master.assignRegion(hri);
+    AssignmentManager am=master.getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    ServerName metaServer=regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+    ServerName oldServerName=null;
+    while (true) {
+      assertTrue(am.waitForAssignment(hri));
+      RegionState state=regionStates.getRegionState(hri);
+      oldServerName=state.getServerName();
+      if (!ServerName.isSameHostnameAndPort(oldServerName,metaServer)) {
+        MyRegionServer.abortedServer=oldServerName;
+        break;
+      }
+      int i=cluster.getServerWithMeta();
+      HRegionServer rs=cluster.getRegionServer(i == 0 ? 1 : 0);
+      oldServerName=rs.getServerName();
+      master.move(hri.getEncodedNameAsBytes(),Bytes.toBytes(oldServerName.getServerName()));
+    }
+    assertTrue(regionStates.isRegionOnline(hri));
+    assertEquals(oldServerName,regionStates.getRegionServerOfRegion(hri));
+    cluster.killRegionServer(oldServerName);
+    cluster.waitForRegionServerToStop(oldServerName,-1);
+    ServerManager serverManager=master.getServerManager();
+    while (!serverManager.isServerDead(oldServerName) || serverManager.getDeadServers().areDeadServersInProgress()) {
+      Thread.sleep(100);
+    }
+    am.waitOnRegionToClearRegionsInTransition(hri);
+    assertTrue(am.waitForAssignment(hri));
+    ServerName serverName=master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri);
+    TEST_UTIL.assertRegionOnlyOnServer(hri,serverName,200);
+  }
+  finally {
+    MyRegionServer.abortedServer=null;
+    TEST_UTIL.deleteTable(table);
+    cluster.startRegionServer();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

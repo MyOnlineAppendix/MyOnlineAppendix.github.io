@@ -1,0 +1,235 @@
+<h3 style="margin:0px">Class: org.apache.hedwig.server.TestBackwardCompat (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+/** 
+ * Test compatability of publish interface between version 4.1.0
+ * and current verison.
+ * 1) 4.1.0 client could talk with current server.
+ * 2) current client could talk with 4.1.0 server,
+ * but no message seq id would be returned
+ */
+@Test(timeout=60000) public void testPublishCompat410() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("TestPublishCompat410");
+  ByteString data=ByteString.copyFromUtf8("testdata");
+  BookKeeperCluster410 bkc410=new BookKeeperCluster410(3);
+  bkc410.start();
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  Server410 s410=new Server410(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s410.start();
+  ClientCurrent ccur=new ClientCurrent("localhost:" + port + ":"+ sslPort);
+  Client410 c410=new Client410("localhost:" + port + ":"+ sslPort);
+  assertNull(c410.publish(topic,data));
+  assertNull(ccur.publish(topic,data));
+  s410.stop();
+  Server420 s420=new Server420(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s420.start();
+  assertNull(c410.publish(topic,data));
+  assertNotNull(ccur.publish(topic,data));
+  ccur.close();
+  c410.close();
+  s420.stop();
+  bkc410.stop();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test compatability between version 4.1.0 and the current version.
+ * Server side throttling does't work when current client connects to old version
+ * server.
+ */
+@Test(timeout=60000) public void testServerSideThrottleCompat410() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("TestServerSideThrottleCompat410");
+  ByteString subid=ByteString.copyFromUtf8("mysub");
+  BookKeeperCluster410 bkc410=new BookKeeperCluster410(3);
+  bkc410.start();
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  Server410 s410=new Server410(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s410.start();
+  ClientCurrent ccur=new ClientCurrent(false,"localhost:" + port + ":"+ sslPort);
+  ccur.throttleX41(topic,subid,10);
+  ccur.close();
+  s410.stop();
+  bkc410.stop();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test compatability between version 4.1.0 and the current version.
+ * A current client running message filter would fail on 4.1.0 hub servers.
+ */
+@Test(timeout=60000) public void testClientMessageFilterCompat410() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("TestUpdateMessageBoundCompat410");
+  ByteString subid=ByteString.copyFromUtf8("mysub");
+  BookKeeperCluster410 bkc410=new BookKeeperCluster410(3);
+  bkc410.start();
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  Server410 s410=new Server410(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s410.start();
+  ClientCurrent ccur=new ClientCurrent("localhost:" + port + ":"+ sslPort);
+  ccur.subscribe(topic,subid);
+  ccur.closeSubscription(topic,subid);
+  ccur.publishInts(topic,0,100);
+  try {
+    ccur.receiveNumModM(topic,subid,0,50,2);
+    fail("client-side filter could not run on 4.1.0 hub server");
+  }
+ catch (  Exception e) {
+    logger.info("Should fail to run client-side message filter on 4.1.0 hub server.",e);
+    ccur.closeSubscription(topic,subid);
+  }
+  s410.stop();
+  bkc410.stop();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test compatability of message bound between version 4.0.0 and
+ * current version.
+ * 1) message bound doesn't take effects on 4.0.0 server.
+ * 2) message bound take effects on both 4.1.0 and current server
+ */
+@Test(timeout=60000) public void testMessageBoundCompat() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("testMessageBoundCompat");
+  ByteString subid=ByteString.copyFromUtf8("mysub");
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  BookKeeperCluster400 bkc400=new BookKeeperCluster400(3);
+  bkc400.start();
+  Server400 s400=new Server400(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s400.start();
+  org.apache.hedwig.protocol.PubSubProtocol.SubscriptionOptions options5cur=org.apache.hedwig.protocol.PubSubProtocol.SubscriptionOptions.newBuilder().setCreateOrAttach(org.apache.hedwig.protocol.PubSubProtocol.SubscribeRequest.CreateOrAttach.CREATE_OR_ATTACH).setMessageBound(5).build();
+  ClientCurrent ccur=new ClientCurrent("localhost:" + port + ":"+ sslPort);
+  ccur.subscribe(topic,subid,options5cur);
+  ccur.closeSubscription(topic,subid);
+  ccur.sendXExpectLastY(topic,subid,50,50);
+  s400.stop();
+  bkc400.stop();
+  BookKeeperCluster410 bkc410=new BookKeeperCluster410(3);
+  bkc410.start();
+  Server410 s410=new Server410(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s410.start();
+  ccur.subscribe(topic,subid,options5cur);
+  ccur.closeSubscription(topic,subid);
+  ccur.sendXExpectLastY(topic,subid,50,5);
+  s410.stop();
+  bkc410.stop();
+  BookKeeperCluster420 bkc420=new BookKeeperCluster420(3);
+  bkc420.start();
+  Server420 s420=new Server420(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s420.start();
+  ccur.subscribe(topic,subid,options5cur);
+  ccur.closeSubscription(topic,subid);
+  ccur.sendXExpectLastY(topic,subid,50,5);
+  s420.stop();
+  bkc420.stop();
+  ccur.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test compatability between version 4.1.0 and the current version.
+ * A current server could read subscription data recorded by 4.1.0 server.
+ */
+@Test(timeout=60000) public void testSubscriptionDataCompat410() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("TestCompat410");
+  ByteString sub410=ByteString.copyFromUtf8("sub410");
+  ByteString subcur=ByteString.copyFromUtf8("subcur");
+  BookKeeperCluster410 bkc410=new BookKeeperCluster410(3);
+  bkc410.start();
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  Server410 s410=new Server410(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s410.start();
+  Client410 c410=new Client410("localhost:" + port + ":"+ sslPort);
+  c410.subscribe(topic,sub410);
+  c410.closeSubscription(topic,sub410);
+  Thread.sleep(1000);
+  ClientCurrent ccur=new ClientCurrent("localhost:" + port + ":"+ sslPort);
+  ccur.subscribe(topic,subcur);
+  ccur.closeSubscription(topic,subcur);
+  c410.publishInts(topic,0,10);
+  s410.stop();
+  Server420 s420=new Server420(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s420.start();
+  c410.subscribe(topic,sub410);
+  c410.receiveInts(topic,sub410,0,10);
+  ccur.subscribe(topic,subcur);
+  ccur.receiveInts(topic,subcur,0,10);
+  ccur.publishInts(topic,10,10);
+  c410.receiveInts(topic,sub410,10,10);
+  ccur.receiveInts(topic,subcur,10,10);
+  s420.stop();
+  c410.close();
+  ccur.close();
+  bkc410.stop();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test compatability between version 4.1.0 and the current version.
+ * A 4.1.0 client could not update message bound, while current could do it.
+ */
+@Test(timeout=60000) public void testUpdateMessageBoundCompat410() throws Exception {
+  ByteString topic=ByteString.copyFromUtf8("TestUpdateMessageBoundCompat410");
+  ByteString subid=ByteString.copyFromUtf8("mysub");
+  BookKeeperCluster420 bkc420=new BookKeeperCluster420(3);
+  bkc420.start();
+  int port=PortManager.nextFreePort();
+  int sslPort=PortManager.nextFreePort();
+  Server420 s420=new Server420(zkUtil.getZooKeeperConnectString(),port,sslPort);
+  s420.start();
+  org.apache.hedwig.protocol.PubSubProtocol.SubscriptionOptions options5cur=org.apache.hedwig.protocol.PubSubProtocol.SubscriptionOptions.newBuilder().setCreateOrAttach(org.apache.hedwig.protocol.PubSubProtocol.SubscribeRequest.CreateOrAttach.CREATE_OR_ATTACH).setMessageBound(5).build();
+  org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscriptionOptions options5v410=org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscriptionOptions.newBuilder().setCreateOrAttach(org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscribeRequest.CreateOrAttach.CREATE_OR_ATTACH).setMessageBound(5).build();
+  org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscriptionOptions options20v410=org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscriptionOptions.newBuilder().setCreateOrAttach(org.apache.hw_v4_1_0.hedwig.protocol.PubSubProtocol.SubscribeRequest.CreateOrAttach.CREATE_OR_ATTACH).setMessageBound(20).build();
+  Client410 c410=new Client410("localhost:" + port + ":"+ sslPort);
+  c410.subscribe(topic,subid,options20v410);
+  c410.closeSubscription(topic,subid);
+  Thread.sleep(1000);
+  c410.sendXExpectLastY(topic,subid,50,20);
+  c410.subscribe(topic,subid,options5v410);
+  c410.closeSubscription(topic,subid);
+  Thread.sleep(1000);
+  c410.sendXExpectLastY(topic,subid,50,20);
+  ClientCurrent ccur=new ClientCurrent("localhost:" + port + ":"+ sslPort);
+  ccur.subscribe(topic,subid,options5cur);
+  ccur.closeSubscription(topic,subid);
+  Thread.sleep(1000);
+  c410.sendXExpectLastY(topic,subid,50,5);
+  s420.stop();
+  c410.close();
+  ccur.close();
+  bkc420.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,116 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestSecurityTokenEditLog (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests transaction logging in dfs.
+ */
+@Test public void testEditLog() throws IOException {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FileSystem fileSys=null;
+  try {
+    conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,true);
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    for (Iterator<URI> it=cluster.getNameDirs(0).iterator(); it.hasNext(); ) {
+      File dir=new File(it.next().getPath());
+      System.out.println(dir);
+    }
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    editLog.setOutputBufferCapacity(2048);
+    Thread threadId[]=new Thread[NUM_THREADS];
+    for (int i=0; i < NUM_THREADS; i++) {
+      Transactions trans=new Transactions(namesystem,NUM_TRANSACTIONS);
+      threadId[i]=new Thread(trans,"TransactionThread-" + i);
+      threadId[i].start();
+    }
+    for (int i=0; i < NUM_THREADS; i++) {
+      try {
+        threadId[i].join();
+      }
+ catch (      InterruptedException e) {
+        i--;
+      }
+    }
+    editLog.close();
+    namesystem.getDelegationTokenSecretManager().stopThreads();
+    int numKeys=namesystem.getDelegationTokenSecretManager().getNumberOfKeys();
+    int expectedTransactions=NUM_THREADS * opsPerTrans * NUM_TRANSACTIONS + numKeys + 2;
+    for (    StorageDirectory sd : fsimage.getStorage().dirIterable(NameNodeDirType.EDITS)) {
+      File editFile=NNStorage.getFinalizedEditsFile(sd,1,1 + expectedTransactions - 1);
+      System.out.println("Verifying file: " + editFile);
+      FSEditLogLoader loader=new FSEditLogLoader(namesystem,0);
+      long numEdits=loader.loadFSEdits(new EditLogFileInputStream(editFile),1);
+      assertEquals("Verification for " + editFile,expectedTransactions,numEdits);
+    }
+  }
+  finally {
+    if (fileSys != null)     fileSys.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=10000) public void testEditsForCancelOnTokenExpire() throws IOException, InterruptedException {
+  long renewInterval=2000;
+  Configuration conf=new Configuration();
+  conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_DELEGATION_TOKEN_ALWAYS_USE_KEY,true);
+  conf.setLong(DFS_NAMENODE_DELEGATION_TOKEN_RENEW_INTERVAL_KEY,renewInterval);
+  conf.setLong(DFS_NAMENODE_DELEGATION_TOKEN_MAX_LIFETIME_KEY,renewInterval * 2);
+  Text renewer=new Text(UserGroupInformation.getCurrentUser().getUserName());
+  FSImage fsImage=mock(FSImage.class);
+  FSEditLog log=mock(FSEditLog.class);
+  doReturn(log).when(fsImage).getEditLog();
+  FSNamesystem fsn=new FSNamesystem(conf,fsImage);
+  DelegationTokenSecretManager dtsm=fsn.getDelegationTokenSecretManager();
+  try {
+    dtsm.startThreads();
+    Token<DelegationTokenIdentifier> token1=fsn.getDelegationToken(renewer);
+    Token<DelegationTokenIdentifier> token2=fsn.getDelegationToken(renewer);
+    DelegationTokenIdentifier ident1=token1.decodeIdentifier();
+    DelegationTokenIdentifier ident2=token2.decodeIdentifier();
+    verify(log,times(1)).logGetDelegationToken(eq(ident1),anyLong());
+    verify(log,times(1)).logGetDelegationToken(eq(ident2),anyLong());
+    Thread.sleep(renewInterval / 2);
+    fsn.renewDelegationToken(token2);
+    verify(log,times(1)).logRenewDelegationToken(eq(ident2),anyLong());
+    dtsm.stopThreads();
+    dtsm.startThreads();
+    Thread.sleep(250);
+    verify(log,times(0)).logCancelDelegationToken(eq(ident1));
+    verify(log,times(0)).logCancelDelegationToken(eq(ident2));
+    Thread.sleep(renewInterval / 2);
+    dtsm.stopThreads();
+    dtsm.startThreads();
+    Thread.sleep(250);
+    verify(log,times(1)).logCancelDelegationToken(eq(ident1));
+    verify(log,times(0)).logCancelDelegationToken(eq(ident2));
+    Thread.sleep(renewInterval / 2);
+    dtsm.stopThreads();
+    dtsm.startThreads();
+    Thread.sleep(250);
+    verify(log,times(1)).logCancelDelegationToken(eq(ident1));
+    verify(log,times(1)).logCancelDelegationToken(eq(ident2));
+  }
+  finally {
+    dtsm.stopThreads();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

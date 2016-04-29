@@ -1,0 +1,141 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hive.TestMovingToProduction (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-12 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * repeat above tests, only difference is don't do 'USE <database>'
+ * in this test. Instead, access table objects across database by
+ * database.table
+ * @throws Exception
+ */
+@Test public void testMovingTable2() throws Exception {
+  String tableName1="tb_1";
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS " + DB1 + " CASCADE");
+  statement.execute("DROP DATABASE IF EXISTS " + DB2 + " CASCADE");
+  statement.execute("CREATE DATABASE " + DB1);
+  statement.execute("CREATE DATABASE " + DB2);
+  statement.execute("DROP TABLE IF EXISTS " + DB2 + "."+ tableName1);
+  statement.execute("create table " + DB2 + "."+ tableName1+ " (under_col int comment 'the under column', value string)");
+  statement.close();
+  connection.close();
+  policyFile.addRolesToGroup(USERGROUP1,"all_db1","load_data").addPermissionsToRole("all_db1","server=server1->db=" + DB1).addPermissionsToRole("load_data","server=server1->uri=file://" + dataDir.getPath());
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("DROP TABLE IF EXISTS " + DB1 + "."+ tableName1);
+  statement.execute("create table " + DB1 + "."+ tableName1+ " (under_col int comment 'the under column', value string)");
+  statement.execute("LOAD DATA LOCAL INPATH 'file://" + dataDir.getPath() + "' INTO TABLE "+ DB1+ "."+ tableName1);
+  policyFile.addRolesToGroup(USERGROUP1,"insert_proddb_tbl1").addPermissionsToRole("insert_proddb_tbl1","server=server1->db=" + DB2 + "->table=tb_1->action=insert");
+  writePolicyFile(policyFile);
+  statement.execute("INSERT OVERWRITE TABLE " + DB2 + "."+ tableName1+ " SELECT * FROM "+ DB1+ "."+ tableName1);
+  policyFile.addRolesToGroup(USERGROUP1,"select_proddb_tbl1").addPermissionsToRole("select_proddb_tbl1","server=server1->db=" + DB2 + "->table=tb_1->action=select");
+  writePolicyFile(policyFile);
+  assertTrue("user1 should be able to select data from " + DB2 + "."+ DB2+ "."+ tableName1,statement.execute("SELECT * FROM " + DB2 + "."+ tableName1+ " LIMIT 10"));
+  assertTrue("user1 should be able to describe table " + DB2 + "."+ tableName1,statement.execute("DESCRIBE " + DB2 + "."+ tableName1));
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  context.assertAuthzException(statement,"INSERT OVERWRITE TABLE " + DB2 + "."+ tableName1+ " SELECT * FROM "+ DB1+ "."+ tableName1);
+  context.assertAuthzException(statement,"SELECT * FROM " + DB2 + "."+ tableName1+ " LIMIT 10");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB2);
+  context.assertAuthzException(statement,"DROP TABLE " + tableName1);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  File dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  policyFile=PolicyFile.setAdminOnServer1(ADMINGROUP).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Steps:
+ * 1. admin create DB_1, admin create GROUP_1, GROUP_2
+ * 2. admin grant all to GROUP_1 on DB_1
+ * 3. user in GROUP_1 create table tb_1 and load data into
+ * 4. admin create table production.tb_1.
+ * 5. admin grant all to GROUP_1 on production.tb_1.
+ * positive test cases:
+ * a)verify user in GROUP_1 can load data from DB_1.tb_1 to production.tb_1
+ * b)verify user in GROUP_1 has proper privilege on production.tb_1
+ * (read and insert)
+ * negative test cases:
+ * c)verify user in GROUP_2 cannot load data from DB_1.tb_1
+ * to production.tb_1
+ * d)verify user in GROUP_1 cannot drop production.tb_1
+ */
+@Test public void testMovingTable1() throws Exception {
+  String tableName1="tb_1";
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS " + DB1 + " CASCADE");
+  statement.execute("DROP DATABASE IF EXISTS " + DB2 + " CASCADE");
+  statement.execute("CREATE DATABASE " + DB1);
+  statement.execute("CREATE DATABASE " + DB2);
+  statement.execute("DROP TABLE IF EXISTS " + DB2 + "."+ tableName1);
+  statement.execute("create table " + DB2 + "."+ tableName1+ " (under_col int comment 'the under column', value string)");
+  statement.close();
+  connection.close();
+  policyFile.addRolesToGroup(USERGROUP1,"all_db1","load_data").addPermissionsToRole("load_data","server=server1->uri=file://" + dataDir.getPath()).addPermissionsToRole("all_db1","server=server1->db=" + DB1);
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  statement.execute("DROP TABLE IF EXISTS " + tableName1);
+  statement.execute("create table " + tableName1 + " (under_col int comment 'the under column', value string)");
+  statement.execute("LOAD DATA LOCAL INPATH 'file://" + dataDir.getPath() + "' INTO TABLE "+ tableName1);
+  policyFile.addRolesToGroup(USERGROUP1,"insert_proddb_tbl1").addPermissionsToRole("insert_proddb_tbl1","server=server1->db=" + DB2 + "->table=tb_1->action=insert");
+  writePolicyFile(policyFile);
+  statement.execute("USE " + DB2);
+  statement.execute("INSERT OVERWRITE TABLE " + tableName1 + " SELECT * FROM "+ DB1+ "."+ tableName1);
+  policyFile.addRolesToGroup(USERGROUP1,"select_proddb_tbl1").addPermissionsToRole("select_proddb_tbl1","server=server1->db=" + DB2 + "->table=tb_1->action=select");
+  writePolicyFile(policyFile);
+  ResultSet resultSet=statement.executeQuery("SELECT * FROM " + tableName1 + " LIMIT 10");
+  int count=0;
+  while (resultSet.next()) {
+    count++;
+  }
+  assertEquals(10,count);
+  statement.execute("DESCRIBE " + tableName1);
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  context.assertAuthzException(statement,"USE " + DB2);
+  context.assertAuthzException(statement,"INSERT OVERWRITE TABLE " + DB2 + "."+ tableName1+ " SELECT * FROM "+ DB1+ "."+ tableName1);
+  context.assertAuthzException(statement,"SELECT * FROM " + DB2 + "."+ tableName1+ " LIMIT 10");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB2);
+  context.assertAuthzException(statement,"DROP TABLE " + tableName1);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

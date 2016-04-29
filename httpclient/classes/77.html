@@ -1,0 +1,245 @@
+<h3 style="margin:0px">Class: org.apache.hc.client5.http.impl.integration.TestAbortHandling (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Tests that if a socket fails to connect, the allocated connection is
+ * properly released back to the connection manager.
+ */
+@Test public void testSocketConnectFailureReleasesConnection() throws Exception {
+  final HttpClientConnection conn=Mockito.mock(HttpClientConnection.class);
+  final ConnectionRequest connrequest=Mockito.mock(ConnectionRequest.class);
+  Mockito.when(connrequest.get(Mockito.anyInt(),Mockito.any(TimeUnit.class))).thenReturn(conn);
+  final HttpClientConnectionManager connmgr=Mockito.mock(HttpClientConnectionManager.class);
+  Mockito.doThrow(new ConnectException()).when(connmgr).connect(Mockito.any(HttpClientConnection.class),Mockito.any(HttpRoute.class),Mockito.anyInt(),Mockito.any(HttpContext.class));
+  Mockito.when(connmgr.requestConnection(Mockito.any(HttpRoute.class),Mockito.any())).thenReturn(connrequest);
+  final CloseableHttpClient client=HttpClients.custom().setConnectionManager(connmgr).build();
+  final HttpContext context=new BasicHttpContext();
+  final HttpGet httpget=new HttpGet("http://www.example.com/a");
+  try {
+    client.execute(httpget,context);
+    Assert.fail("expected IOException");
+  }
+ catch (  final IOException expected) {
+  }
+  Mockito.verify(connmgr).releaseConnection(conn,null,0,TimeUnit.MILLISECONDS);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAbortInAllocate() throws Exception {
+  final CountDownLatch connLatch=new CountDownLatch(1);
+  final CountDownLatch awaitLatch=new CountDownLatch(1);
+  final ConMan conMan=new ConMan(connLatch,awaitLatch);
+  final AtomicReference<Throwable> throwableRef=new AtomicReference<>();
+  final CountDownLatch getLatch=new CountDownLatch(1);
+  this.clientBuilder.setConnectionManager(conMan);
+  final HttpContext context=new BasicHttpContext();
+  final HttpGet httpget=new HttpGet("http://www.example.com/a");
+  start();
+  new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        httpclient.execute(httpget,context);
+      }
+ catch (      final Throwable t) {
+        throwableRef.set(t);
+      }
+ finally {
+        getLatch.countDown();
+      }
+    }
+  }
+).start();
+  Assert.assertTrue("should have tried to get a connection",connLatch.await(1,TimeUnit.SECONDS));
+  httpget.abort();
+  Assert.assertTrue("should have finished get request",getLatch.await(1,TimeUnit.SECONDS));
+  Assert.assertTrue("should be instanceof IOException, was: " + throwableRef.get(),throwableRef.get() instanceof IOException);
+  Assert.assertTrue("cause should be InterruptedException, was: " + throwableRef.get().getCause(),throwableRef.get().getCause() instanceof InterruptedException);
+}
+
+</code></pre>
+
+<pre class="type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testAbortRetry_HTTPCLIENT_1120() throws Exception {
+  final CountDownLatch wait=new CountDownLatch(1);
+  this.serverBootstrap.registerHandler("*",new HttpRequestHandler(){
+    @Override public void handle(    final HttpRequest request,    final HttpResponse response,    final HttpContext context) throws HttpException, IOException {
+      try {
+        wait.countDown();
+        Thread.sleep(2000);
+        response.setStatusCode(HttpStatus.SC_OK);
+        final StringEntity entity=new StringEntity("Whatever");
+        response.setEntity(entity);
+      }
+ catch (      final Exception e) {
+        response.setStatusCode(HttpStatus.SC_REQUEST_TIMEOUT);
+      }
+    }
+  }
+);
+  final HttpHost target=start();
+  final HttpGet httpget=new HttpGet("/");
+  final Thread t=new Thread(){
+    @Override public void run(){
+      try {
+        wait.await();
+      }
+ catch (      final InterruptedException e) {
+      }
+      httpget.abort();
+    }
+  }
+;
+  t.start();
+  final HttpClientContext context=HttpClientContext.create();
+  try {
+    this.httpclient.execute(target,httpget,context);
+  }
+ catch (  final IllegalStateException|IOException e) {
+  }
+  final HttpRequest reqWrapper=context.getRequest();
+  Assert.assertNotNull("Request should exist",reqWrapper);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that an abort called completely before execute
+ * still aborts the request.
+ */
+@Test public void testAbortBeforeExecute() throws Exception {
+  this.serverBootstrap.registerHandler("*",new BasicService());
+  final AtomicReference<Throwable> throwableRef=new AtomicReference<>();
+  final CountDownLatch getLatch=new CountDownLatch(1);
+  final CountDownLatch startLatch=new CountDownLatch(1);
+  final HttpContext context=new BasicHttpContext();
+  final HttpGet httpget=new HttpGet("a");
+  final HttpHost target=start();
+  new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        try {
+          if (!startLatch.await(1,TimeUnit.SECONDS)) {
+            throw new RuntimeException("Took too long to start!");
+          }
+        }
+ catch (        final InterruptedException interrupted) {
+          throw new RuntimeException("Never started!",interrupted);
+        }
+        httpclient.execute(target,httpget,context);
+      }
+ catch (      final Throwable t) {
+        throwableRef.set(t);
+      }
+ finally {
+        getLatch.countDown();
+      }
+    }
+  }
+).start();
+  httpget.abort();
+  startLatch.countDown();
+  Assert.assertTrue("should have finished get request",getLatch.await(1,TimeUnit.SECONDS));
+  Assert.assertTrue("should be instanceof IOException, was: " + throwableRef.get(),throwableRef.get() instanceof IOException);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that an abort called after a redirect has found a new host
+ * still aborts in the correct place (while trying to get the new
+ * host's route, not while doing the subsequent request).
+ */
+@Test public void testAbortAfterRedirectedRoute() throws Exception {
+  final UriHttpRequestHandlerMapper reqistry=new UriHttpRequestHandlerMapper();
+  this.serverBootstrap.setHandlerMapper(reqistry);
+  final CountDownLatch connLatch=new CountDownLatch(1);
+  final CountDownLatch awaitLatch=new CountDownLatch(1);
+  final ConnMan4 conMan=new ConnMan4(connLatch,awaitLatch);
+  final AtomicReference<Throwable> throwableRef=new AtomicReference<>();
+  final CountDownLatch getLatch=new CountDownLatch(1);
+  this.clientBuilder.setConnectionManager(conMan);
+  final HttpContext context=new BasicHttpContext();
+  final HttpGet httpget=new HttpGet("a");
+  final HttpHost target=start();
+  reqistry.register("*",new BasicRedirectService(target.getPort()));
+  new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        final HttpHost host=new HttpHost("127.0.0.1",target.getPort());
+        httpclient.execute(host,httpget,context);
+      }
+ catch (      final Throwable t) {
+        throwableRef.set(t);
+      }
+ finally {
+        getLatch.countDown();
+      }
+    }
+  }
+).start();
+  Assert.assertTrue("should have tried to get a connection",connLatch.await(1,TimeUnit.SECONDS));
+  httpget.abort();
+  Assert.assertTrue("should have finished get request",getLatch.await(1,TimeUnit.SECONDS));
+  Assert.assertTrue("should be instanceof IOException, was: " + throwableRef.get(),throwableRef.get() instanceof IOException);
+  Assert.assertTrue("cause should be InterruptedException, was: " + throwableRef.get().getCause(),throwableRef.get().getCause() instanceof InterruptedException);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that an abort called after the connection has been retrieved
+ * but before a release trigger is set does still abort the request.
+ */
+@Test public void testAbortAfterAllocateBeforeRequest() throws Exception {
+  this.serverBootstrap.registerHandler("*",new BasicService());
+  final CountDownLatch releaseLatch=new CountDownLatch(1);
+  final AtomicReference<Throwable> throwableRef=new AtomicReference<>();
+  final CountDownLatch getLatch=new CountDownLatch(1);
+  final HttpContext context=new BasicHttpContext();
+  final HttpGet httpget=new CustomGet("a",releaseLatch);
+  final HttpHost target=start();
+  new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        httpclient.execute(target,httpget,context);
+      }
+ catch (      final Throwable t) {
+        throwableRef.set(t);
+      }
+ finally {
+        getLatch.countDown();
+      }
+    }
+  }
+).start();
+  Thread.sleep(100);
+  httpget.abort();
+  releaseLatch.countDown();
+  Assert.assertTrue("should have finished get request",getLatch.await(1,TimeUnit.SECONDS));
+  Assert.assertTrue("should be instanceof IOException, was: " + throwableRef.get(),throwableRef.get() instanceof IOException);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

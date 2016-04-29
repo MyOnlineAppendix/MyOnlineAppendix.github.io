@@ -1,0 +1,960 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.v2.app.TestRecovery (15 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(5)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRecoverySuccessAttempt(){
+  LOG.info("--- START: testRecoverySuccessAttempt ---");
+  long clusterTimestamp=System.currentTimeMillis();
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  MapTaskImpl recoverMapTask=getMockMapTask(clusterTimestamp,mockEventHandler);
+  TaskId taskId=recoverMapTask.getID();
+  JobID jobID=new JobID(Long.toString(clusterTimestamp),1);
+  TaskID taskID=new TaskID(jobID,org.apache.hadoop.mapreduce.TaskType.MAP,taskId.getId());
+  Map<TaskAttemptID,TaskAttemptInfo> mockTaskAttempts=new HashMap<TaskAttemptID,TaskAttemptInfo>();
+  TaskAttemptID taId1=new TaskAttemptID(taskID,2);
+  TaskAttemptInfo mockTAinfo1=getMockTaskAttemptInfo(taId1,TaskAttemptState.SUCCEEDED);
+  mockTaskAttempts.put(taId1,mockTAinfo1);
+  TaskAttemptID taId2=new TaskAttemptID(taskID,1);
+  TaskAttemptInfo mockTAinfo2=getMockTaskAttemptInfo(taId2,TaskAttemptState.FAILED);
+  mockTaskAttempts.put(taId2,mockTAinfo2);
+  OutputCommitter mockCommitter=mock(OutputCommitter.class);
+  TaskInfo mockTaskInfo=mock(TaskInfo.class);
+  when(mockTaskInfo.getTaskStatus()).thenReturn("SUCCEEDED");
+  when(mockTaskInfo.getTaskId()).thenReturn(taskID);
+  when(mockTaskInfo.getAllTaskAttempts()).thenReturn(mockTaskAttempts);
+  recoverMapTask.handle(new TaskRecoverEvent(taskId,mockTaskInfo,mockCommitter,true));
+  ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+  verify(mockEventHandler,atLeast(1)).handle((org.apache.hadoop.yarn.event.Event)arg.capture());
+  Map<TaskAttemptID,TaskAttemptState> finalAttemptStates=new HashMap<TaskAttemptID,TaskAttemptState>();
+  finalAttemptStates.put(taId1,TaskAttemptState.SUCCEEDED);
+  finalAttemptStates.put(taId2,TaskAttemptState.FAILED);
+  List<EventType> jobHistoryEvents=new ArrayList<EventType>();
+  jobHistoryEvents.add(EventType.TASK_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FINISHED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FAILED);
+  jobHistoryEvents.add(EventType.TASK_FINISHED);
+  recoveryChecker(recoverMapTask,TaskState.SUCCEEDED,finalAttemptStates,arg,jobHistoryEvents,2L,1L);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testOutputRecovery() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(1,2,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task reduceTask1=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  TaskAttempt task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.waitForState(reduceTask1,TaskState.RUNNING);
+  TaskAttempt reduce1Attempt1=reduceTask1.getAttempts().values().iterator().next();
+  writeOutput(reduce1Attempt1,conf);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduce1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(reduceTask1,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(1,2,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  reduceTask1=it.next();
+  Task reduceTask2=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.waitForState(reduceTask1,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask2,TaskState.RUNNING);
+  TaskAttempt reduce2Attempt=reduceTask2.getAttempts().values().iterator().next();
+  app.waitForState(reduce2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduce2Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(reduceTask2,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+  validateOutput();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=30000) public void testRecoveryWithoutShuffleSecret() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppNoShuffleSecret(2,1,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  TaskAttempt task1Attempt=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  Assert.assertEquals("Reduce Task state not correct",TaskState.RUNNING,reduceTask.getReport().getTaskState());
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppNoShuffleSecret(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask2.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask1.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduceTask.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This test case primarily verifies if the recovery is controlled through config
+ * property. In this case, recover is turned ON. AM with 3 maps and 0 reduce.
+ * AM crashes after the first two tasks finishes and recovers completely and
+ * succeeds in the second generation.
+ * @throws Exception
+ */
+@Test public void testRecoverySuccessUsingCustomOutputCommitter() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(3,0,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setClass("mapred.output.committer.class",TestFileOutputCommitter.class,org.apache.hadoop.mapred.OutputCommitter.class);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean("want.am.recovery",true);
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  TaskAttempt task1Attempt=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  TaskAttempt task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task2Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setClass("mapred.output.committer.class",TestFileOutputCommitter.class,org.apache.hadoop.mapred.OutputCommitter.class);
+  conf.setBoolean("want.am.recovery",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask3.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask3,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRecoveryAllFailAttempts(){
+  LOG.info("--- START: testRecoveryAllFailAttempts ---");
+  long clusterTimestamp=System.currentTimeMillis();
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  MapTaskImpl recoverMapTask=getMockMapTask(clusterTimestamp,mockEventHandler);
+  TaskId taskId=recoverMapTask.getID();
+  JobID jobID=new JobID(Long.toString(clusterTimestamp),1);
+  TaskID taskID=new TaskID(jobID,org.apache.hadoop.mapreduce.TaskType.MAP,taskId.getId());
+  Map<TaskAttemptID,TaskAttemptInfo> mockTaskAttempts=new HashMap<TaskAttemptID,TaskAttemptInfo>();
+  TaskAttemptID taId1=new TaskAttemptID(taskID,2);
+  TaskAttemptInfo mockTAinfo1=getMockTaskAttemptInfo(taId1,TaskAttemptState.FAILED);
+  mockTaskAttempts.put(taId1,mockTAinfo1);
+  TaskAttemptID taId2=new TaskAttemptID(taskID,1);
+  TaskAttemptInfo mockTAinfo2=getMockTaskAttemptInfo(taId2,TaskAttemptState.FAILED);
+  mockTaskAttempts.put(taId2,mockTAinfo2);
+  OutputCommitter mockCommitter=mock(OutputCommitter.class);
+  TaskInfo mockTaskInfo=mock(TaskInfo.class);
+  when(mockTaskInfo.getTaskStatus()).thenReturn("FAILED");
+  when(mockTaskInfo.getTaskId()).thenReturn(taskID);
+  when(mockTaskInfo.getAllTaskAttempts()).thenReturn(mockTaskAttempts);
+  recoverMapTask.handle(new TaskRecoverEvent(taskId,mockTaskInfo,mockCommitter,true));
+  ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+  verify(mockEventHandler,atLeast(1)).handle((org.apache.hadoop.yarn.event.Event)arg.capture());
+  Map<TaskAttemptID,TaskAttemptState> finalAttemptStates=new HashMap<TaskAttemptID,TaskAttemptState>();
+  finalAttemptStates.put(taId1,TaskAttemptState.FAILED);
+  finalAttemptStates.put(taId2,TaskAttemptState.FAILED);
+  List<EventType> jobHistoryEvents=new ArrayList<EventType>();
+  jobHistoryEvents.add(EventType.TASK_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FAILED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FAILED);
+  jobHistoryEvents.add(EventType.TASK_FAILED);
+  recoveryChecker(recoverMapTask,TaskState.FAILED,finalAttemptStates,arg,jobHistoryEvents,2L,2L);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testOutputRecoveryMapsOnly() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(2,1,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task reduceTask1=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  TaskAttempt task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  writeBadOutput(task1Attempt1,conf);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask1=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  TaskAttempt task2Attempt1=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task2Attempt1,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task2Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  Assert.assertEquals(5467,task2Attempt1.getShufflePort());
+  app.waitForState(reduceTask1,TaskState.RUNNING);
+  TaskAttempt reduce1Attempt1=reduceTask1.getAttempts().values().iterator().next();
+  writeOutput(reduce1Attempt1,conf);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduce1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(reduceTask1,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+  validateOutput();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * AM with 2 maps and 1 reduce. For 1st map, one attempt fails, one attempt
+ * completely disappears because of failed launch, one attempt gets killed and
+ * one attempt succeeds. AM crashes after the first tasks finishes and
+ * recovers completely and succeeds in the second generation.
+ * @throws Exception
+ */
+@Test public void testSpeculative() throws Exception {
+  int runCount=0;
+  long am1StartTimeEst=System.currentTimeMillis();
+  MRApp app=new MRAppWithHistory(2,1,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  long jobStartTime=job.getReport().getStartTime();
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskEvent(mapTask1.getID(),TaskEventType.T_ADD_SPEC_ATTEMPT));
+  int timeOut=0;
+  while (mapTask1.getAttempts().size() != 2 && timeOut++ < 10) {
+    Thread.sleep(1000);
+    LOG.info("Waiting for next attempt to start");
+  }
+  Iterator<TaskAttempt> t1it=mapTask1.getAttempts().values().iterator();
+  TaskAttempt task1Attempt1=t1it.next();
+  TaskAttempt task1Attempt2=t1it.next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  ContainerId t1a2contId=task1Attempt2.getAssignedContainerID();
+  LOG.info(t1a2contId.toString());
+  LOG.info(task1Attempt1.getID().toString());
+  LOG.info(task1Attempt2.getID().toString());
+  app.getContext().getEventHandler().handle(new TaskAttemptContainerLaunchedEvent(task1Attempt2.getID(),runCount));
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  app.waitForState(task1Attempt2,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  Assert.assertEquals("Reduce Task state not correct",TaskState.RUNNING,reduceTask.getReport().getTaskState());
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(task1Attempt1,TaskAttemptState.SUCCEEDED);
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  long task1StartTime=mapTask1.getReport().getStartTime();
+  long task1FinishTime=mapTask1.getReport().getFinishTime();
+  app.stop();
+  long am2StartTimeEst=System.currentTimeMillis();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask2.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduceTask.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+  Assert.assertEquals("Job Start time not correct",jobStartTime,job.getReport().getStartTime());
+  Assert.assertEquals("Task Start time not correct",task1StartTime,mapTask1.getReport().getStartTime());
+  Assert.assertEquals("Task Finish time not correct",task1FinishTime,mapTask1.getReport().getFinishTime());
+  Assert.assertEquals(2,job.getAMInfos().size());
+  int attemptNum=1;
+  for (  AMInfo amInfo : job.getAMInfos()) {
+    Assert.assertEquals(attemptNum++,amInfo.getAppAttemptId().getAttemptId());
+    Assert.assertEquals(amInfo.getAppAttemptId(),amInfo.getContainerId().getApplicationAttemptId());
+    Assert.assertEquals(MRApp.NM_HOST,amInfo.getNodeManagerHost());
+    Assert.assertEquals(MRApp.NM_PORT,amInfo.getNodeManagerPort());
+    Assert.assertEquals(MRApp.NM_HTTP_PORT,amInfo.getNodeManagerHttpPort());
+  }
+  long am1StartTimeReal=job.getAMInfos().get(0).getStartTime();
+  long am2StartTimeReal=job.getAMInfos().get(1).getStartTime();
+  Assert.assertTrue(am1StartTimeReal >= am1StartTimeEst && am1StartTimeReal <= am2StartTimeEst);
+  Assert.assertTrue(am2StartTimeReal >= am2StartTimeEst && am2StartTimeReal <= System.currentTimeMillis());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This test case primarily verifies if the recovery is controlled through config
+ * property. In this case, recover is turned OFF. AM with 3 maps and 0 reduce.
+ * AM crashes after the first two tasks finishes and recovery fails and have
+ * to rerun fully in the second generation and succeeds.
+ * @throws Exception
+ */
+@Test public void testRecoveryFailsUsingCustomOutputCommitter() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(3,0,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setClass("mapred.output.committer.class",TestFileOutputCommitter.class,org.apache.hadoop.mapred.OutputCommitter.class);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean("want.am.recovery",false);
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  TaskAttempt task1Attempt=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  TaskAttempt task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task2Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setClass("mapred.output.committer.class",TestFileOutputCommitter.class,org.apache.hadoop.mapred.OutputCommitter.class);
+  conf.setBoolean("want.am.recovery",false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask1.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask2.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask3.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask3,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRecoveryWithOldCommiter() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(1,2,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",false);
+  conf.setBoolean("mapred.reducer.new-api",false);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task reduceTask1=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  TaskAttempt task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.waitForState(reduceTask1,TaskState.RUNNING);
+  TaskAttempt reduce1Attempt1=reduceTask1.getAttempts().values().iterator().next();
+  writeOutput(reduce1Attempt1,conf);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduce1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(reduceTask1,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(1,2,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",false);
+  conf.setBoolean("mapred.reducer.new-api",false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  reduceTask1=it.next();
+  Task reduceTask2=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  Assert.assertEquals(5467,task1Attempt1.getShufflePort());
+  app.waitForState(reduceTask1,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask2,TaskState.RUNNING);
+  TaskAttempt reduce2Attempt=reduceTask2.getAttempts().values().iterator().next();
+  app.waitForState(reduce2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduce2Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(reduceTask2,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+  validateOutput();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * AM with 3 maps and 0 reduce. AM crashes after the first two tasks finishes
+ * and recovers completely and succeeds in the second generation.
+ * @throws Exception
+ */
+@Test public void testCrashOfMapsOnlyJob() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(3,0,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  TaskAttempt task1Attempt=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  TaskAttempt task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task2Attempt.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  mapTask3=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(mapTask3,TaskState.RUNNING);
+  task3Attempt=mapTask3.getAttempts().values().iterator().next();
+  app.waitForState(task3Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask3.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask3,TaskState.SUCCEEDED);
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRecoveryAllAttemptsKilled(){
+  LOG.info("--- START:  testRecoveryAllAttemptsKilled ---");
+  long clusterTimestamp=System.currentTimeMillis();
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  MapTaskImpl recoverMapTask=getMockMapTask(clusterTimestamp,mockEventHandler);
+  TaskId taskId=recoverMapTask.getID();
+  JobID jobID=new JobID(Long.toString(clusterTimestamp),1);
+  TaskID taskID=new TaskID(jobID,org.apache.hadoop.mapreduce.TaskType.MAP,taskId.getId());
+  Map<TaskAttemptID,TaskAttemptInfo> mockTaskAttempts=new HashMap<TaskAttemptID,TaskAttemptInfo>();
+  TaskAttemptID taId1=new TaskAttemptID(taskID,2);
+  TaskAttemptInfo mockTAinfo1=getMockTaskAttemptInfo(taId1,TaskAttemptState.KILLED);
+  mockTaskAttempts.put(taId1,mockTAinfo1);
+  TaskAttemptID taId2=new TaskAttemptID(taskID,1);
+  TaskAttemptInfo mockTAinfo2=getMockTaskAttemptInfo(taId2,TaskAttemptState.KILLED);
+  mockTaskAttempts.put(taId2,mockTAinfo2);
+  OutputCommitter mockCommitter=mock(OutputCommitter.class);
+  TaskInfo mockTaskInfo=mock(TaskInfo.class);
+  when(mockTaskInfo.getTaskStatus()).thenReturn("KILLED");
+  when(mockTaskInfo.getTaskId()).thenReturn(taskID);
+  when(mockTaskInfo.getAllTaskAttempts()).thenReturn(mockTaskAttempts);
+  recoverMapTask.handle(new TaskRecoverEvent(taskId,mockTaskInfo,mockCommitter,true));
+  ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+  verify(mockEventHandler,atLeast(1)).handle((org.apache.hadoop.yarn.event.Event)arg.capture());
+  Map<TaskAttemptID,TaskAttemptState> finalAttemptStates=new HashMap<TaskAttemptID,TaskAttemptState>();
+  finalAttemptStates.put(taId1,TaskAttemptState.KILLED);
+  finalAttemptStates.put(taId2,TaskAttemptState.KILLED);
+  List<EventType> jobHistoryEvents=new ArrayList<EventType>();
+  jobHistoryEvents.add(EventType.TASK_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_KILLED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_KILLED);
+  jobHistoryEvents.add(EventType.TASK_FAILED);
+  recoveryChecker(recoverMapTask,TaskState.KILLED,finalAttemptStates,arg,jobHistoryEvents,2L,0L);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRecoveryTaskSuccessAllAttemptsFail(){
+  LOG.info("--- START:  testRecoveryTaskSuccessAllAttemptsFail ---");
+  long clusterTimestamp=System.currentTimeMillis();
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  MapTaskImpl recoverMapTask=getMockMapTask(clusterTimestamp,mockEventHandler);
+  TaskId taskId=recoverMapTask.getID();
+  JobID jobID=new JobID(Long.toString(clusterTimestamp),1);
+  TaskID taskID=new TaskID(jobID,org.apache.hadoop.mapreduce.TaskType.MAP,taskId.getId());
+  Map<TaskAttemptID,TaskAttemptInfo> mockTaskAttempts=new HashMap<TaskAttemptID,TaskAttemptInfo>();
+  TaskAttemptID taId1=new TaskAttemptID(taskID,2);
+  TaskAttemptInfo mockTAinfo1=getMockTaskAttemptInfo(taId1,TaskAttemptState.FAILED);
+  mockTaskAttempts.put(taId1,mockTAinfo1);
+  TaskAttemptID taId2=new TaskAttemptID(taskID,1);
+  TaskAttemptInfo mockTAinfo2=getMockTaskAttemptInfo(taId2,TaskAttemptState.FAILED);
+  mockTaskAttempts.put(taId2,mockTAinfo2);
+  OutputCommitter mockCommitter=mock(OutputCommitter.class);
+  TaskInfo mockTaskInfo=mock(TaskInfo.class);
+  when(mockTaskInfo.getTaskStatus()).thenReturn("SUCCEEDED");
+  when(mockTaskInfo.getTaskId()).thenReturn(taskID);
+  when(mockTaskInfo.getAllTaskAttempts()).thenReturn(mockTaskAttempts);
+  recoverMapTask.handle(new TaskRecoverEvent(taskId,mockTaskInfo,mockCommitter,true));
+  ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+  verify(mockEventHandler,atLeast(1)).handle((org.apache.hadoop.yarn.event.Event)arg.capture());
+  Map<TaskAttemptID,TaskAttemptState> finalAttemptStates=new HashMap<TaskAttemptID,TaskAttemptState>();
+  finalAttemptStates.put(taId1,TaskAttemptState.FAILED);
+  finalAttemptStates.put(taId2,TaskAttemptState.FAILED);
+  TaskAttemptID taId3=new TaskAttemptID(taskID,2000);
+  finalAttemptStates.put(taId3,TaskAttemptState.NEW);
+  List<EventType> jobHistoryEvents=new ArrayList<EventType>();
+  jobHistoryEvents.add(EventType.TASK_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FAILED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FAILED);
+  recoveryChecker(recoverMapTask,TaskState.RUNNING,finalAttemptStates,arg,jobHistoryEvents,2L,2L);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMultipleCrashes() throws Exception {
+  int runCount=0;
+  MRApp app=new MRAppWithHistory(2,1,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  TaskAttempt task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  Assert.assertEquals("Reduce Task state not correct",TaskState.RUNNING,reduceTask.getReport().getTaskState());
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask2.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.stop();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduceTask.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * AM with 2 maps and 1 reduce. For 1st map, one attempt fails, one attempt
+ * completely disappears because of failed launch, one attempt gets killed and
+ * one attempt succeeds. AM crashes after the first tasks finishes and
+ * recovers completely and succeeds in the second generation.
+ * @throws Exception
+ */
+@Test public void testCrashed() throws Exception {
+  int runCount=0;
+  long am1StartTimeEst=System.currentTimeMillis();
+  MRApp app=new MRAppWithHistory(2,1,false,this.getClass().getName(),true,++runCount);
+  Configuration conf=new Configuration();
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  Job job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  long jobStartTime=job.getReport().getStartTime();
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  Iterator<Task> it=job.getTasks().values().iterator();
+  Task mapTask1=it.next();
+  Task mapTask2=it.next();
+  Task reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.RUNNING);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  TaskAttempt task1Attempt1=mapTask1.getAttempts().values().iterator().next();
+  TaskAttempt task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task1Attempt1,TaskAttemptState.RUNNING);
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  Assert.assertEquals("Reduce Task state not correct",TaskState.RUNNING,reduceTask.getReport().getTaskState());
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt1.getID(),TaskAttemptEventType.TA_FAILMSG));
+  app.waitForState(task1Attempt1,TaskAttemptState.FAILED);
+  int timeOut=0;
+  while (mapTask1.getAttempts().size() != 2 && timeOut++ < 10) {
+    Thread.sleep(2000);
+    LOG.info("Waiting for next attempt to start");
+  }
+  Assert.assertEquals(2,mapTask1.getAttempts().size());
+  Iterator<TaskAttempt> itr=mapTask1.getAttempts().values().iterator();
+  itr.next();
+  TaskAttempt task1Attempt2=itr.next();
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt2.getID(),TaskAttemptEventType.TA_CONTAINER_LAUNCH_FAILED));
+  app.waitForState(task1Attempt2,TaskAttemptState.FAILED);
+  timeOut=0;
+  while (mapTask1.getAttempts().size() != 3 && timeOut++ < 10) {
+    Thread.sleep(2000);
+    LOG.info("Waiting for next attempt to start");
+  }
+  Assert.assertEquals(3,mapTask1.getAttempts().size());
+  itr=mapTask1.getAttempts().values().iterator();
+  itr.next();
+  itr.next();
+  TaskAttempt task1Attempt3=itr.next();
+  app.waitForState(task1Attempt3,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt3.getID(),TaskAttemptEventType.TA_KILL));
+  app.waitForState(task1Attempt3,TaskAttemptState.KILLED);
+  timeOut=0;
+  while (mapTask1.getAttempts().size() != 4 && timeOut++ < 10) {
+    Thread.sleep(2000);
+    LOG.info("Waiting for next attempt to start");
+  }
+  Assert.assertEquals(4,mapTask1.getAttempts().size());
+  itr=mapTask1.getAttempts().values().iterator();
+  itr.next();
+  itr.next();
+  itr.next();
+  TaskAttempt task1Attempt4=itr.next();
+  app.waitForState(task1Attempt4,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(task1Attempt4.getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  long task1StartTime=mapTask1.getReport().getStartTime();
+  long task1FinishTime=mapTask1.getReport().getFinishTime();
+  app.stop();
+  long am2StartTimeEst=System.currentTimeMillis();
+  app=new MRAppWithHistory(2,1,false,this.getClass().getName(),false,++runCount);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.MR_AM_JOB_RECOVERY_ENABLE,true);
+  conf.setBoolean("mapred.mapper.new-api",true);
+  conf.setBoolean("mapred.reducer.new-api",true);
+  conf.set(FileOutputFormat.OUTDIR,outputDir.toString());
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,false);
+  job=app.submit(conf);
+  app.waitForState(job,JobState.RUNNING);
+  Assert.assertEquals("No of tasks not correct",3,job.getTasks().size());
+  it=job.getTasks().values().iterator();
+  mapTask1=it.next();
+  mapTask2=it.next();
+  reduceTask=it.next();
+  app.waitForState(mapTask1,TaskState.SUCCEEDED);
+  app.waitForState(mapTask2,TaskState.RUNNING);
+  task2Attempt=mapTask2.getAttempts().values().iterator().next();
+  app.waitForState(task2Attempt,TaskAttemptState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(mapTask2.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(mapTask2,TaskState.SUCCEEDED);
+  app.waitForState(reduceTask,TaskState.RUNNING);
+  app.getContext().getEventHandler().handle(new TaskAttemptEvent(reduceTask.getAttempts().values().iterator().next().getID(),TaskAttemptEventType.TA_DONE));
+  app.waitForState(job,JobState.SUCCEEDED);
+  app.verifyCompleted();
+  Assert.assertEquals("Job Start time not correct",jobStartTime,job.getReport().getStartTime());
+  Assert.assertEquals("Task Start time not correct",task1StartTime,mapTask1.getReport().getStartTime());
+  Assert.assertEquals("Task Finish time not correct",task1FinishTime,mapTask1.getReport().getFinishTime());
+  Assert.assertEquals(2,job.getAMInfos().size());
+  int attemptNum=1;
+  for (  AMInfo amInfo : job.getAMInfos()) {
+    Assert.assertEquals(attemptNum++,amInfo.getAppAttemptId().getAttemptId());
+    Assert.assertEquals(amInfo.getAppAttemptId(),amInfo.getContainerId().getApplicationAttemptId());
+    Assert.assertEquals(MRApp.NM_HOST,amInfo.getNodeManagerHost());
+    Assert.assertEquals(MRApp.NM_PORT,amInfo.getNodeManagerPort());
+    Assert.assertEquals(MRApp.NM_HTTP_PORT,amInfo.getNodeManagerHttpPort());
+  }
+  long am1StartTimeReal=job.getAMInfos().get(0).getStartTime();
+  long am2StartTimeReal=job.getAMInfos().get(1).getStartTime();
+  Assert.assertTrue(am1StartTimeReal >= am1StartTimeEst && am1StartTimeReal <= am2StartTimeEst);
+  Assert.assertTrue(am2StartTimeReal >= am2StartTimeEst && am2StartTimeReal <= System.currentTimeMillis());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRecoveryTaskSuccessAllAttemptsSucceed(){
+  LOG.info("--- START:  testRecoveryTaskSuccessAllAttemptsFail ---");
+  long clusterTimestamp=System.currentTimeMillis();
+  EventHandler mockEventHandler=mock(EventHandler.class);
+  MapTaskImpl recoverMapTask=getMockMapTask(clusterTimestamp,mockEventHandler);
+  TaskId taskId=recoverMapTask.getID();
+  JobID jobID=new JobID(Long.toString(clusterTimestamp),1);
+  TaskID taskID=new TaskID(jobID,org.apache.hadoop.mapreduce.TaskType.MAP,taskId.getId());
+  Map<TaskAttemptID,TaskAttemptInfo> mockTaskAttempts=new HashMap<TaskAttemptID,TaskAttemptInfo>();
+  TaskAttemptID taId1=new TaskAttemptID(taskID,2);
+  TaskAttemptInfo mockTAinfo1=getMockTaskAttemptInfo(taId1,TaskAttemptState.SUCCEEDED);
+  mockTaskAttempts.put(taId1,mockTAinfo1);
+  TaskAttemptID taId2=new TaskAttemptID(taskID,1);
+  TaskAttemptInfo mockTAinfo2=getMockTaskAttemptInfo(taId2,TaskAttemptState.SUCCEEDED);
+  mockTaskAttempts.put(taId2,mockTAinfo2);
+  OutputCommitter mockCommitter=mock(OutputCommitter.class);
+  TaskInfo mockTaskInfo=mock(TaskInfo.class);
+  when(mockTaskInfo.getTaskStatus()).thenReturn("SUCCEEDED");
+  when(mockTaskInfo.getTaskId()).thenReturn(taskID);
+  when(mockTaskInfo.getAllTaskAttempts()).thenReturn(mockTaskAttempts);
+  recoverMapTask.handle(new TaskRecoverEvent(taskId,mockTaskInfo,mockCommitter,true));
+  ArgumentCaptor<Event> arg=ArgumentCaptor.forClass(Event.class);
+  verify(mockEventHandler,atLeast(1)).handle((org.apache.hadoop.yarn.event.Event)arg.capture());
+  Map<TaskAttemptID,TaskAttemptState> finalAttemptStates=new HashMap<TaskAttemptID,TaskAttemptState>();
+  finalAttemptStates.put(taId1,TaskAttemptState.SUCCEEDED);
+  finalAttemptStates.put(taId2,TaskAttemptState.SUCCEEDED);
+  List<EventType> jobHistoryEvents=new ArrayList<EventType>();
+  jobHistoryEvents.add(EventType.TASK_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FINISHED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_STARTED);
+  jobHistoryEvents.add(EventType.MAP_ATTEMPT_FINISHED);
+  jobHistoryEvents.add(EventType.TASK_FINISHED);
+  recoveryChecker(recoverMapTask,TaskState.SUCCEEDED,finalAttemptStates,arg,jobHistoryEvents,2L,0L);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

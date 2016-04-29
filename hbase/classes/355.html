@@ -1,0 +1,64 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestMetaShutdownHandler (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test will test the expire handling of a meta-carrying
+ * region server.
+ * After HBaseMiniCluster is up, we will delete the ephemeral
+ * node of the meta-carrying region server, which will trigger
+ * the expire of this region server on the master.
+ * On the other hand, we will slow down the abort process on
+ * the region server so that it is still up during the master SSH.
+ * We will check that the master SSH is still successfully done.
+ */
+@Test(timeout=180000) public void testExpireMetaRegionServer() throws Exception {
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  HMaster master=cluster.getMaster();
+  RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+  ServerName metaServerName=regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO);
+  if (master.getServerName().equals(metaServerName) || metaServerName == null || !metaServerName.equals(cluster.getServerHoldingMeta())) {
+    metaServerName=cluster.getLiveRegionServerThreads().get(0).getRegionServer().getServerName();
+    master.move(HRegionInfo.FIRST_META_REGIONINFO.getEncodedNameAsBytes(),Bytes.toBytes(metaServerName.getServerName()));
+    TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  }
+  RegionState metaState=MetaTableLocator.getMetaRegionState(master.getZooKeeper());
+  assertEquals("Meta should be not in transition",metaState.getState(),RegionState.State.OPEN);
+  assertNotEquals("Meta should be moved off master",metaServerName,master.getServerName());
+  String rsEphemeralNodePath=ZKUtil.joinZNode(master.getZooKeeper().rsZNode,metaServerName.toString());
+  ZKUtil.deleteNode(master.getZooKeeper(),rsEphemeralNodePath);
+  final ServerManager serverManager=master.getServerManager();
+  final ServerName priorMetaServerName=metaServerName;
+  TEST_UTIL.waitFor(120000,200,new Waiter.Predicate<Exception>(){
+    @Override public boolean evaluate() throws Exception {
+      return !serverManager.isServerOnline(priorMetaServerName) && !serverManager.areDeadServersInProgress();
+    }
+  }
+);
+  TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  assertTrue("Meta should be assigned",regionStates.isRegionOnline(HRegionInfo.FIRST_META_REGIONINFO));
+  metaState=MetaTableLocator.getMetaRegionState(master.getZooKeeper());
+  assertEquals("Meta should be not in transition",metaState.getState(),RegionState.State.OPEN);
+  assertEquals("Meta should be assigned",metaState.getServerName(),regionStates.getRegionServerOfRegion(HRegionInfo.FIRST_META_REGIONINFO));
+  assertNotEquals("Meta should be assigned on a different server",metaState.getServerName(),metaServerName);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

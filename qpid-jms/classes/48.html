@@ -1,0 +1,501 @@
+<h3 style="margin:0px">Class: org.apache.qpid.jms.integration.ConsumerIntegrationTest (19 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(10)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testReceiveNoWaitDrainsOnNoMessage() throws IOException, Exception {
+  doDrainOnNoMessageTestImpl(false,false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCloseConsumer() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    testPeer.expectBegin();
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    MessageConsumer consumer=session.createConsumer(queue);
+    testPeer.expectDetach(true,true,true);
+    consumer.close();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-6 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testSetMessageListenerAfterStartAndSend() throws Exception {
+  final int messageCount=4;
+  final CountDownLatch latch=new CountDownLatch(messageCount);
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue destination=session.createQueue(getTestName());
+    connection.start();
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),messageCount);
+    MessageConsumer consumer=session.createConsumer(destination);
+    for (int i=0; i < messageCount; i++) {
+      testPeer.expectDisposition(true,new AcceptedMatcher());
+    }
+    consumer.setMessageListener(new MessageListener(){
+      @Override public void onMessage(      Message m){
+        LOG.debug("Async consumer got Message: {}",m);
+        latch.countDown();
+      }
+    }
+);
+    boolean await=latch.await(3000,TimeUnit.MILLISECONDS);
+    assertTrue("Messages not received within given timeout. Count remaining: " + latch.getCount(),await);
+    testPeer.waitForAllHandlersToComplete(2000);
+    testPeer.expectDetach(true,true,true);
+    consumer.close();
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-13 type-4 type-5 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=20000) public void testCloseDurableSubscriberWithUnackedAnUnconsumedPrefetchedMessages() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.CLIENT_ACKNOWLEDGE);
+    String topicName="myTopic";
+    String subscriptionName="mySubscription";
+    Topic topic=session.createTopic(topicName);
+    int messageCount=5;
+    testPeer.expectDurableSubscriberAttach(topicName,subscriptionName);
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),messageCount);
+    MessageConsumer consumer=session.createDurableSubscriber(topic,subscriptionName);
+    int consumeCount=2;
+    for (int i=1; i <= consumeCount; i++) {
+      Message receivedMessage=consumer.receive(3000);
+      assertNotNull(receivedMessage);
+      assertTrue(receivedMessage instanceof TextMessage);
+    }
+    testPeer.expectDetach(false,true,false);
+    for (int i=1; i <= consumeCount; i++) {
+      testPeer.expectDisposition(true,new ModifiedMatcher().withDeliveryFailed(equalTo(true)));
+    }
+    for (int i=consumeCount + 1; i <= messageCount; i++) {
+      testPeer.expectDisposition(true,new ReleasedMatcher());
+    }
+    testPeer.expectEnd();
+    consumer.close();
+    session.close();
+    testPeer.waitForAllHandlersToComplete(3000);
+    testPeer.expectClose();
+    connection.close();
+  }
+ }
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test(timeout=30000) public void testCreditReplenishmentWhenSenderAdvancesDeliveryCountUnexpectedly() throws Exception {
+  int prefetch=4;
+  int topUp=2;
+  int messageCount=prefetch - topUp;
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer,"?jms.prefetchPolicy.all=" + prefetch);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowThenPerformUnexpectedDeliveryCountAdvanceThenCreditTopupThenTransfers(prefetch,topUp,messageCount);
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(prefetch)));
+    testPeer.expectDisposition(true,new AcceptedMatcher(),0,0);
+    testPeer.expectDisposition(true,new AcceptedMatcher(),1,1);
+    MessageConsumer consumer=session.createConsumer(queue);
+    Message msg=consumer.receive(10000);
+    assertNotNull("Should have received message 1",msg);
+    msg=consumer.receive(1);
+    assertNotNull("Should have received message 2",msg);
+    testPeer.expectDetach(true,true,true);
+    consumer.close();
+    testPeer.waitForAllHandlersToComplete(3000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCreateProducerInOnMessage() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    final Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    final Queue destination=session.createQueue(getTestName());
+    final Queue outboud=session.createQueue(getTestName() + "-FowardDest");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),1);
+    MessageHeaderSectionMatcher headersMatcher=new MessageHeaderSectionMatcher(true);
+    MessageAnnotationsSectionMatcher msgAnnotationsMatcher=new MessageAnnotationsSectionMatcher(true);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(headersMatcher);
+    messageMatcher.setMessageAnnotationsMatcher(msgAnnotationsMatcher);
+    testPeer.expectSenderAttach();
+    testPeer.expectTransfer(messageMatcher);
+    testPeer.expectDetach(true,true,true);
+    testPeer.expectDisposition(true,new AcceptedMatcher());
+    MessageConsumer consumer=session.createConsumer(destination);
+    consumer.setMessageListener(new MessageListener(){
+      @Override public void onMessage(      Message message){
+        LOG.debug("Async consumer got Message: {}",message);
+        try {
+          LOG.debug("Received async message: {}",message);
+          MessageProducer producer=session.createProducer(outboud);
+          producer.send(message);
+          producer.close();
+          LOG.debug("forwarded async message: {}",message);
+        }
+ catch (        Throwable e) {
+          LOG.debug("Caught exception: {}",e);
+          throw new RuntimeException(e.getMessage());
+        }
+      }
+    }
+);
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testReceiveNoWaitDoesntDrainOnNoMessageWithLocalOnlyOption() throws IOException, Exception {
+  doDrainOnNoMessageTestImpl(true,false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testReceiveWithTimoutDrainsOnNoMessage() throws IOException, Exception {
+  doDrainOnNoMessageTestImpl(false,true);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=60000) public void testSyncReceiveFailsWhenListenerSet() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue destination=session.createQueue(getTestName());
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow();
+    MessageConsumer consumer=session.createConsumer(destination);
+    consumer.setMessageListener(new MessageListener(){
+      @Override public void onMessage(      Message m){
+        LOG.warn("Async consumer got unexpected Message: {}",m);
+      }
+    }
+);
+    try {
+      consumer.receive();
+      fail("Should have thrown an exception.");
+    }
+ catch (    JMSException ex) {
+    }
+    try {
+      consumer.receive(1000);
+      fail("Should have thrown an exception.");
+    }
+ catch (    JMSException ex) {
+    }
+    try {
+      consumer.receiveNoWait();
+      fail("Should have thrown an exception.");
+    }
+ catch (    JMSException ex) {
+    }
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testCannotUseMessageListener() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    ((JmsConnection)connection).getPrefetchPolicy().setAll(0);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue destination=session.createQueue(getTestName());
+    testPeer.expectReceiverAttach();
+    MessageConsumer consumer=session.createConsumer(destination);
+    MessageListener listener=new MessageListener(){
+      @Override public void onMessage(      Message message){
+      }
+    }
+;
+    try {
+      consumer.setMessageListener(listener);
+      fail("Should not allow listener to be set when prefetch is zero.");
+    }
+ catch (    JMSException ex) {
+    }
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testConsumerTimedReceiveThrowsIfConnectionLost() throws Exception {
+  doConsumerReceiveThrowsIfConnectionLostTestImpl(true);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+/** 
+ * Test that a message is received when calling receive with a timeout
+ * of 0, which means wait indefinitely.
+ * @throws Exception if an error occurs during the test.
+ */
+@Test(timeout=20000) public void testReceiveMessageWithReceiveZeroTimeout() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    DescribedType amqpValueNullContent=new AmqpValueDescribedType(null);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,amqpValueNullContent);
+    testPeer.expectDispositionThatIsAcceptedAndSettled();
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    Message receivedMessage=messageConsumer.receive(0);
+    assertNotNull("A message should have been recieved",receivedMessage);
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-4 type-5 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=20000) public void testNoReceivedMessagesWhenConnectionNotStarted() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    final CountDownLatch incoming=new CountDownLatch(1);
+    Connection connection=testFixture.establishConnecton(testPeer);
+    ((JmsConnection)connection).addConnectionListener(new JmsDefaultConnectionListener(){
+      @Override public void onInboundMessage(      JmsInboundMessageDispatch envelope){
+        incoming.countDown();
+      }
+    }
+);
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue destination=session.createQueue(getTestName());
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),3);
+    MessageConsumer consumer=session.createConsumer(destination);
+    assertTrue(incoming.await(10,TimeUnit.SECONDS));
+    assertNull(consumer.receive(100));
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testConsumerReceiveThrowsIfConnectionLost() throws Exception {
+  doConsumerReceiveThrowsIfConnectionLostTestImpl(false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testReceiveWithTimoutDoesntDrainOnNoMessageWithLocalOnlyOption() throws IOException, Exception {
+  doDrainOnNoMessageTestImpl(true,true);
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testRemotelyCloseConsumer() throws Exception {
+  final String BREAD_CRUMB="ErrorMessage";
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow();
+    testPeer.remotelyDetachLastOpenedLinkOnLastOpenedSession(true,true,AmqpError.RESOURCE_DELETED,BREAD_CRUMB);
+    Queue queue=session.createQueue("myQueue");
+    final MessageConsumer consumer=session.createConsumer(queue);
+    testPeer.waitForAllHandlersToComplete(1000);
+    assertTrue("consumer never closed.",Wait.waitFor(new Wait.Condition(){
+      @Override public boolean isSatisified() throws Exception {
+        try {
+          consumer.getMessageListener();
+        }
+ catch (        IllegalStateException jmsise) {
+          if (jmsise.getCause() != null) {
+            String message=jmsise.getCause().getMessage();
+            return message.contains(AmqpError.RESOURCE_DELETED.toString()) && message.contains(BREAD_CRUMB);
+          }
+ else {
+            return false;
+          }
+        }
+        return false;
+      }
+    }
+,10000,10));
+    consumer.close();
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that an Ack is not dropped when RTE is thrown from onMessage
+ * @throws Exception if an error occurs during the test.
+ */
+@Test(timeout=20000) public void testRuntimeExceptionInOnMessageReleasesInDupsOkAckMode() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.DUPS_OK_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    DescribedType amqpValueNullContent=new AmqpValueDescribedType(null);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,amqpValueNullContent);
+    testPeer.expectDispositionThatIsReleasedAndSettled();
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    messageConsumer.setMessageListener(new MessageListener(){
+      @Override public void onMessage(      Message message){
+        throw new RuntimeException();
+      }
+    }
+);
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that an Ack is not dropped when RTE is thrown from onMessage
+ * @throws Exception if an error occurs during the test.
+ */
+@Test(timeout=20000) public void testRuntimeExceptionInOnMessageReleasesInAutoAckMode() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    DescribedType amqpValueNullContent=new AmqpValueDescribedType(null);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,amqpValueNullContent);
+    testPeer.expectDispositionThatIsReleasedAndSettled();
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    messageConsumer.setMessageListener(new MessageListener(){
+      @Override public void onMessage(      Message message){
+        throw new RuntimeException();
+      }
+    }
+);
+    testPeer.waitForAllHandlersToComplete(2000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testConsumerReceiveNoWaitThrowsIfConnectionLost() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.CLIENT_ACKNOWLEDGE);
+    Queue queue=session.createQueue("queue");
+    connection.start();
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow(false,notNullValue(UnsignedInteger.class));
+    testPeer.expectLinkFlow(true,notNullValue(UnsignedInteger.class));
+    testPeer.dropAfterLastHandler();
+    final MessageConsumer consumer=session.createConsumer(queue);
+    try {
+      consumer.receiveNoWait();
+      fail("An exception should have been thrown");
+    }
+ catch (    JMSException jmse) {
+    }
+  }
+ }
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

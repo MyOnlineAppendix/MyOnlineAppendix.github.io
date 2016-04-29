@@ -1,0 +1,134 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.replication.CyclicReplicationIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-3 type-7 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void dataIsNotOverReplicated() throws Exception {
+  File master1Dir=createTestDir("master1"), master2Dir=createTestDir("master2");
+  String password="password";
+  MiniAccumuloConfigImpl master1Cfg;
+  MiniAccumuloClusterImpl master1Cluster;
+  while (true) {
+    master1Cfg=new MiniAccumuloConfigImpl(master1Dir,password);
+    master1Cfg.setNumTservers(1);
+    master1Cfg.setInstanceName("master1");
+    ConfigurableMacBase.configureForEnvironment(master1Cfg,this.getClass(),ConfigurableMacBase.getSslDir(master1Dir));
+    master1Cfg.setProperty(Property.REPLICATION_NAME,master1Cfg.getInstanceName());
+    master1Cfg.setProperty(Property.TSERV_WALOG_MAX_SIZE,"5M");
+    master1Cfg.setProperty(Property.REPLICATION_THREADCHECK,"5m");
+    master1Cfg.setProperty(Property.REPLICATION_WORK_ASSIGNMENT_SLEEP,"1s");
+    master1Cfg.setProperty(Property.MASTER_REPLICATION_SCAN_INTERVAL,"1s");
+    master1Cluster=new MiniAccumuloClusterImpl(master1Cfg);
+    setCoreSite(master1Cluster);
+    try {
+      master1Cluster.start();
+      break;
+    }
+ catch (    ZooKeeperBindException e) {
+      log.warn("Failed to start ZooKeeper on " + master1Cfg.getZooKeeperPort() + ", will retry");
+    }
+  }
+  MiniAccumuloConfigImpl master2Cfg;
+  MiniAccumuloClusterImpl master2Cluster;
+  while (true) {
+    master2Cfg=new MiniAccumuloConfigImpl(master2Dir,password);
+    master2Cfg.setNumTservers(1);
+    master2Cfg.setInstanceName("master2");
+    this.updatePeerConfigFromPrimary(master1Cfg,master2Cfg);
+    master2Cfg.setProperty(Property.REPLICATION_NAME,master2Cfg.getInstanceName());
+    master2Cfg.setProperty(Property.TSERV_WALOG_MAX_SIZE,"5M");
+    master2Cfg.setProperty(Property.REPLICATION_THREADCHECK,"5m");
+    master2Cfg.setProperty(Property.REPLICATION_WORK_ASSIGNMENT_SLEEP,"1s");
+    master2Cfg.setProperty(Property.MASTER_REPLICATION_SCAN_INTERVAL,"1s");
+    master2Cluster=new MiniAccumuloClusterImpl(master2Cfg);
+    setCoreSite(master2Cluster);
+    try {
+      master2Cluster.start();
+      break;
+    }
+ catch (    ZooKeeperBindException e) {
+      log.warn("Failed to start ZooKeeper on " + master2Cfg.getZooKeeperPort() + ", will retry");
+    }
+  }
+  try {
+    Connector connMaster1=master1Cluster.getConnector("root",new PasswordToken(password)), connMaster2=master2Cluster.getConnector("root",new PasswordToken(password));
+    String master1UserName="master1", master1Password="foo";
+    String master2UserName="master2", master2Password="bar";
+    String master1Table=master1Cluster.getInstanceName(), master2Table=master2Cluster.getInstanceName();
+    connMaster1.securityOperations().createLocalUser(master1UserName,new PasswordToken(master1Password));
+    connMaster2.securityOperations().createLocalUser(master2UserName,new PasswordToken(master2Password));
+    connMaster1.instanceOperations().setProperty(Property.REPLICATION_PEER_USER.getKey() + master2Cluster.getInstanceName(),master2UserName);
+    connMaster1.instanceOperations().setProperty(Property.REPLICATION_PEER_PASSWORD.getKey() + master2Cluster.getInstanceName(),master2Password);
+    connMaster2.instanceOperations().setProperty(Property.REPLICATION_PEER_USER.getKey() + master1Cluster.getInstanceName(),master1UserName);
+    connMaster2.instanceOperations().setProperty(Property.REPLICATION_PEER_PASSWORD.getKey() + master1Cluster.getInstanceName(),master1Password);
+    connMaster1.instanceOperations().setProperty(Property.REPLICATION_PEERS.getKey() + master2Cluster.getInstanceName(),ReplicaSystemFactory.getPeerConfigurationValue(AccumuloReplicaSystem.class,AccumuloReplicaSystem.buildConfiguration(master2Cluster.getInstanceName(),master2Cluster.getZooKeepers())));
+    connMaster2.instanceOperations().setProperty(Property.REPLICATION_PEERS.getKey() + master1Cluster.getInstanceName(),ReplicaSystemFactory.getPeerConfigurationValue(AccumuloReplicaSystem.class,AccumuloReplicaSystem.buildConfiguration(master1Cluster.getInstanceName(),master1Cluster.getZooKeepers())));
+    connMaster1.tableOperations().create(master1Table,new NewTableConfiguration().withoutDefaultIterators());
+    String master1TableId=connMaster1.tableOperations().tableIdMap().get(master1Table);
+    Assert.assertNotNull(master1TableId);
+    connMaster2.tableOperations().create(master2Table,new NewTableConfiguration().withoutDefaultIterators());
+    String master2TableId=connMaster2.tableOperations().tableIdMap().get(master2Table);
+    Assert.assertNotNull(master2TableId);
+    connMaster1.tableOperations().setProperty(master1Table,Property.TABLE_REPLICATION.getKey(),"true");
+    connMaster1.tableOperations().setProperty(master1Table,Property.TABLE_REPLICATION_TARGET.getKey() + master2Cluster.getInstanceName(),master2TableId);
+    connMaster2.tableOperations().setProperty(master2Table,Property.TABLE_REPLICATION.getKey(),"true");
+    connMaster2.tableOperations().setProperty(master2Table,Property.TABLE_REPLICATION_TARGET.getKey() + master1Cluster.getInstanceName(),master1TableId);
+    connMaster1.securityOperations().grantTablePermission(master1UserName,master1Table,TablePermission.WRITE);
+    connMaster2.securityOperations().grantTablePermission(master2UserName,master2Table,TablePermission.WRITE);
+    IteratorSetting summingCombiner=new IteratorSetting(50,SummingCombiner.class);
+    SummingCombiner.setEncodingType(summingCombiner,Type.STRING);
+    SummingCombiner.setCombineAllColumns(summingCombiner,true);
+    connMaster1.tableOperations().attachIterator(master1Table,summingCombiner);
+    connMaster2.tableOperations().attachIterator(master2Table,summingCombiner);
+    BatchWriter bw=connMaster1.createBatchWriter(master1Table,new BatchWriterConfig());
+    Mutation m=new Mutation("row");
+    m.put("count","","1");
+    bw.addMutation(m);
+    bw.close();
+    Set<String> files=connMaster1.replicationOperations().referencedFiles(master1Table);
+    log.info("Found {} that need replication from master1",files);
+    for (    ProcessReference proc : master1Cluster.getProcesses().get(ServerType.TABLET_SERVER)) {
+      master1Cluster.killProcess(ServerType.TABLET_SERVER,proc);
+    }
+    master1Cluster.exec(TabletServer.class);
+    log.info("Restarted tserver on master1");
+    Thread.sleep(1000);
+    Scanner s=connMaster1.createScanner(master1Table,Authorizations.EMPTY);
+    Entry<Key,Value> entry=Iterables.getOnlyElement(s);
+    Assert.assertEquals("1",entry.getValue().toString());
+    connMaster1.replicationOperations().drain(master1Table,files);
+    Thread.sleep(5000);
+    s=connMaster2.createScanner(master2Table,Authorizations.EMPTY);
+    entry=Iterables.getOnlyElement(s);
+    Assert.assertEquals("1",entry.getValue().toString());
+    files=connMaster2.replicationOperations().referencedFiles(master2Table);
+    for (    ProcessReference proc : master2Cluster.getProcesses().get(ServerType.TABLET_SERVER)) {
+      master2Cluster.killProcess(ServerType.TABLET_SERVER,proc);
+    }
+    master2Cluster.exec(TabletServer.class);
+    Thread.sleep(1000);
+    s=connMaster2.createScanner(master2Table,Authorizations.EMPTY);
+    entry=Iterables.getOnlyElement(s);
+    Assert.assertEquals("1",entry.getValue().toString());
+    connMaster2.replicationOperations().drain(master2Table,files);
+    Thread.sleep(5000);
+    s=connMaster1.createScanner(master1Table,Authorizations.EMPTY);
+    entry=Iterables.getOnlyElement(s);
+    Assert.assertEquals("1",entry.getValue().toString());
+  }
+  finally {
+    master1Cluster.stop();
+    master2Cluster.stop();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

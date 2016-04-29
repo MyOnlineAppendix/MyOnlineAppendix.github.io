@@ -1,0 +1,602 @@
+<h3 style="margin:0px">Class: org.apache.qpid.jms.integration.TransactionsIntegrationTest (24 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(15)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithPrefetchFullBeforeStoppingConsumer() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    int messageCount=5;
+    ((JmsConnection)connection).getPrefetchPolicy().setAll(messageCount);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),messageCount);
+    session.createConsumer(queue);
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.expectDischarge(txnId,true);
+    txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    for (int i=1; i <= messageCount; i++) {
+      testPeer.expectDisposition(true,new ReleasedMatcher());
+    }
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(messageCount)));
+    session.rollback();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingSomeMessages() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(5,2,false,false);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testProducedMessagesAfterCommitOfSentMessagesFails() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    Rejected commitFailure=new Rejected(new Error(Symbol.valueOf("failed"),"Unknown error"));
+    testPeer.expectDischarge(txnId,false,commitFailure);
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    try {
+      session.commit();
+      fail("Commit operation should have failed.");
+    }
+ catch (    TransactionRolledBackException jmsTxRb) {
+    }
+    stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testTransactionCommitFailWithEmptyRejectedDisposition() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.expectDischarge(txnId,false,new Rejected());
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    try {
+      session.commit();
+      fail("Commit operation should have failed.");
+    }
+ catch (    TransactionRolledBackException jmsTxRb) {
+    }
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingAllMessages() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(1,1,false,false);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test(timeout=20000) public void testConsumerWithNoMessageCanCloseBeforeRollback() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow();
+    testPeer.expectLinkFlow(true,true,equalTo(UnsignedInteger.valueOf(JmsPrefetchPolicy.DEFAULT_QUEUE_PREFETCH)));
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(JmsPrefetchPolicy.DEFAULT_QUEUE_PREFETCH)));
+    testPeer.expectDetach(true,true,true);
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    assertNull(messageConsumer.receiveNoWait());
+    messageConsumer.close();
+    testPeer.expectDischarge(txnId,true);
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    session.rollback();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testTransactionRolledBackOnSessionClose() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    testPeer.expectDischarge(txnId,true);
+    testPeer.expectEnd();
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    session.close();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test(timeout=20000) public void testConsumerWithNoMessageCanCloseBeforeCommit() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow();
+    testPeer.expectLinkFlow(true,true,equalTo(UnsignedInteger.valueOf(JmsPrefetchPolicy.DEFAULT_QUEUE_PREFETCH)));
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(JmsPrefetchPolicy.DEFAULT_QUEUE_PREFETCH)));
+    testPeer.expectDetach(true,true,true);
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    assertNull(messageConsumer.receiveNoWait());
+    messageConsumer.close();
+    testPeer.expectDischarge(txnId,false);
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    session.commit();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingAllMessagesAndCloseBefore() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(1,1,true,true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithConsumerReceivingAllMessagesThenCloses() throws Exception {
+  doRollbackTransactedSessionWithConsumerTestImpl(1,1,true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithPrefetchFullyUtilisedByDrainWhenStoppingConsumer() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    int messageCount=5;
+    ((JmsConnection)connection).getPrefetchPolicy().setAll(messageCount);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(messageCount)));
+    session.createConsumer(queue);
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,new AmqpValueDescribedType("content"),messageCount,true,false,equalTo(UnsignedInteger.valueOf(messageCount)),1,false);
+    testPeer.expectDischarge(txnId,true);
+    txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    for (int i=1; i <= messageCount; i++) {
+      testPeer.expectDisposition(true,new ReleasedMatcher());
+    }
+    testPeer.expectLinkFlow(false,false,equalTo(UnsignedInteger.valueOf(messageCount)));
+    session.rollback();
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingSomeMessagesAndClosesBefore() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(5,2,true,true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingAllMessagesAndCloseAfter() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(1,1,true,false);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testJMSErrorCoordinatorClosedOnRollback() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    testPeer.remotelyCloseLastCoordinatorLinkOnDischarge(txnId,true);
+    testPeer.expectCoordinatorAttach();
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    try {
+      session.rollback();
+      fail("Transaction should have rolled back");
+    }
+ catch (    JMSException ex) {
+      LOG.info("Caught expected JMSException");
+    }
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitTransactedSessionWithConsumerReceivingSomeMessagesAndClosesAfter() throws Exception {
+  doCommitTransactedSessionWithConsumerTestImpl(5,2,true,false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithConsumerReceivingAllMessages() throws Exception {
+  doRollbackTransactedSessionWithConsumerTestImpl(1,1,false);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testRollbackErrorCoordinatorClosedOnCommit() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    testPeer.remotelyCloseLastCoordinatorLinkOnDischarge(txnId,false);
+    testPeer.expectCoordinatorAttach();
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    try {
+      session.commit();
+      fail("Transaction should have rolled back");
+    }
+ catch (    TransactionRolledBackException ex) {
+      LOG.info("Caught expected TransactionRolledBackException");
+    }
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testProducedMessagesOnTransactedSessionCarryTxnId() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testDefaultOutcomeIsModifiedForConsumerSourceOnTransactedSession() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    String queueName="myQueue";
+    Queue queue=session.createQueue(queueName);
+    SourceMatcher sourceMatcher=new SourceMatcher();
+    sourceMatcher.withAddress(equalTo(queueName));
+    sourceMatcher.withDynamic(equalTo(false));
+    sourceMatcher.withOutcomes(arrayContaining(Accepted.DESCRIPTOR_SYMBOL,Rejected.DESCRIPTOR_SYMBOL,Released.DESCRIPTOR_SYMBOL,Modified.DESCRIPTOR_SYMBOL));
+    ModifiedMatcher outcomeMatcher=new ModifiedMatcher().withDeliveryFailed(equalTo(true)).withUndeliverableHere(nullValue());
+    sourceMatcher.withDefaultOutcome(outcomeMatcher);
+    testPeer.expectReceiverAttach(notNullValue(),sourceMatcher);
+    testPeer.expectLinkFlow();
+    session.createConsumer(queue);
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testSendAfterCoordinatorLinkClosedDuringTX() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectSenderAttach();
+    testPeer.remotelyCloseLastCoordinatorLink();
+    MessageProducer producer=session.createProducer(queue);
+    testPeer.waitForAllHandlersToComplete(2000);
+    producer.send(session.createMessage());
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectCoordinatorAttach();
+    testPeer.expectDeclare(txnId);
+    try {
+      session.commit();
+      fail("Commit operation should have failed.");
+    }
+ catch (    TransactionRolledBackException jmsTxRb) {
+    }
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithConsumerReceivingSomeMessagesThenCloses() throws Exception {
+  doRollbackTransactedSessionWithConsumerTestImpl(5,2,true);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testProducedMessagesAfterRollbackSentMessagesFails() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(new MessageHeaderSectionMatcher(true));
+    messageMatcher.setMessageAnnotationsMatcher(new MessageAnnotationsSectionMatcher(true));
+    TransactionalStateMatcher stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    TransactionalState txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    Rejected commitFailure=new Rejected(new Error(Symbol.valueOf("failed"),"Unknown error"));
+    testPeer.expectDischarge(txnId,true,commitFailure);
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectDeclare(txnId);
+    try {
+      session.rollback();
+      fail("Rollback operation should have failed.");
+    }
+ catch (    JMSException jmsex) {
+    }
+    stateMatcher=new TransactionalStateMatcher();
+    stateMatcher.withTxnId(equalTo(txnId));
+    stateMatcher.withOutcome(nullValue());
+    txState=new TransactionalState();
+    txState.setTxnId(txnId);
+    txState.setOutcome(new Accepted());
+    testPeer.expectTransfer(messageMatcher,stateMatcher,false,txState,true);
+    producer.send(session.createMessage());
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testRollbackTransactedSessionWithConsumerReceivingSomeMessages() throws Exception {
+  doRollbackTransactedSessionWithConsumerTestImpl(5,2,false);
+}
+
+</code></pre>
+
+<pre class="type-11 type-4 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=20000) public void testReceiveAfterCoordinatorLinkClosedDuringTX() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    testPeer.expectCoordinatorAttach();
+    Binary txnId=new Binary(new byte[]{(byte)5,(byte)6,(byte)7,(byte)8});
+    testPeer.expectDeclare(txnId);
+    Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+    Queue queue=session.createQueue("myQueue");
+    DescribedType amqpValueNullContent=new AmqpValueDescribedType(null);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,amqpValueNullContent);
+    testPeer.remotelyCloseLastCoordinatorLink();
+    MessageConsumer consumer=session.createConsumer(queue);
+    testPeer.waitForAllHandlersToComplete(2000);
+    Message received=consumer.receive();
+    assertNotNull(received);
+    txnId=new Binary(new byte[]{(byte)1,(byte)2,(byte)3,(byte)4});
+    testPeer.expectCoordinatorAttach();
+    testPeer.expectDeclare(txnId);
+    try {
+      session.commit();
+      fail("Commit operation should have failed.");
+    }
+ catch (    TransactionRolledBackException jmsTxRb) {
+    }
+    testPeer.waitForAllHandlersToComplete(1000);
+  }
+ }
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

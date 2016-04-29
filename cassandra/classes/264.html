@@ -1,0 +1,115 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.locator.NetworkTopologyStrategyTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testProperties() throws IOException, ConfigurationException {
+  IEndpointSnitch snitch=new PropertyFileSnitch();
+  DatabaseDescriptor.setEndpointSnitch(snitch);
+  TokenMetadata metadata=new TokenMetadata();
+  createDummyTokens(metadata,true);
+  Map<String,String> configOptions=new HashMap<String,String>();
+  configOptions.put("DC1","3");
+  configOptions.put("DC2","2");
+  configOptions.put("DC3","1");
+  NetworkTopologyStrategy strategy=new NetworkTopologyStrategy(keyspaceName,metadata,snitch,configOptions);
+  assert strategy.getReplicationFactor("DC1") == 3;
+  assert strategy.getReplicationFactor("DC2") == 2;
+  assert strategy.getReplicationFactor("DC3") == 1;
+  ArrayList<InetAddress> endpoints=strategy.getNaturalEndpoints(new StringToken("123"));
+  assert 6 == endpoints.size();
+  assert 6 == new HashSet<InetAddress>(endpoints).size();
+}
+
+</code></pre>
+
+<pre class="type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testLargeCluster() throws UnknownHostException, ConfigurationException {
+  int[] dcRacks=new int[]{2,4,8};
+  int[] dcEndpoints=new int[]{128,256,512};
+  int[] dcReplication=new int[]{2,6,6};
+  IEndpointSnitch snitch=new RackInferringSnitch();
+  DatabaseDescriptor.setEndpointSnitch(snitch);
+  TokenMetadata metadata=new TokenMetadata();
+  Map<String,String> configOptions=new HashMap<String,String>();
+  Multimap<InetAddress,Token> tokens=HashMultimap.create();
+  int totalRF=0;
+  for (int dc=0; dc < dcRacks.length; ++dc) {
+    totalRF+=dcReplication[dc];
+    configOptions.put(Integer.toString(dc),Integer.toString(dcReplication[dc]));
+    for (int rack=0; rack < dcRacks[dc]; ++rack) {
+      for (int ep=1; ep <= dcEndpoints[dc] / dcRacks[dc]; ++ep) {
+        byte[] ipBytes=new byte[]{10,(byte)dc,(byte)rack,(byte)ep};
+        InetAddress address=InetAddress.getByAddress(ipBytes);
+        StringToken token=new StringToken(String.format("%02x%02x%02x",ep,rack,dc));
+        logger.debug("adding node {} at {}",address,token);
+        tokens.put(address,token);
+      }
+    }
+  }
+  metadata.updateNormalTokens(tokens);
+  NetworkTopologyStrategy strategy=new NetworkTopologyStrategy(keyspaceName,metadata,snitch,configOptions);
+  for (  String testToken : new String[]{"123456","200000","000402","ffffff","400200"}) {
+    List<InetAddress> endpoints=strategy.calculateNaturalEndpoints(new StringToken(testToken),metadata);
+    Set<InetAddress> epSet=new HashSet<InetAddress>(endpoints);
+    Assert.assertEquals(totalRF,endpoints.size());
+    Assert.assertEquals(totalRF,epSet.size());
+    logger.debug("{}: {}",testToken,endpoints);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testPropertiesWithEmptyDC() throws IOException, ConfigurationException {
+  IEndpointSnitch snitch=new PropertyFileSnitch();
+  DatabaseDescriptor.setEndpointSnitch(snitch);
+  TokenMetadata metadata=new TokenMetadata();
+  createDummyTokens(metadata,false);
+  Map<String,String> configOptions=new HashMap<String,String>();
+  configOptions.put("DC1","3");
+  configOptions.put("DC2","3");
+  configOptions.put("DC3","0");
+  NetworkTopologyStrategy strategy=new NetworkTopologyStrategy(keyspaceName,metadata,snitch,configOptions);
+  assert strategy.getReplicationFactor("DC1") == 3;
+  assert strategy.getReplicationFactor("DC2") == 3;
+  assert strategy.getReplicationFactor("DC3") == 0;
+  ArrayList<InetAddress> endpoints=strategy.getNaturalEndpoints(new StringToken("123"));
+  assert 6 == endpoints.size();
+  assert 6 == new HashSet<InetAddress>(endpoints).size();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCalculateEndpoints() throws UnknownHostException {
+  final int NODES=100;
+  final int VNODES=64;
+  final int RUNS=10;
+  StorageService.instance.setPartitionerUnsafe(Murmur3Partitioner.instance);
+  Map<String,Integer> datacenters=ImmutableMap.of("rf1",1,"rf3",3,"rf5_1",5,"rf5_2",5,"rf5_3",5);
+  List<InetAddress> nodes=new ArrayList<>(NODES);
+  for (byte i=0; i < NODES; ++i)   nodes.add(InetAddress.getByAddress(new byte[]{127,0,0,i}));
+  for (int run=0; run < RUNS; ++run) {
+    Random rand=new Random();
+    IEndpointSnitch snitch=generateSnitch(datacenters,nodes,rand);
+    DatabaseDescriptor.setEndpointSnitch(snitch);
+    TokenMetadata meta=new TokenMetadata();
+    for (int i=0; i < NODES; ++i)     for (int j=0; j < VNODES; ++j)     meta.updateNormalToken(Murmur3Partitioner.instance.getRandomToken(rand),nodes.get(i));
+    testEquivalence(meta,snitch,datacenters,rand);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

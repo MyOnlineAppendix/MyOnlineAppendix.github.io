@@ -1,0 +1,130 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.balancer.TestBalancerWithNodeGroup (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-20 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Create a cluster with even distribution, and a new empty node is added to
+ * the cluster, then test node-group locality for balancer policy.
+ */
+@Test(timeout=60000) public void testBalancerWithNodeGroup() throws Exception {
+  Configuration conf=createConf();
+  long[] capacities=new long[]{CAPACITY,CAPACITY,CAPACITY,CAPACITY};
+  String[] racks=new String[]{RACK0,RACK0,RACK1,RACK1};
+  String[] nodeGroups=new String[]{NODEGROUP0,NODEGROUP0,NODEGROUP1,NODEGROUP2};
+  int numOfDatanodes=capacities.length;
+  assertEquals(numOfDatanodes,racks.length);
+  assertEquals(numOfDatanodes,nodeGroups.length);
+  MiniDFSCluster.Builder builder=new MiniDFSCluster.Builder(conf).numDataNodes(capacities.length).racks(racks).simulatedCapacities(capacities);
+  MiniDFSClusterWithNodeGroup.setNodeGroups(nodeGroups);
+  cluster=new MiniDFSClusterWithNodeGroup(builder);
+  try {
+    cluster.waitActive();
+    client=NameNodeProxies.createProxy(conf,cluster.getFileSystem(0).getUri(),ClientProtocol.class).getProxy();
+    long totalCapacity=TestBalancer.sum(capacities);
+    long totalUsedSpace=totalCapacity * 2 / 10;
+    TestBalancer.createFile(cluster,filePath,totalUsedSpace / (numOfDatanodes / 2),(short)(numOfDatanodes / 2),0);
+    long newCapacity=CAPACITY;
+    String newRack=RACK1;
+    String newNodeGroup=NODEGROUP2;
+    cluster.startDataNodes(conf,1,true,null,new String[]{newRack},new long[]{newCapacity},new String[]{newNodeGroup});
+    totalCapacity+=newCapacity;
+    runBalancer(conf,totalUsedSpace,totalCapacity);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-20 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Create a cluster with even distribution, and a new empty node is added to
+ * the cluster, then test rack locality for balancer policy. 
+ */
+@Test(timeout=60000) public void testBalancerWithRackLocality() throws Exception {
+  Configuration conf=createConf();
+  long[] capacities=new long[]{CAPACITY,CAPACITY};
+  String[] racks=new String[]{RACK0,RACK1};
+  String[] nodeGroups=new String[]{NODEGROUP0,NODEGROUP1};
+  int numOfDatanodes=capacities.length;
+  assertEquals(numOfDatanodes,racks.length);
+  MiniDFSCluster.Builder builder=new MiniDFSCluster.Builder(conf).numDataNodes(capacities.length).racks(racks).simulatedCapacities(capacities);
+  MiniDFSClusterWithNodeGroup.setNodeGroups(nodeGroups);
+  cluster=new MiniDFSClusterWithNodeGroup(builder);
+  try {
+    cluster.waitActive();
+    client=NameNodeProxies.createProxy(conf,cluster.getFileSystem(0).getUri(),ClientProtocol.class).getProxy();
+    long totalCapacity=TestBalancer.sum(capacities);
+    long totalUsedSpace=totalCapacity * 3 / 10;
+    long length=totalUsedSpace / numOfDatanodes;
+    TestBalancer.createFile(cluster,filePath,length,(short)numOfDatanodes,0);
+    LocatedBlocks lbs=client.getBlockLocations(filePath.toUri().getPath(),0,length);
+    Set<ExtendedBlock> before=getBlocksOnRack(lbs.getLocatedBlocks(),RACK0);
+    long newCapacity=CAPACITY;
+    String newRack=RACK1;
+    String newNodeGroup=NODEGROUP2;
+    cluster.startDataNodes(conf,1,true,null,new String[]{newRack},new long[]{newCapacity},new String[]{newNodeGroup});
+    totalCapacity+=newCapacity;
+    runBalancerCanFinish(conf,totalUsedSpace,totalCapacity);
+    lbs=client.getBlockLocations(filePath.toUri().getPath(),0,length);
+    Set<ExtendedBlock> after=getBlocksOnRack(lbs.getLocatedBlocks(),RACK0);
+    assertEquals(before,after);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-6 type-20 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Create a 4 nodes cluster: 2 nodes (n0, n1) in RACK0/NODEGROUP0, 1 node (n2)
+ * in RACK1/NODEGROUP1 and 1 node (n3) in RACK1/NODEGROUP2. Fill the cluster 
+ * to 60% and 3 replicas, so n2 and n3 will have replica for all blocks according
+ * to replica placement policy with NodeGroup. As a result, n2 and n3 will be
+ * filled with 80% (60% x 4 / 3), and no blocks can be migrated from n2 and n3
+ * to n0 or n1 as balancer policy with node group. Thus, we expect the balancer
+ * to end in 5 iterations without move block process.
+ */
+@Test(timeout=60000) public void testBalancerEndInNoMoveProgress() throws Exception {
+  Configuration conf=createConf();
+  long[] capacities=new long[]{CAPACITY,CAPACITY,CAPACITY,CAPACITY};
+  String[] racks=new String[]{RACK0,RACK0,RACK1,RACK1};
+  String[] nodeGroups=new String[]{NODEGROUP0,NODEGROUP0,NODEGROUP1,NODEGROUP2};
+  int numOfDatanodes=capacities.length;
+  assertEquals(numOfDatanodes,racks.length);
+  assertEquals(numOfDatanodes,nodeGroups.length);
+  MiniDFSCluster.Builder builder=new MiniDFSCluster.Builder(conf).numDataNodes(capacities.length).racks(racks).simulatedCapacities(capacities);
+  MiniDFSClusterWithNodeGroup.setNodeGroups(nodeGroups);
+  cluster=new MiniDFSClusterWithNodeGroup(builder);
+  try {
+    cluster.waitActive();
+    client=NameNodeProxies.createProxy(conf,cluster.getFileSystem(0).getUri(),ClientProtocol.class).getProxy();
+    long totalCapacity=TestBalancer.sum(capacities);
+    long totalUsedSpace=totalCapacity * 6 / 10;
+    TestBalancer.createFile(cluster,filePath,totalUsedSpace / 3,(short)(3),0);
+    runBalancerCanFinish(conf,totalUsedSpace,totalCapacity);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

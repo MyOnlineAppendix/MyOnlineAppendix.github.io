@@ -1,0 +1,700 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hive.TestOperations (24 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(21)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Is an empty test case"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >EmptyTester&nbsp;(1)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testFullyQualifiedTableName() throws Exception {
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(ADMIN1);
+  statement=context.createStatement(connection);
+  statement.execute("create database " + DB1);
+  statement.execute("create table " + DB1 + ".tb1(a int)");
+  statement.execute("DROP table " + DB1 + ".tb1");
+  statement.execute("create table " + DB1 + ".tb1(a int)");
+  statement.execute("use " + DB1);
+  statement.execute("drop table tb1");
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  policyFile=PolicyFile.setAdminOnServer1(ADMINGROUP).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testInsert() throws Exception {
+  File dataFile;
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  dropDb(ADMIN1,DB1);
+  dropDb(ADMIN1,DB2);
+  createDb(ADMIN1,DB1);
+  createDb(ADMIN1,DB2);
+  createTable(ADMIN1,DB1,dataFile,tableName);
+  createTable(ADMIN1,DB2,null,"tb2");
+  String location=dfs.getBaseDir() + "/" + Math.random();
+  policyFile.addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addPermissionsToRole("insert_db2_tb2",privileges.get("insert_db2_tb2")).addRolesToGroup(USERGROUP1,"select_db1_tb1","insert_db2_tb2").addPermissionsToRole("all_uri","server=server1->uri=" + location).addRolesToGroup(USERGROUP2,"select_db1_tb1","all_uri");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  assertSemanticException(statement,"insert overwrite directory '" + location + "' select * from "+ DB1+ ".tb1");
+  statement.execute("insert overwrite table " + DB2 + ".tb2 select * from "+ DB1+ ".tb1");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("insert overwrite directory '" + location + "' select * from "+ DB1+ ".tb1");
+  assertSemanticException(statement,"insert overwrite table " + DB2 + ".tb2 select * from "+ DB1+ ".tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLoad() throws Exception {
+  File dataFile;
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  adminCreate(DB1,tableName);
+  policyFile.addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addPermissionsToRole("all_uri","server=server1->uri=file://" + dataDir).addRolesToGroup(USERGROUP1,"insert_db1_tb1","all_uri");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("load data local inpath '" + dataFile.getPath() + "' into table tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCreateView() throws Exception {
+  adminCreate(DB1,tableName);
+  adminCreate(DB2,null);
+  policyFile.addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addPermissionsToRole("create_db2",privileges.get("create_db2")).addRolesToGroup(USERGROUP1,"select_db1_tb1","create_db2");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("use " + DB2);
+  statement.execute("create view view1 as select a from " + DB1 + ".tb1");
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP3,"insert_db1_tb1","create_db2");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB2);
+  context.assertSentrySemanticException(statement,"create view view1 as select a from " + DB1 + ".tb1",semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testExternalTables() throws Exception {
+  createDb(ADMIN1,DB1);
+  File externalTblDir=new File(dataDir,"exttab");
+  assertTrue("Unable to create directory for external table test",externalTblDir.mkdir());
+  policyFile.addPermissionsToRole("create_db1",privileges.get("create_db1")).addPermissionsToRole("all_uri","server=server1->uri=file://" + dataDir.getPath()).addRolesToGroup(USERGROUP1,"create_db1","all_uri").addRolesToGroup(USERGROUP2,"create_db1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER2_1);
+  Statement statement=context.createStatement(connection);
+  assertSemanticException(statement,"create external table " + DB1 + ".tb1(a int) stored as "+ "textfile location 'file:"+ externalTblDir.getAbsolutePath()+ "'");
+  assertSemanticException(statement,"create external table " + DB1 + ".tb2(a int) location '/user/hive/warehouse/blah'");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("create external table " + DB1 + ".tb1(a int) stored as "+ "textfile location 'file:"+ externalTblDir.getAbsolutePath()+ "'");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void dropPartition() throws Exception {
+  adminCreate(DB1,tableName,true);
+  policyFile.addPermissionsToRole("alter_db1_tb1",privileges.get("alter_db1_tb1")).addPermissionsToRole("drop_db1_tb1",privileges.get("drop_db1_tb1")).addRolesToGroup(USERGROUP1,"alter_db1_tb1","drop_db1_tb1").addRolesToGroup(USERGROUP2,"alter_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(ADMIN1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '10') ");
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 DROP PARTITION (b = 10)");
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 DROP PARTITION (b = 10)");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testIndexTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  policyFile.addPermissionsToRole("index_db1_tb1",privileges.get("index_db1_tb1")).addRolesToGroup(USERGROUP1,"index_db1_tb1").addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP2,"insert_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("CREATE INDEX table01_index ON TABLE tb1 (a) AS 'COMPACT' WITH DEFERRED REBUILD");
+  statement.execute("ALTER INDEX table01_index ON tb1 REBUILD");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"CREATE INDEX table02_index ON TABLE tb1 (a) AS 'COMPACT' WITH DEFERRED REBUILD");
+  assertSemanticException(statement,"ALTER INDEX table01_index ON tb1 REBUILD");
+  assertSemanticException(statement,"DROP INDEX table01_index ON tb1");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("DROP INDEX table01_index ON tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSelectOnTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  adminCreatePartition();
+  policyFile.addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addRolesToGroup(USERGROUP1,"select_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("select * from tb1");
+  statement.executeQuery("SHOW Partitions tb1");
+  statement.executeQuery("SHOW TBLPROPERTIES tb1");
+  statement.executeQuery("SHOW CREATE TABLE tb1");
+  statement.executeQuery("SHOW indexes on tb1");
+  statement.executeQuery("SHOW COLUMNS from tb1");
+  statement.executeQuery("SHOW functions '.*'");
+  statement.executeQuery("SHOW TABLE EXTENDED IN " + DB1 + " LIKE 'tb*'");
+  statement.executeQuery("DESCRIBE tb1");
+  statement.executeQuery("DESCRIBE tb1 PARTITION (b=1)");
+  statement.close();
+  connection.close();
+  adminCreate(DB2,tableName);
+  policyFile.addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP3,"insert_db1_tb1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  context.assertSentrySemanticException(statement,"select * from tb1",semanticException);
+  context.assertSentrySemanticException(statement,"SHOW TABLE EXTENDED IN " + DB2 + " LIKE 'tb*'",semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDescDB() throws Exception {
+  adminCreate(DB1,tableName);
+  policyFile.addPermissionsToRole("select_db1",privileges.get("select_db1")).addPermissionsToRole("insert_db1",privileges.get("insert_db1")).addRolesToGroup(USERGROUP1,"select_db1").addRolesToGroup(USERGROUP2,"insert_db1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("describe database " + DB1);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("describe database " + DB1);
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("all_db1_tb1",privileges.get("all_db1_tb1")).addRolesToGroup(USERGROUP3,"all_db1_tb1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  context.assertSentrySemanticException(statement,"describe database " + DB1,semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-13 type-18 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is an empty test case">EmptyTester</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Is an empty test case
+- Is not executed with the test suite
+"></span><br>
+@Ignore @Test public void testLockTable() throws Exception {
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAlterTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(ADMIN1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '10') ");
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '1') ");
+  statement.execute("DROP TABLE IF EXISTS ptab");
+  statement.execute("CREATE TABLE ptab (a int) STORED AS PARQUET");
+  policyFile.addPermissionsToRole("alter_db1_tb1",privileges.get("alter_db1_tb1")).addPermissionsToRole("alter_db1_ptab",privileges.get("alter_db1_ptab")).addRolesToGroup(USERGROUP1,"alter_db1_tb1","alter_db1_ptab").addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP2,"insert_db1_tb1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 SET TBLPROPERTIES ('comment' = 'new_comment')");
+  assertSemanticException(statement,"ALTER TABLE tb1 SET SERDEPROPERTIES ('field.delim' = ',')");
+  assertSemanticException(statement,"ALTER TABLE tb1 CLUSTERED BY (a) SORTED BY (a) INTO 1 BUCKETS");
+  assertSemanticException(statement,"ALTER TABLE tb1 TOUCH");
+  assertSemanticException(statement,"ALTER TABLE tb1 ENABLE NO_DROP");
+  assertSemanticException(statement,"ALTER TABLE tb1 DISABLE OFFLINE");
+  assertSemanticException(statement,"ALTER TABLE tb1 SET FILEFORMAT RCFILE");
+  assertSemanticException(statement,"ALTER TABLE tb1 PARTITION (b = 10) RENAME TO PARTITION (b = 2)");
+  assertSemanticException(statement,"ALTER TABLE tb1 PARTITION (b = 10) SET SERDEPROPERTIES ('field.delim' = ',')");
+  assertSemanticException(statement,"ALTER TABLE tb1 PARTITION (b = 10) SET FILEFORMAT RCFILE");
+  assertSemanticException(statement,"ALTER TABLE tb1 TOUCH PARTITION (b = 10)");
+  assertSemanticException(statement,"ALTER TABLE tb1 PARTITION (b = 10) DISABLE NO_DROP");
+  assertSemanticException(statement,"ALTER TABLE tb1 PARTITION (b = 10) DISABLE OFFLINE");
+  assertSemanticException(statement,"ALTER TABLE tb1 CHANGE COLUMN a c int");
+  assertSemanticException(statement,"ALTER TABLE tb1 ADD COLUMNS (a int)");
+  assertSemanticException(statement,"ALTER TABLE ptab REPLACE COLUMNS (a int, c int)");
+  assertSemanticException(statement,"MSCK REPAIR TABLE tb1");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 SET TBLPROPERTIES ('comment' = 'new_comment')");
+  statement.execute("ALTER TABLE tb1 SET SERDEPROPERTIES ('field.delim' = ',')");
+  statement.execute("ALTER TABLE tb1 CLUSTERED BY (a) SORTED BY (a) INTO 1 BUCKETS");
+  statement.execute("ALTER TABLE tb1 TOUCH");
+  statement.execute("ALTER TABLE tb1 ENABLE NO_DROP");
+  statement.execute("ALTER TABLE tb1 DISABLE OFFLINE");
+  statement.execute("ALTER TABLE tb1 SET FILEFORMAT RCFILE");
+  statement.execute("ALTER TABLE tb1 PARTITION (b = 1) RENAME TO PARTITION (b = 2)");
+  statement.execute("ALTER TABLE tb1 PARTITION (b = 2) SET SERDEPROPERTIES ('field.delim' = ',')");
+  statement.execute("ALTER TABLE tb1 PARTITION (b = 2) SET FILEFORMAT RCFILE");
+  statement.execute("ALTER TABLE tb1 TOUCH PARTITION (b = 2)");
+  statement.execute("ALTER TABLE tb1 PARTITION (b = 2) DISABLE NO_DROP");
+  statement.execute("ALTER TABLE tb1 PARTITION (b = 2) DISABLE OFFLINE");
+  statement.execute("ALTER TABLE tb1 CHANGE COLUMN a c int");
+  statement.execute("ALTER TABLE tb1 ADD COLUMNS (a int)");
+  statement.execute("ALTER TABLE ptab REPLACE COLUMNS (a int, c int)");
+  statement.execute("MSCK REPAIR TABLE tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAlterOnDatabase() throws Exception {
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("alter_db1",privileges.get("alter_db1")).addPermissionsToRole("all_db1",privileges.get("all_db1")).addRolesToGroup(USERGROUP2,"all_db1").addRolesToGroup(USERGROUP1,"alter_db1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("ALTER DATABASE " + DB1 + " SET DBPROPERTIES ('comment'='comment')");
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("ALTER DATABASE " + DB1 + " SET DBPROPERTIES ('comment'='comment')");
+  statement.close();
+  connection.close();
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("select_db1",privileges.get("select_db1")).addRolesToGroup(USERGROUP3,"select_db1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  context.assertSentrySemanticException(statement,"ALTER DATABASE " + DB1 + " SET DBPROPERTIES ('comment'='comment')",semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testExportImport() throws Exception {
+  File dataFile;
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  dropDb(ADMIN1,DB1);
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,tableName);
+  String location=dfs.getBaseDir() + "/" + Math.random();
+  policyFile.addPermissionsToRole("create_db1",privileges.get("create_db1")).addPermissionsToRole("all_uri","server=server1->uri=" + location).addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addPermissionsToRole("insert_db1",privileges.get("insert_db1")).addRolesToGroup(USERGROUP1,"select_db1_tb1","all_uri").addRolesToGroup(USERGROUP2,"create_db1","all_uri").addRolesToGroup(USERGROUP3,"insert_db1","all_uri");
+  writePolicyFile(policyFile);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  context.assertSentrySemanticException(statement,"export table tb1 to '" + location + "'",semanticException);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("export table tb1 to '" + location + "'");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  context.assertSentrySemanticException(statement,"import table tb2 from '" + location + "'",semanticException);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("import table tb2 from '" + location + "'");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void renameTable() throws Exception {
+  adminCreate(DB1,tableName);
+  policyFile.addPermissionsToRole("alter_db1_tb1",privileges.get("alter_db1_tb1")).addPermissionsToRole("create_db1",privileges.get("create_db1")).addRolesToGroup(USERGROUP1,"alter_db1_tb1","create_db1").addRolesToGroup(USERGROUP2,"create_db1").addRolesToGroup(USERGROUP3,"alter_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 RENAME TO tb2");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 RENAME TO tb2");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 RENAME TO tb2");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCaseSensitivity() throws Exception {
+  Statement statement=null;
+  Connection connection=null;
+  try {
+    createDb(ADMIN1,DB1);
+    Path extParentDir=dfs.assertCreateDir("/ABC/hhh");
+    Path extTableDir=dfs.assertCreateDir("/abc/hhh");
+    policyFile.addPermissionsToRole("create_db1",privileges.get("create_db1")).addPermissionsToRole("all_uri","server=server1->uri=" + extParentDir).addRolesToGroup(USERGROUP1,"create_db1","all_uri");
+    writePolicyFile(policyFile);
+    connection=context.createConnection(USER1_1);
+    statement=context.createStatement(connection);
+    assertSemanticException(statement,"create external table " + DB1 + ".tb1(a int) location '"+ extTableDir+ "'");
+  }
+  finally {
+    if (statement != null)     statement.close();
+    if (connection != null)     connection.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAlterOnTableAndURI() throws Exception {
+  adminCreate(DB1,tableName,true);
+  String tabLocation=dfs.getBaseDir() + "/" + Math.random();
+  policyFile.addPermissionsToRole("alter_db1_tb1",privileges.get("alter_db1_tb1")).addPermissionsToRole("all_uri","server=server1->uri=" + tabLocation).addRolesToGroup(USERGROUP1,"alter_db1_tb1","all_uri").addRolesToGroup(USERGROUP2,"alter_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER2_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 SET LOCATION '" + tabLocation + "'");
+  assertSemanticException(statement,"ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '3') LOCATION '" + tabLocation + "/part'");
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '1') ");
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ALTER TABLE tb1 SET LOCATION '" + tabLocation + "'");
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '3') LOCATION '" + tabLocation + "/part'");
+  statement.execute("ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '10') ");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  context.assertSentrySemanticException(statement,"ALTER TABLE tb1 SET LOCATION '" + tabLocation + "'",semanticException);
+  context.assertSentrySemanticException(statement,"ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '3') LOCATION '" + tabLocation + "/part'",semanticException);
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP3,"insert_db1_tb1","all_uri");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '2') ");
+  assertSemanticException(statement,"ALTER TABLE tb1 SET LOCATION '" + tabLocation + "'");
+  assertSemanticException(statement,"ALTER TABLE tb1 ADD IF NOT EXISTS PARTITION (b = '3') LOCATION '" + tabLocation + "/part'");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDropOnDatabase() throws Exception {
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("drop_db1",privileges.get("drop_db1")).addRolesToGroup(USERGROUP1,"drop_db1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE " + DB1);
+  statement.close();
+  connection.close();
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("all_db1",privileges.get("all_db1")).addRolesToGroup(USERGROUP2,"all_db1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE " + DB1);
+  statement.close();
+  connection.close();
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("select_db1",privileges.get("select_db1")).addRolesToGroup(USERGROUP3,"select_db1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  context.assertSentrySemanticException(statement,"drop database " + DB1,semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCreateOnDatabase() throws Exception {
+  adminCreate(DB1,null);
+  policyFile.addPermissionsToRole("create_db1",privileges.get("create_db1")).addPermissionsToRole("all_db1",privileges.get("all_db1")).addRolesToGroup(USERGROUP1,"create_db1").addRolesToGroup(USERGROUP2,"all_db1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("CREATE TABLE " + DB1 + ".tb2(a int)");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("CREATE TABLE " + DB1 + ".tb3(a int)");
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("all_db1_tb1",privileges.get("select_db1")).addRolesToGroup(USERGROUP3,"all_db1_tb1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  context.assertSentrySemanticException(statement,"CREATE TABLE " + DB1 + ".tb1(a int)",semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCreateOnServer() throws Exception {
+  policyFile.addPermissionsToRole("create_server",privileges.get("create_server")).addRolesToGroup(USERGROUP1,"create_server");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Create database " + DB2);
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("create_db1",privileges.get("create_db1")).addRolesToGroup(USERGROUP2,"create_db1");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  context.assertSentrySemanticException(statement,"CREATE database " + DB1,semanticException);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSelectAndInsertOnTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  adminCreatePartition();
+  policyFile.addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP1,"select_db1_tb1","insert_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("ANALYZE TABLE tb1 PARTITION (b='1' ) COMPUTE STATISTICS");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testInsertOnTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  adminCreatePartition();
+  policyFile.addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP1,"insert_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(USER1_1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.executeQuery("SHOW TBLPROPERTIES tb1");
+  statement.executeQuery("SHOW CREATE TABLE tb1");
+  statement.executeQuery("SHOW indexes on tb1");
+  statement.executeQuery("SHOW COLUMNS from tb1");
+  statement.executeQuery("SHOW functions '.*'");
+  statement.executeQuery("SHOW TABLE EXTENDED IN " + DB1 + " LIKE 'tb*'");
+  statement.executeQuery("DESCRIBE tb1");
+  statement.executeQuery("DESCRIBE tb1 PARTITION (b=1)");
+  statement.executeQuery("SHOW Partitions tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCTAS() throws Exception {
+  adminCreate(DB1,tableName);
+  adminCreate(DB2,null);
+  String location=dfs.getBaseDir() + "/" + Math.random();
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("create view view1 as select a from " + DB1 + ".tb1");
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole("select_db1_tb1",privileges.get("select_db1_tb1")).addPermissionsToRole("select_db1_view1",privileges.get("select_db1_view1")).addPermissionsToRole("create_db2",privileges.get("create_db2")).addPermissionsToRole("all_uri","server=server1->uri=" + location).addRolesToGroup(USERGROUP1,"select_db1_tb1","create_db2").addRolesToGroup(USERGROUP2,"select_db1_view1","create_db2").addRolesToGroup(USERGROUP3,"select_db1_tb1","create_db2,all_uri");
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB2);
+  statement.execute("create table tb2 as select a from " + DB1 + ".tb1");
+  context.assertSentrySemanticException(statement,"create table tb3 location '" + location + "' as select a from "+ DB1+ ".tb1",semanticException);
+  context.assertSentrySemanticException(statement,"create table tb3 as select a from " + DB1 + ".view1",semanticException);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB2);
+  statement.execute("create table tb3 as select a from " + DB1 + ".view1");
+  context.assertSentrySemanticException(statement,"create table tb4 as select a from " + DB1 + ".tb1",semanticException);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB2);
+  statement.execute("create table tb4 location '" + location + "' as select a from "+ DB1+ ".tb1");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDropTable() throws Exception {
+  adminCreate(DB1,tableName,true);
+  policyFile.addPermissionsToRole("drop_db1_tb1",privileges.get("drop_db1_tb1")).addRolesToGroup(USERGROUP1,"drop_db1_tb1").addPermissionsToRole("insert_db1_tb1",privileges.get("insert_db1_tb1")).addRolesToGroup(USERGROUP2,"insert_db1_tb1");
+  writePolicyFile(policyFile);
+  Connection connection;
+  Statement statement;
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  assertSemanticException(statement,"drop table " + tableName);
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("Use " + DB1);
+  statement.execute("drop table " + tableName);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

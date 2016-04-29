@@ -1,0 +1,268 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexEditorTest (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void indexVersionSwitchOnReindex() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinition(index,"lucene",of(TYPENAME_STRING));
+  NodeState indexed=HOOK.processCommit(EMPTY_NODE,builder.getNodeState(),CommitInfo.EMPTY);
+  builder=indexed.builder();
+  builder.child(INDEX_DEFINITIONS_NAME).child("lucene").setProperty(IndexDefinition.INDEX_VERSION,IndexFormatVersion.V1.getVersion());
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  NodeState after=builder.getNodeState();
+  indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  assertEquals(IndexFormatVersion.V1,new IndexDefinition(root,indexed.getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("lucene")).getVersion());
+  builder=indexed.builder();
+  before=indexed;
+  builder.child(INDEX_DEFINITIONS_NAME).child("lucene").setProperty(IndexConstants.REINDEX_PROPERTY_NAME,true);
+  after=builder.getNodeState();
+  indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  assertEquals(IndexFormatVersion.getDefault(),new IndexDefinition(root,indexed.getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("lucene")).getVersion());
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * 1. Index property foo in /test
+ * 2. Then modify some other property in /test
+ * This should not cause the index to be updated
+ */
+@Test public void nonIncludedPropertyChange() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.FULL_TEXT_ENABLED,false);
+  nb.setProperty(createProperty(INCLUDE_PROPERTY_NAMES,of("foo"),STRINGS));
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  builder.child("test2").setProperty("foo","bird is chirping");
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals(2,getSearcher().getIndexReader().numDocs());
+  assertEquals("/test",getPath(new TermQuery(new Term("foo","fox is jumping"))));
+  releaseIndexNode();
+  before=indexed;
+  builder=before.builder();
+  builder.child("test").setProperty("bar","kite is flying");
+  after=builder.getNodeState();
+  indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals(2,getSearcher().getIndexReader().numDocs());
+  assertEquals("change in non included property should not cause " + "index update",0,getSearcher().getIndexReader().numDeletedDocs());
+}
+
+</code></pre>
+
+<pre class="type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLuceneWithRelativeProperty() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.FULL_TEXT_ENABLED,false);
+  nb.setProperty(createProperty(INCLUDE_PROPERTY_NAMES,of("foo","jcr:content/mime","jcr:content/metadata/type"),STRINGS));
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  builder.child("test").child("jcr:content").setProperty("mime","text");
+  builder.child("test").child("jcr:content").child("metadata").setProperty("type","image");
+  builder.child("jcr:content").setProperty("count","text");
+  builder.child("jcr:content").child("boom").child("metadata").setProperty("type","image");
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals(1,getSearcher().getIndexReader().numDocs());
+  assertEquals("/test",getPath(new TermQuery(new Term("foo","fox is jumping"))));
+  assertEquals("/test",getPath(new TermQuery(new Term("jcr:content/mime","text"))));
+  assertEquals("/test",getPath(new TermQuery(new Term("jcr:content/metadata/type","image"))));
+  assertNull("bar must NOT be indexed",getPath(new TermQuery(new Term("count","text"))));
+  releaseIndexNode();
+  before=indexed;
+  builder=before.builder();
+  builder.child("test").child("jcr:content").setProperty("mime","pdf");
+  after=builder.getNodeState();
+  indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals("/test",getPath(new TermQuery(new Term("jcr:content/mime","pdf"))));
+  releaseIndexNode();
+  before=indexed;
+  builder=before.builder();
+  builder.child("test").child("jcr:content").remove();
+  after=builder.getNodeState();
+  indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertNull("removes must be persisted too, 1st level",getPath(new TermQuery(new Term("jcr:content/mime","pdf"))));
+  assertNull("removes must be persisted too, 2nd level",getPath(new TermQuery(new Term("jcr:content/metadata/type","image"))));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void autoFormatUpdate() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  NodeState indexed=HOOK.processCommit(EMPTY_NODE,builder.getNodeState(),CommitInfo.EMPTY);
+  IndexDefinition defn=new IndexDefinition(root,indexed.getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("lucene"));
+  assertFalse(defn.isOfOldFormat());
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLuceneWithFullText() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder idxnb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  IndexDefinition defn=new IndexDefinition(root,idxnb.getNodeState());
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  builder.child("test").setProperty("price",100);
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals("/test",query(escape(FieldNames.createAnalyzedFieldName("foo")) + ":fox",defn));
+  assertNull("Non string properties not indexed by default",getPath(NumericRangeQuery.newLongRange("price",100L,100L,true,true)));
+}
+
+</code></pre>
+
+<pre class="type-5 type-3 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Contains more than 2 JUnit-based stereotypes
+- Is not executed with the test suite
+"></span><br>
+@Test @Ignore("OAK-3072") public void copyOnWriteAndLocks() throws Exception {
+  ExecutorService executorService=Executors.newFixedThreadPool(2);
+  IndexCopier copier=new IndexCopier(executorService,temporaryFolder.getRoot());
+  FailOnDemandEditorProvider failingProvider=new FailOnDemandEditorProvider();
+  EditorHook hook=new EditorHook(new IndexUpdateProvider(new CompositeIndexEditorProvider(failingProvider,new LuceneIndexEditorProvider(copier))));
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.INDEX_PATH,"foo");
+  IndexUtils.createIndexDefinition(index,"failingIndex",false,false,of("foo"),null);
+  NodeState indexed=hook.processCommit(EMPTY_NODE,builder.getNodeState(),CommitInfo.EMPTY);
+  builder=indexed.builder();
+  NodeState before=indexed;
+  builder.child("test").setProperty("a","fox is jumping");
+  NodeState after=builder.getNodeState();
+  failingProvider.setShouldFail(true);
+  try {
+    hook.processCommit(before,after,CommitInfo.EMPTY);
+    fail();
+  }
+ catch (  CommitFailedException ignore) {
+  }
+  failingProvider.setShouldFail(false);
+  hook.processCommit(before,after,CommitInfo.EMPTY);
+  executorService.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void noOfDocsIndexedNonFullText() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.FULL_TEXT_ENABLED,false);
+  nb.setProperty(createProperty(INCLUDE_PROPERTY_NAMES,of("foo"),STRINGS));
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  builder.child("test2").setProperty("bar","kite is flying");
+  builder.child("test3").setProperty("foo","wind is blowing");
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertEquals(2,getSearcher().getIndexReader().numDocs());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void saveDirectoryListing() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.SAVE_DIR_LISTING,true);
+  nb.setProperty(LuceneIndexConstants.FULL_TEXT_ENABLED,false);
+  nb.setProperty(createProperty(INCLUDE_PROPERTY_NAMES,of("foo"),STRINGS));
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  NodeState dir=indexed.getChildNode("oak:index").getChildNode("lucene").getChildNode(":data");
+  assertTrue(dir.hasProperty(OakDirectory.PROP_DIR_LISTING));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void releaseIndexNode(){
+  if (indexNode != null) {
+    indexNode.release();
+  }
+  indexNode=null;
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLuceneWithNonFullText() throws Exception {
+  NodeBuilder index=builder.child(INDEX_DEFINITIONS_NAME);
+  NodeBuilder nb=newLuceneIndexDefinitionV2(index,"lucene",of(TYPENAME_STRING));
+  nb.setProperty(LuceneIndexConstants.FULL_TEXT_ENABLED,false);
+  nb.setProperty(createProperty(INCLUDE_PROPERTY_NAMES,of("foo","price","weight","bool","creationTime"),STRINGS));
+  IndexDefinition defn=new IndexDefinition(root,nb.getNodeState());
+  NodeState before=builder.getNodeState();
+  builder.child("test").setProperty("foo","fox is jumping");
+  builder.child("test").setProperty("bar","kite is flying");
+  builder.child("test").setProperty("price",100);
+  builder.child("test").setProperty("weight",10.0);
+  builder.child("test").setProperty("bool",true);
+  builder.child("test").setProperty("truth",true);
+  builder.child("test").setProperty("creationTime",createCal("05/06/2014"));
+  NodeState after=builder.getNodeState();
+  NodeState indexed=HOOK.processCommit(before,after,CommitInfo.EMPTY);
+  tracker.update(indexed);
+  assertNull("Fulltext search should not work",query("foo:fox",defn));
+  assertEquals("/test",getPath(new TermQuery(new Term("foo","fox is jumping"))));
+  assertNull("bar must NOT be indexed",getPath(new TermQuery(new Term("bar","kite is flying"))));
+  assertEquals("/test",getPath(NumericRangeQuery.newDoubleRange("weight",8D,12D,true,true)));
+  assertEquals("/test",getPath(NumericRangeQuery.newLongRange("price",100L,100L,true,true)));
+  assertEquals("/test",getPath(new TermQuery(new Term("bool","true"))));
+  assertNull("truth must NOT be indexed",getPath(new TermQuery(new Term("truth","true"))));
+  assertEquals("/test",getPath(NumericRangeQuery.newLongRange("creationTime",dateToTime("05/05/2014"),dateToTime("05/07/2014"),true,true)));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

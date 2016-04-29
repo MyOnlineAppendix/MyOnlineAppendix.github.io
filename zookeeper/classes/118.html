@@ -1,0 +1,354 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.test.LoadFromLogTest (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test we can restore the snapshot that has data ahead of the zxid
+ * of the snapshot file.
+ */
+@Test public void testRestore() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=getConnectedZkClient();
+  String lastPath=null;
+  try {
+    zk.create("/invalidsnap",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    for (int i=0; i < NUM_MESSAGES; i++) {
+      lastPath=zk.create("/invalidsnap/test-",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT_SEQUENTIAL);
+    }
+  }
+  finally {
+    zk.close();
+  }
+  String[] tokens=lastPath.split("-");
+  String expectedPath="/invalidsnap/test-" + String.format("%010d",(new Integer(tokens[1])).intValue() + 1);
+  long eZxid=zks.getZKDatabase().getDataTreeLastProcessedZxid();
+  zks.getZKDatabase().setlastProcessedZxid(zks.getZKDatabase().getDataTreeLastProcessedZxid() - 10);
+  LOG.info("Set lastProcessedZxid to " + zks.getZKDatabase().getDataTreeLastProcessedZxid());
+  zks.takeSnapshot();
+  zks.shutdown();
+  f.shutdown();
+  zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  connected=false;
+  long fZxid=zks.getZKDatabase().getDataTreeLastProcessedZxid();
+  Assert.assertTrue("Restore failed expected zxid=" + eZxid + " found="+ fZxid,fZxid == eZxid);
+  zk=getConnectedZkClient();
+  String[] children;
+  String path;
+  try {
+    children=zk.getChildren("/invalidsnap",false).toArray(new String[0]);
+    path=zk.create("/invalidsnap/test-",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT_SEQUENTIAL);
+  }
+  finally {
+    zk.close();
+  }
+  LOG.info("Expected " + expectedPath + " found "+ path);
+  Assert.assertTrue("Error in sequential znode creation expected " + expectedPath + " found "+ path,path.equals(expectedPath));
+  Assert.assertTrue("Unexpected number of children " + children.length + " expected "+ NUM_MESSAGES,(children.length == NUM_MESSAGES));
+  f.shutdown();
+  zks.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-3 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify snap/log dir create with/without autocreate enabled.
+ */
+@Test public void testDatadirAutocreate() throws Exception {
+  ClientBase.setupTestEnv();
+  File tmpDir=ClientBase.createTmpDir();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  zks.shutdown();
+  f.shutdown();
+  Assert.assertTrue("waiting for server being down ",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+  try {
+    System.setProperty(FileTxnSnapLog.ZOOKEEPER_DATADIR_AUTOCREATE,"false");
+    tmpDir=ClientBase.createTmpDir();
+    zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+    f=ServerCnxnFactory.createFactory(PORT,-1);
+    f.startup(zks);
+    Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+    Assert.fail("Server should not have started without datadir");
+  }
+ catch (  IOException e) {
+    LOG.info("Server failed to start - correct behavior " + e);
+  }
+ finally {
+    System.setProperty(FileTxnSnapLog.ZOOKEEPER_DATADIR_AUTOCREATE,FileTxnSnapLog.ZOOKEEPER_DATADIR_AUTOCREATE_DEFAULT);
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * test that all transactions from the Log are loaded, and only once
+ * @throws Exception an exception might be thrown here
+ */
+@Test public void testLoad() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(100);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=new ZooKeeper(HOSTPORT,CONNECTION_TIMEOUT,this);
+  try {
+    for (int i=0; i < NUM_MESSAGES; i++) {
+      zk.create("/invalidsnap-" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    }
+  }
+  finally {
+    zk.close();
+  }
+  f.shutdown();
+  Assert.assertTrue("waiting for server to shutdown",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+  File logDir=new File(tmpDir,FileTxnSnapLog.version + FileTxnSnapLog.VERSION);
+  FileTxnLog txnLog=new FileTxnLog(logDir);
+  TxnIterator itr=txnLog.read(0);
+  FileTxnIterator fileItr=(FileTxnIterator)itr;
+  long storageSize=fileItr.getStorageSize();
+  LOG.info("Txnlog size: " + storageSize + " bytes");
+  Assert.assertTrue("Storage size is greater than zero ",(storageSize > 0));
+  long expectedZxid=0;
+  long lastZxid=0;
+  TxnHeader hdr;
+  do {
+    hdr=itr.getHeader();
+    expectedZxid++;
+    Assert.assertTrue("not the same transaction. lastZxid=" + lastZxid + ", zxid="+ hdr.getZxid(),lastZxid != hdr.getZxid());
+    Assert.assertTrue("excepting next transaction. expected=" + expectedZxid + ", retreived="+ hdr.getZxid(),(hdr.getZxid() == expectedZxid));
+    lastZxid=hdr.getZxid();
+  }
+ while (itr.next());
+  Assert.assertTrue("processed all transactions. " + expectedZxid + " == "+ TOTAL_TRANSACTIONS,(expectedZxid == TOTAL_TRANSACTIONS));
+  zks.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * test that we fail to load txnlog of a request zxid that is older
+ * than what exist on disk
+ * @throws Exception an exception might be thrown here
+ */
+@Test public void testLoadFailure() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(50);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=new ZooKeeper(HOSTPORT,CONNECTION_TIMEOUT,this);
+  try {
+    for (int i=0; i < NUM_MESSAGES; i++) {
+      zk.create("/data-",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT_SEQUENTIAL);
+    }
+  }
+  finally {
+    zk.close();
+  }
+  f.shutdown();
+  Assert.assertTrue("waiting for server to shutdown",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+  File logDir=new File(tmpDir,FileTxnSnapLog.version + FileTxnSnapLog.VERSION);
+  File[] logFiles=FileTxnLog.getLogFiles(logDir.listFiles(),0);
+  Assert.assertTrue(logFiles.length > 4);
+  Assert.assertTrue("delete the first log file",logFiles[0].delete());
+  long secondStartZxid=Util.getZxidFromName(logFiles[1].getName(),"log");
+  FileTxnLog txnLog=new FileTxnLog(logDir);
+  TxnIterator itr=txnLog.read(1,false);
+  Assert.assertEquals(secondStartZxid,itr.getHeader().getZxid());
+  itr=txnLog.read(secondStartZxid,false);
+  Assert.assertEquals(secondStartZxid,itr.getHeader().getZxid());
+  Assert.assertTrue(itr.next());
+  long nextZxid=itr.getHeader().getZxid();
+  itr=txnLog.read(nextZxid,false);
+  Assert.assertEquals(secondStartZxid,itr.getHeader().getZxid());
+  long thirdStartZxid=Util.getZxidFromName(logFiles[2].getName(),"log");
+  itr=txnLog.read(thirdStartZxid,false);
+  Assert.assertEquals(secondStartZxid,itr.getHeader().getZxid());
+  Assert.assertTrue(itr.next());
+  nextZxid=itr.getHeader().getZxid();
+  itr=txnLog.read(nextZxid,false);
+  Assert.assertEquals(secondStartZxid,itr.getHeader().getZxid());
+}
+
+</code></pre>
+
+<pre class="type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Simulates ZOOKEEPER-1069 and verifies that flush() before padLogFile
+ * fixes it.
+ */
+@Test public void testPad() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  FileTxnLog txnLog=new FileTxnLog(tmpDir);
+  TxnHeader txnHeader=new TxnHeader(0xabcd,0x123,0x123,Time.currentElapsedTime(),OpCode.create);
+  Record txn=new CreateTxn("/Test",new byte[0],null,false,1);
+  txnLog.append(txnHeader,txn);
+  FileInputStream in=new FileInputStream(tmpDir.getPath() + "/log." + Long.toHexString(txnHeader.getZxid()));
+  BinaryInputArchive ia=BinaryInputArchive.getArchive(in);
+  FileHeader header=new FileHeader();
+  header.deserialize(ia,"fileheader");
+  LOG.info("Received magic : " + header.getMagic() + " Expected : "+ FileTxnLog.TXNLOG_MAGIC);
+  Assert.assertTrue("Missing magic number ",header.getMagic() == FileTxnLog.TXNLOG_MAGIC);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test we can restore a snapshot that has errors and data ahead of the zxid
+ * of the snapshot file.
+ */
+@Test public void testRestoreWithTransactionErrors() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=getConnectedZkClient();
+  try {
+    for (int i=0; i < NUM_MESSAGES; i++) {
+      try {
+        zk.create("/invaliddir/test-",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT_SEQUENTIAL);
+      }
+ catch (      NoNodeException e) {
+      }
+    }
+  }
+  finally {
+    zk.close();
+  }
+  zks.getZKDatabase().setlastProcessedZxid(zks.getZKDatabase().getDataTreeLastProcessedZxid() - 10);
+  LOG.info("Set lastProcessedZxid to " + zks.getZKDatabase().getDataTreeLastProcessedZxid());
+  zks.takeSnapshot();
+  zks.shutdown();
+  f.shutdown();
+  zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  f.shutdown();
+  zks.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * ZOOKEEPER-1573: test restoring a snapshot with deleted txns ahead of the
+ * snapshot file's zxid.
+ */
+@Test public void testReloadSnapshotWithMissingParent() throws Exception {
+  File tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=getConnectedZkClient();
+  zk.create("/a","".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  Stat stat=zk.exists("/a",false);
+  long createZxId=stat.getMzxid();
+  zk.create("/a/b","".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  zk.delete("/a/b",-1);
+  zk.delete("/a",-1);
+  zks.getZKDatabase().setlastProcessedZxid(createZxId);
+  LOG.info("Set lastProcessedZxid to {}",zks.getZKDatabase().getDataTreeLastProcessedZxid());
+  zks.takeSnapshot();
+  zks.shutdown();
+  f.shutdown();
+  zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(10000);
+  f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  f.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * For ZOOKEEPER-1046. Verify if cversion and pzxid if incremented
+ * after create/delete failure during restore.
+ */
+@Test public void testTxnFailure() throws Exception {
+  long count=1;
+  File tmpDir=ClientBase.createTmpDir();
+  FileTxnSnapLog logFile=new FileTxnSnapLog(tmpDir,tmpDir);
+  DataTree dt=new DataTree();
+  dt.createNode("/test",new byte[0],null,0,-1,1,1);
+  for (count=1; count <= 3; count++) {
+    dt.createNode("/test/" + count,new byte[0],null,0,-1,count,Time.currentElapsedTime());
+  }
+  DataNode zk=dt.getNode("/test");
+  LOG.info("Attempting to create " + "/test/" + (count - 1));
+  doOp(logFile,OpCode.create,"/test/" + (count - 1),dt,zk,-1);
+  LOG.info("Attempting to create " + "/test/" + (count - 1));
+  doOp(logFile,OpCode.create,"/test/" + (count - 1),dt,zk,zk.stat.getCversion() + 1);
+  LOG.info("Attempting to create " + "/test/" + (count - 1));
+  doOp(logFile,OpCode.multi,"/test/" + (count - 1),dt,zk,zk.stat.getCversion() + 1);
+  LOG.info("Attempting to create " + "/test/" + (count - 1));
+  doOp(logFile,OpCode.multi,"/test/" + (count - 1),dt,zk,-1);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

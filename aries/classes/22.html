@@ -1,0 +1,70 @@
+<h3 style="margin:0px">Class: org.apache.aries.application.runtime.itests.MinimumImportsTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void createApplications() throws Exception {
+  if (createdApplications) {
+    return;
+  }
+  ZipFixture bundle=ArchiveFixture.newJar().manifest().attribute(Constants.BUNDLE_SYMBOLICNAME,fake_app_management).attribute(Constants.BUNDLE_MANIFESTVERSION,"2").attribute(Constants.BUNDLE_VERSION,"1.0.0").end();
+  OutputStream out=new FileOutputStream(fake_app_management + ".jar");
+  bundle.writeOut(out);
+  out.close();
+  ZipFixture testEba=ArchiveFixture.newZip().jar("org.apache.aries.application.itests.minimports.jar").manifest().symbolicName("org.apache.aries.application.itests.minimports").attribute("Bundle-Version","1.0.0").attribute("Import-Package","org.apache.aries.application.management").end().binary("org/apache/aries/application/sample/appmgrclient/AppMgrClient.class",MinimumImportsTest.class.getClassLoader().getResourceAsStream("org/apache/aries/application/sample/appmgrclient/AppMgrClient.class")).binary("OSGI-INF/blueprint/app-mgr-client.xml",MinimumImportsTest.class.getClassLoader().getResourceAsStream("app-mgr-client.xml")).end();
+  FileOutputStream fout=new FileOutputStream("appmgrclienttest.eba");
+  testEba.writeOut(fout);
+  fout.close();
+  StringBuilder repositoryXML=new StringBuilder();
+  BufferedReader reader=new BufferedReader(new InputStreamReader(MinimumImportsTest.class.getResourceAsStream("/basic/fakeAppMgrServiceRepo.xml")));
+  String line;
+  while ((line=reader.readLine()) != null) {
+    repositoryXML.append(line);
+    repositoryXML.append("\r\n");
+  }
+  String repo=repositoryXML.toString().replaceAll("bundle_location",new File(fake_app_management + ".jar").toURI().toString());
+  System.out.println(repo);
+  FileWriter writer=new FileWriter("repository.xml");
+  writer.write(repo);
+  writer.close();
+  createdApplications=true;
+}
+
+</code></pre>
+
+<pre class="type-3 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAppUsingAriesApplicationManager() throws Exception {
+  AppMgrClientBlueprintListener acbl=new AppMgrClientBlueprintListener();
+  ServiceRegistration sr=bundleContext.registerService("org.osgi.service.blueprint.container.BlueprintListener",acbl,null);
+  AriesApplicationManager manager=context().getService(AriesApplicationManager.class);
+  AriesApplication app=manager.createApplication(FileSystem.getFSRoot(new File("appmgrclienttest.eba")));
+  RepositoryAdmin repositoryAdmin=context().getService(RepositoryAdmin.class);
+  Repository[] repos=repositoryAdmin.listRepositories();
+  for (  Repository repo : repos) {
+    repositoryAdmin.removeRepository(repo.getURI());
+  }
+  repositoryAdmin.addRepository(new File("repository.xml").toURI().toURL());
+  AriesApplicationContext ctx=manager.install(app);
+  ctx.start();
+  int sleepfor=3000;
+  while ((acbl.success == null || acbl.success == false) && sleepfor > 0) {
+    Thread.sleep(100);
+    sleepfor-=100;
+  }
+  assertNotNull("Timed out - didn't receive Blueprint CREATED or FAILURE event",acbl.success);
+  assertTrue("Received Blueprint FAILURE event",acbl.success);
+  ctx.stop();
+  manager.uninstall(ctx);
+  sr.unregister();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

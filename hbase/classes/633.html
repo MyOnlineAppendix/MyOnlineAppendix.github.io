@@ -1,0 +1,1965 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.security.access.TestAccessController (60 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(49)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testPostGrantRevokeAtQualifierLevel() throws Exception {
+  final TableName tableName=TableName.valueOf("testGrantRevokeAtQualifierLevel");
+  final byte[] family1=Bytes.toBytes("f1");
+  final byte[] family2=Bytes.toBytes("f2");
+  final byte[] qualifier=Bytes.toBytes("q");
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  if (admin.tableExists(tableName)) {
+    deleteTable(TEST_UTIL,tableName);
+  }
+  HTableDescriptor htd=new HTableDescriptor(tableName);
+  htd.addFamily(new HColumnDescriptor(family1));
+  htd.addFamily(new HColumnDescriptor(family2));
+  createTable(TEST_UTIL,htd);
+  try {
+    User user=User.createUserForTesting(TEST_UTIL.getConfiguration(),"user",new String[0]);
+    AccessTestAction getQualifierAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Get g=new Get(TEST_ROW);
+        g.addColumn(family1,qualifier);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.get(g);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction putQualifierAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Put p=new Put(TEST_ROW);
+        p.addColumn(family1,qualifier,Bytes.toBytes("v1"));
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.put(p);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction deleteQualifierAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Delete d=new Delete(TEST_ROW);
+        d.addColumn(family1,qualifier);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.delete(d);
+        }
+         return null;
+      }
+    }
+;
+    revokeFromTable(TEST_UTIL,user.getShortName(),tableName,family1,null);
+    verifyDenied(user,getQualifierAction);
+    verifyDenied(user,putQualifierAction);
+    verifyDenied(user,deleteQualifierAction);
+    grantOnTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.READ);
+    verifyAllowed(user,getQualifierAction);
+    verifyDenied(user,putQualifierAction);
+    verifyDenied(user,deleteQualifierAction);
+    grantOnTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.WRITE);
+    verifyDenied(user,getQualifierAction);
+    verifyAllowed(user,putQualifierAction);
+    verifyAllowed(user,deleteQualifierAction);
+    grantOnTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.READ,Permission.Action.WRITE);
+    verifyAllowed(user,getQualifierAction);
+    verifyAllowed(user,putQualifierAction);
+    verifyAllowed(user,deleteQualifierAction);
+    revokeFromTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier);
+    verifyDenied(user,getQualifierAction);
+    verifyDenied(user,putQualifierAction);
+    verifyDenied(user,deleteQualifierAction);
+  }
+  finally {
+    deleteTable(TEST_UTIL,tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testGrantRevoke() throws Exception {
+  AccessTestAction grantAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table acl=conn.getTable(AccessControlLists.ACL_TABLE_NAME)){
+        BlockingRpcChannel service=acl.coprocessorService(TEST_TABLE.getName());
+        AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+        ProtobufUtil.grant(protocol,USER_RO.getShortName(),TEST_TABLE,TEST_FAMILY,null,Action.READ);
+      }
+       return null;
+    }
+  }
+;
+  AccessTestAction revokeAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table acl=conn.getTable(AccessControlLists.ACL_TABLE_NAME)){
+        BlockingRpcChannel service=acl.coprocessorService(TEST_TABLE.getName());
+        AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+        ProtobufUtil.revoke(protocol,USER_RO.getShortName(),TEST_TABLE,TEST_FAMILY,null,Action.READ);
+      }
+       return null;
+    }
+  }
+;
+  AccessTestAction getTablePermissionsAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table acl=conn.getTable(AccessControlLists.ACL_TABLE_NAME)){
+        BlockingRpcChannel service=acl.coprocessorService(TEST_TABLE.getName());
+        AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+        ProtobufUtil.getUserPermissions(protocol,TEST_TABLE);
+      }
+       return null;
+    }
+  }
+;
+  AccessTestAction getGlobalPermissionsAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table acl=conn.getTable(AccessControlLists.ACL_TABLE_NAME)){
+        BlockingRpcChannel service=acl.coprocessorService(HConstants.EMPTY_START_ROW);
+        AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+        ProtobufUtil.getUserPermissions(protocol);
+      }
+       return null;
+    }
+  }
+;
+  verifyAllowed(grantAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(grantAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  try {
+    verifyAllowed(revokeAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+    verifyDenied(revokeAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+    verifyAllowed(getTablePermissionsAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+    verifyDenied(getTablePermissionsAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+    verifyAllowed(getGlobalPermissionsAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+    verifyDenied(getGlobalPermissionsAction,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  }
+  finally {
+    grantOnTable(TEST_UTIL,USER_RO.getShortName(),TEST_TABLE,TEST_FAMILY,null,Permission.Action.READ);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-8 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  cleanUp();
+  TEST_UTIL.shutdownMiniCluster();
+  int total=TableAuthManager.getTotalRefCount();
+  assertTrue("Unexpected reference count: " + total,total == 0);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableNameEnumeration() throws Exception {
+  AccessTestAction listTablesAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Connection unmanagedConnection=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration());
+      Admin admin=unmanagedConnection.getAdmin();
+      try {
+        return Arrays.asList(admin.listTableNames());
+      }
+  finally {
+        admin.close();
+        unmanagedConnection.close();
+      }
+    }
+  }
+;
+  verifyAllowed(listTablesAction,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_GROUP_CREATE,USER_GROUP_ADMIN,USER_GROUP_READ,USER_GROUP_WRITE);
+  verifyIfEmptyList(listTablesAction,USER_NONE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testOpenRegion() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preOpen(ObserverContext.createAndPrepare(RCP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testSecurityCapabilities() throws Exception {
+  List<SecurityCapability> capabilities=TEST_UTIL.getConnection().getAdmin().getSecurityCapabilities();
+  assertTrue("AUTHORIZATION capability is missing",capabilities.contains(SecurityCapability.AUTHORIZATION));
+  assertTrue("CELL_AUTHORIZATION capability is missing",capabilities.contains(SecurityCapability.CELL_AUTHORIZATION));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableTruncate() throws Exception {
+  AccessTestAction truncateTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preTruncateTable(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE);
+      return null;
+    }
+  }
+;
+  verifyAllowed(truncateTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(truncateTable,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testMergeRegions() throws Exception {
+  final TableName tname=TableName.valueOf("testMergeRegions");
+  createTestTable(tname);
+  try {
+    final List<HRegion> regions=TEST_UTIL.getHBaseCluster().findRegionsForTable(tname);
+    assertTrue("not enough regions: " + regions.size(),regions.size() >= 2);
+    AccessTestAction action=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        ACCESS_CONTROLLER.preMerge(ObserverContext.createAndPrepare(RSCP_ENV,null),regions.get(0),regions.get(1));
+        return null;
+      }
+    }
+;
+    verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+    verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  }
+  finally {
+    deleteTable(TEST_UTIL,tname);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testCloseRegion() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preClose(ObserverContext.createAndPrepare(RCP_ENV,null),false);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testReservedCellTags() throws Exception {
+  AccessTestAction putWithReservedTag=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        KeyValue kv=new KeyValue(TEST_ROW,TEST_FAMILY,TEST_QUALIFIER,HConstants.LATEST_TIMESTAMP,HConstants.EMPTY_BYTE_ARRAY,new Tag[]{new ArrayBackedTag(AccessControlLists.ACL_TAG_TYPE,ProtobufUtil.toUsersAndPermissions(USER_OWNER.getShortName(),new Permission(Permission.Action.READ)).toByteArray())});
+        t.put(new Put(TEST_ROW).add(kv));
+      }
+       return null;
+    }
+  }
+;
+  verifyAllowed(putWithReservedTag,User.getCurrent());
+  verifyDenied(putWithReservedTag,USER_OWNER,USER_ADMIN,USER_CREATE,USER_RW,USER_RO);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableCreate() throws Exception {
+  AccessTestAction createTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      HTableDescriptor htd=new HTableDescriptor(TableName.valueOf("testnewtable"));
+      htd.addFamily(new HColumnDescriptor(TEST_FAMILY));
+      ACCESS_CONTROLLER.preCreateTable(ObserverContext.createAndPrepare(CP_ENV,null),htd,null);
+      return null;
+    }
+  }
+;
+  verifyAllowed(createTable,SUPERUSER,USER_ADMIN,USER_GROUP_CREATE);
+  verifyDenied(createTable,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_ADMIN,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testSplitWithSplitRow() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSplit(ObserverContext.createAndPrepare(RCP_ENV,null),TEST_ROW);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testUnassign() throws Exception {
+  List<HRegionLocation> regions;
+  try (RegionLocator locator=systemUserConnection.getRegionLocator(TEST_TABLE)){
+    regions=locator.getAllRegionLocations();
+  }
+   HRegionLocation location=regions.get(0);
+  final HRegionInfo hri=location.getRegionInfo();
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preUnassign(ObserverContext.createAndPrepare(CP_ENV,null),hri,false);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAddColumn() throws Exception {
+  final HColumnDescriptor hcd=new HColumnDescriptor("fam_new");
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preAddColumnFamily(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE,hcd);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testPostGrantRevoke() throws Exception {
+  final TableName tableName=TableName.valueOf("TempTable");
+  final byte[] family1=Bytes.toBytes("f1");
+  final byte[] family2=Bytes.toBytes("f2");
+  final byte[] qualifier=Bytes.toBytes("q");
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  if (admin.tableExists(tableName)) {
+    deleteTable(TEST_UTIL,tableName);
+  }
+  HTableDescriptor htd=new HTableDescriptor(tableName);
+  htd.addFamily(new HColumnDescriptor(family1));
+  htd.addFamily(new HColumnDescriptor(family2));
+  createTable(TEST_UTIL,htd);
+  try {
+    User tblUser=User.createUserForTesting(TEST_UTIL.getConfiguration(),"tbluser",new String[0]);
+    User gblUser=User.createUserForTesting(TEST_UTIL.getConfiguration(),"gbluser",new String[0]);
+    AccessTestAction putActionAll=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Put p=new Put(Bytes.toBytes("a"));
+        p.addColumn(family1,qualifier,Bytes.toBytes("v1"));
+        p.addColumn(family2,qualifier,Bytes.toBytes("v2"));
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.put(p);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction putAction1=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Put p=new Put(Bytes.toBytes("a"));
+        p.addColumn(family1,qualifier,Bytes.toBytes("v1"));
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.put(p);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction putAction2=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Put p=new Put(Bytes.toBytes("a"));
+        p.addColumn(family2,qualifier,Bytes.toBytes("v2"));
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.put(p);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction getActionAll=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Get g=new Get(TEST_ROW);
+        g.addFamily(family1);
+        g.addFamily(family2);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.get(g);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction getAction1=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Get g=new Get(TEST_ROW);
+        g.addFamily(family1);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.get(g);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction getAction2=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Get g=new Get(TEST_ROW);
+        g.addFamily(family2);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.get(g);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction deleteActionAll=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Delete d=new Delete(TEST_ROW);
+        d.addFamily(family1);
+        d.addFamily(family2);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.delete(d);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction deleteAction1=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Delete d=new Delete(TEST_ROW);
+        d.addFamily(family1);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.delete(d);
+        }
+         return null;
+      }
+    }
+;
+    AccessTestAction deleteAction2=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Delete d=new Delete(TEST_ROW);
+        d.addFamily(family2);
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(tableName)){
+          t.delete(d);
+        }
+         return null;
+      }
+    }
+;
+    verifyDenied(tblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyDenied(gblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(gblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    grantGlobal(TEST_UTIL,gblUser.getShortName(),Permission.Action.READ);
+    grantOnTable(TEST_UTIL,tblUser.getShortName(),tableName,null,null,Permission.Action.READ);
+    verifyAllowed(tblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyAllowed(gblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(gblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    grantGlobal(TEST_UTIL,gblUser.getShortName(),Permission.Action.WRITE);
+    grantOnTable(TEST_UTIL,tblUser.getShortName(),tableName,null,null,Permission.Action.WRITE);
+    verifyDenied(tblUser,getActionAll,getAction1,getAction2);
+    verifyAllowed(tblUser,putActionAll,putAction1,putAction2);
+    verifyAllowed(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyDenied(gblUser,getActionAll,getAction1,getAction2);
+    verifyAllowed(gblUser,putActionAll,putAction1,putAction2);
+    verifyAllowed(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    revokeGlobal(TEST_UTIL,gblUser.getShortName());
+    revokeFromTable(TEST_UTIL,tblUser.getShortName(),tableName,null,null);
+    verifyDenied(tblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyDenied(gblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(gblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    grantGlobal(TEST_UTIL,gblUser.getShortName(),Permission.Action.READ);
+    grantOnTable(TEST_UTIL,tblUser.getShortName(),tableName,family1,null,Permission.Action.READ);
+    verifyAllowed(tblUser,getActionAll,getAction1);
+    verifyDenied(tblUser,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyAllowed(gblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(gblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    grantGlobal(TEST_UTIL,gblUser.getShortName(),Permission.Action.WRITE);
+    grantOnTable(TEST_UTIL,tblUser.getShortName(),tableName,family2,null,Permission.Action.WRITE);
+    verifyAllowed(tblUser,getActionAll,getAction1);
+    verifyAllowed(tblUser,putAction2,deleteAction2);
+    verifyDenied(tblUser,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1);
+    verifyDenied(gblUser,getActionAll,getAction1,getAction2);
+    verifyAllowed(gblUser,putActionAll,putAction1,putAction2);
+    verifyAllowed(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+    revokeGlobal(TEST_UTIL,gblUser.getShortName());
+    revokeFromTable(TEST_UTIL,tblUser.getShortName(),tableName,family2,null);
+    verifyAllowed(tblUser,getActionAll,getAction1);
+    verifyDenied(tblUser,getAction2);
+    verifyDenied(tblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(tblUser,deleteActionAll,deleteAction1,deleteAction2);
+    verifyDenied(gblUser,getActionAll,getAction1,getAction2);
+    verifyDenied(gblUser,putActionAll,putAction1,putAction2);
+    verifyDenied(gblUser,deleteActionAll,deleteAction1,deleteAction2);
+  }
+  finally {
+    deleteTable(TEST_UTIL,tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAccessControlClientGlobalGrantRevoke() throws Exception {
+  User testGlobalGrantRevoke=User.createUserForTesting(conf,"testGlobalGrantRevoke",new String[0]);
+  AccessTestAction getAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        return t.get(new Get(TEST_ROW));
+      }
+     }
+  }
+;
+  verifyDenied(getAction,testGlobalGrantRevoke);
+  String userName=testGlobalGrantRevoke.getShortName();
+  try {
+    grantGlobalUsingAccessControlClient(TEST_UTIL,systemUserConnection,userName,Permission.Action.READ);
+  }
+ catch (  Throwable e) {
+    LOG.error("error during call of AccessControlClient.grant. ",e);
+  }
+  try {
+    verifyAllowed(getAction,testGlobalGrantRevoke);
+    try {
+      revokeGlobalUsingAccessControlClient(TEST_UTIL,systemUserConnection,userName,Permission.Action.READ);
+    }
+ catch (    Throwable e) {
+      LOG.error("error during call of AccessControlClient.revoke ",e);
+    }
+    verifyDenied(getAction,testGlobalGrantRevoke);
+  }
+  finally {
+    revokeGlobal(TEST_UTIL,userName,Permission.Action.READ);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testStopMaster() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preStopMaster(ObserverContext.createAndPrepare(CP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=180000) public void testCheckPermissions() throws Exception {
+  AccessTestAction globalAdmin=new AccessTestAction(){
+    @Override public Void run() throws Exception {
+      checkGlobalPerms(TEST_UTIL,Permission.Action.ADMIN);
+      return null;
+    }
+  }
+;
+  verifyGlobal(globalAdmin);
+  AccessTestAction globalReadWrite=new AccessTestAction(){
+    @Override public Void run() throws Exception {
+      checkGlobalPerms(TEST_UTIL,Permission.Action.READ,Permission.Action.WRITE);
+      return null;
+    }
+  }
+;
+  verifyGlobal(globalReadWrite);
+  final byte[] TEST_Q1=Bytes.toBytes("q1");
+  final byte[] TEST_Q2=Bytes.toBytes("q2");
+  User userTable=User.createUserForTesting(conf,"user_check_perms_table",new String[0]);
+  User userColumn=User.createUserForTesting(conf,"user_check_perms_family",new String[0]);
+  User userQualifier=User.createUserForTesting(conf,"user_check_perms_q",new String[0]);
+  grantOnTable(TEST_UTIL,userTable.getShortName(),TEST_TABLE,null,null,Permission.Action.READ);
+  grantOnTable(TEST_UTIL,userColumn.getShortName(),TEST_TABLE,TEST_FAMILY,null,Permission.Action.READ);
+  grantOnTable(TEST_UTIL,userQualifier.getShortName(),TEST_TABLE,TEST_FAMILY,TEST_Q1,Permission.Action.READ);
+  try {
+    AccessTestAction tableRead=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,null,null,Permission.Action.READ);
+        return null;
+      }
+    }
+;
+    AccessTestAction columnRead=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,TEST_FAMILY,null,Permission.Action.READ);
+        return null;
+      }
+    }
+;
+    AccessTestAction qualifierRead=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,TEST_FAMILY,TEST_Q1,Permission.Action.READ);
+        return null;
+      }
+    }
+;
+    AccessTestAction multiQualifierRead=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,new Permission[]{new TablePermission(TEST_TABLE,TEST_FAMILY,TEST_Q1,Permission.Action.READ),new TablePermission(TEST_TABLE,TEST_FAMILY,TEST_Q2,Permission.Action.READ)});
+        return null;
+      }
+    }
+;
+    AccessTestAction globalAndTableRead=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,new Permission[]{new Permission(Permission.Action.READ),new TablePermission(TEST_TABLE,null,(byte[])null,Permission.Action.READ)});
+        return null;
+      }
+    }
+;
+    AccessTestAction noCheck=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,new Permission[0]);
+        return null;
+      }
+    }
+;
+    verifyAllowed(tableRead,SUPERUSER,userTable);
+    verifyDenied(tableRead,userColumn,userQualifier);
+    verifyAllowed(columnRead,SUPERUSER,userTable,userColumn);
+    verifyDenied(columnRead,userQualifier);
+    verifyAllowed(qualifierRead,SUPERUSER,userTable,userColumn,userQualifier);
+    verifyAllowed(multiQualifierRead,SUPERUSER,userTable,userColumn);
+    verifyDenied(multiQualifierRead,userQualifier);
+    verifyAllowed(globalAndTableRead,SUPERUSER);
+    verifyDenied(globalAndTableRead,userTable,userColumn,userQualifier);
+    verifyAllowed(noCheck,SUPERUSER,userTable,userColumn,userQualifier);
+    AccessTestAction familyReadWrite=new AccessTestAction(){
+      @Override public Void run() throws Exception {
+        checkTablePerms(TEST_UTIL,TEST_TABLE,TEST_FAMILY,null,Permission.Action.READ,Permission.Action.WRITE);
+        return null;
+      }
+    }
+;
+    verifyAllowed(familyReadWrite,SUPERUSER,USER_OWNER,USER_CREATE,USER_RW);
+    verifyDenied(familyReadWrite,USER_NONE,USER_RO);
+    CheckPermissionsRequest checkRequest=CheckPermissionsRequest.newBuilder().addPermission(AccessControlProtos.Permission.newBuilder().setType(AccessControlProtos.Permission.Type.Table).setTablePermission(AccessControlProtos.TablePermission.newBuilder().setTableName(ProtobufUtil.toProtoTableName(TEST_TABLE)).addAction(AccessControlProtos.Permission.Action.CREATE))).build();
+    Table acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel channel=acl.coprocessorService(new byte[0]);
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(channel);
+      try {
+        protocol.checkPermissions(null,checkRequest);
+        fail("this should have thrown CoprocessorException");
+      }
+ catch (      ServiceException ex) {
+      }
+    }
+  finally {
+      acl.close();
+    }
+  }
+  finally {
+    revokeFromTable(TEST_UTIL,userTable.getShortName(),TEST_TABLE,null,null,Permission.Action.READ);
+    revokeFromTable(TEST_UTIL,userColumn.getShortName(),TEST_TABLE,TEST_FAMILY,null,Permission.Action.READ);
+    revokeFromTable(TEST_UTIL,userQualifier.getShortName(),TEST_TABLE,TEST_FAMILY,TEST_Q1,Permission.Action.READ);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testPrepareAndCleanBulkLoad() throws Exception {
+  AccessTestAction prepareBulkLoadAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.prePrepareBulkLoad(ObserverContext.createAndPrepare(RCP_ENV,null),null);
+      return null;
+    }
+  }
+;
+  AccessTestAction cleanupBulkLoadAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preCleanupBulkLoad(ObserverContext.createAndPrepare(RCP_ENV,null),null);
+      return null;
+    }
+  }
+;
+  verifyAnyCreate(prepareBulkLoadAction);
+  verifyAnyCreate(cleanupBulkLoadAction);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableModify() throws Exception {
+  AccessTestAction modifyTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      HTableDescriptor htd=new HTableDescriptor(TEST_TABLE);
+      htd.addFamily(new HColumnDescriptor(TEST_FAMILY));
+      htd.addFamily(new HColumnDescriptor("fam_" + User.getCurrent().getShortName()));
+      ACCESS_CONTROLLER.preModifyTable(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE,htd);
+      return null;
+    }
+  }
+;
+  verifyAllowed(modifyTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(modifyTable,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=180000) public void testGlobalAuthorizationForNewRegisteredRS() throws Exception {
+  LOG.debug("Test for global authorization for a new registered RegionServer.");
+  MiniHBaseCluster hbaseCluster=TEST_UTIL.getHBaseCluster();
+  final Admin admin=TEST_UTIL.getHBaseAdmin();
+  HTableDescriptor htd=new HTableDescriptor(TEST_TABLE2);
+  htd.addFamily(new HColumnDescriptor(TEST_FAMILY));
+  createTable(TEST_UTIL,htd);
+  JVMClusterUtil.RegionServerThread newRsThread=hbaseCluster.startRegionServer();
+  final HRegionServer newRs=newRsThread.getRegionServer();
+  List<HRegionLocation> regions;
+  try (RegionLocator locator=systemUserConnection.getRegionLocator(TEST_TABLE2)){
+    regions=locator.getAllRegionLocations();
+  }
+   HRegionLocation location=regions.get(0);
+  final HRegionInfo hri=location.getRegionInfo();
+  final ServerName server=location.getServerName();
+  try (Table table=systemUserConnection.getTable(TEST_TABLE2)){
+    AccessTestAction moveAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        admin.move(hri.getEncodedNameAsBytes(),Bytes.toBytes(newRs.getServerName().getServerName()));
+        return null;
+      }
+    }
+;
+    SUPERUSER.runAs(moveAction);
+    final int RETRIES_LIMIT=10;
+    int retries=0;
+    while (newRs.getOnlineRegions(TEST_TABLE2).size() < 1 && retries < RETRIES_LIMIT) {
+      LOG.debug("Waiting for region to be opened. Already retried " + retries + " times.");
+      try {
+        Thread.sleep(1000);
+      }
+ catch (      InterruptedException e) {
+      }
+      retries++;
+      if (retries == RETRIES_LIMIT - 1) {
+        fail("Retry exhaust for waiting region to be opened.");
+      }
+    }
+    AccessTestAction putAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        Put put=new Put(Bytes.toBytes("test"));
+        put.addColumn(TEST_FAMILY,Bytes.toBytes("qual"),Bytes.toBytes("value"));
+        table.put(put);
+        return null;
+      }
+    }
+;
+    USER_ADMIN.runAs(putAction);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableDescriptorsEnumeration() throws Exception {
+  User TABLE_ADMIN=User.createUserForTesting(conf,"UserA",new String[0]);
+  grantOnTable(TEST_UTIL,TABLE_ADMIN.getShortName(),TEST_TABLE,null,null,Permission.Action.ADMIN);
+  try {
+    AccessTestAction listTablesAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        try (Connection conn=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration());Admin admin=conn.getAdmin()){
+          return Arrays.asList(admin.listTables());
+        }
+       }
+    }
+;
+    AccessTestAction getTableDescAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        try (Connection conn=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration());Admin admin=conn.getAdmin()){
+          return admin.getTableDescriptor(TEST_TABLE);
+        }
+       }
+    }
+;
+    verifyAllowed(listTablesAction,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,TABLE_ADMIN,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+    verifyIfEmptyList(listTablesAction,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+    verifyAllowed(getTableDescAction,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,TABLE_ADMIN,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+    verifyDenied(getTableDescAction,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+  }
+  finally {
+    revokeFromTable(TEST_UTIL,TABLE_ADMIN.getShortName(),TEST_TABLE,null,null,Permission.Action.ADMIN);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testSetQuota() throws Exception {
+  AccessTestAction setUserQuotaAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSetUserQuota(ObserverContext.createAndPrepare(CP_ENV,null),null,null);
+      return null;
+    }
+  }
+;
+  AccessTestAction setUserTableQuotaAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSetUserQuota(ObserverContext.createAndPrepare(CP_ENV,null),null,TEST_TABLE,null);
+      return null;
+    }
+  }
+;
+  AccessTestAction setUserNamespaceQuotaAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSetUserQuota(ObserverContext.createAndPrepare(CP_ENV,null),null,(String)null,null);
+      return null;
+    }
+  }
+;
+  AccessTestAction setTableQuotaAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSetTableQuota(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE,null);
+      return null;
+    }
+  }
+;
+  AccessTestAction setNamespaceQuotaAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSetNamespaceQuota(ObserverContext.createAndPrepare(CP_ENV,null),null,null);
+      return null;
+    }
+  }
+;
+  verifyAllowed(setUserQuotaAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(setUserQuotaAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(setUserTableQuotaAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(setUserTableQuotaAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(setUserNamespaceQuotaAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(setUserNamespaceQuotaAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(setTableQuotaAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(setTableQuotaAction,USER_CREATE,USER_RW,USER_RO,USER_NONE);
+  verifyAllowed(setNamespaceQuotaAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(setNamespaceQuotaAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testSnapshotWithOwner() throws Exception {
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  final HTableDescriptor htd=admin.getTableDescriptor(TEST_TABLE);
+  SnapshotDescription.Builder builder=SnapshotDescription.newBuilder();
+  builder.setName(TEST_TABLE.getNameAsString() + "-snapshot");
+  builder.setTable(TEST_TABLE.getNameAsString());
+  builder.setOwner(USER_OWNER.getName());
+  final SnapshotDescription snapshot=builder.build();
+  AccessTestAction snapshotAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot,htd);
+      return null;
+    }
+  }
+;
+  verifyAllowed(snapshotAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(snapshotAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  AccessTestAction deleteAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDeleteSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot);
+      return null;
+    }
+  }
+;
+  verifyAllowed(deleteAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(deleteAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  AccessTestAction restoreAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preRestoreSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot,htd);
+      return null;
+    }
+  }
+;
+  verifyAllowed(restoreAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(restoreAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  AccessTestAction cloneAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preCloneSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),null,null);
+      return null;
+    }
+  }
+;
+  verifyAllowed(cloneAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(cloneAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testFlush() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preFlush(ObserverContext.createAndPrepare(RCP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_CREATE,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAbortProcedure() throws Exception {
+  final TableName tableName=TableName.valueOf("testAbortProcedure");
+  final ProcedureExecutor<MasterProcedureEnv> procExec=TEST_UTIL.getHBaseCluster().getMaster().getMasterProcedureExecutor();
+  Procedure proc=new TestTableDDLProcedure(procExec.getEnvironment(),tableName);
+  proc.setOwner(USER_OWNER.getShortName());
+  final long procId=procExec.submitProcedure(proc);
+  AccessTestAction abortProcedureAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preAbortProcedure(ObserverContext.createAndPrepare(CP_ENV,null),procExec,procId);
+      return null;
+    }
+  }
+;
+  verifyAllowed(abortProcedureAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyAllowed(abortProcedureAction,USER_OWNER);
+  verifyDenied(abortProcedureAction,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAccessControlClientGrantRevoke() throws Exception {
+  User testGrantRevoke=User.createUserForTesting(conf,"testGrantRevoke",new String[0]);
+  AccessTestAction getAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        return t.get(new Get(TEST_ROW));
+      }
+     }
+  }
+;
+  verifyDenied(getAction,testGrantRevoke);
+  try {
+    grantOnTableUsingAccessControlClient(TEST_UTIL,systemUserConnection,testGrantRevoke.getShortName(),TEST_TABLE,null,null,Permission.Action.READ);
+  }
+ catch (  Throwable e) {
+    LOG.error("error during call of AccessControlClient.grant. ",e);
+  }
+  verifyAllowed(getAction,testGrantRevoke);
+  try {
+    revokeFromTableUsingAccessControlClient(TEST_UTIL,systemUserConnection,testGrantRevoke.getShortName(),TEST_TABLE,null,null,Permission.Action.READ);
+  }
+ catch (  Throwable e) {
+    LOG.error("error during call of AccessControlClient.revoke ",e);
+  }
+  verifyDenied(getAction,testGrantRevoke);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testWrite() throws Exception {
+  AccessTestAction putAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Put p=new Put(TEST_ROW);
+      p.addColumn(TEST_FAMILY,TEST_QUALIFIER,Bytes.toBytes(1));
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.put(p);
+      }
+       return null;
+    }
+  }
+;
+  verifyWrite(putAction);
+  AccessTestAction deleteAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Delete d=new Delete(TEST_ROW);
+      d.addFamily(TEST_FAMILY);
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.delete(d);
+      }
+       return null;
+    }
+  }
+;
+  verifyWrite(deleteAction);
+  AccessTestAction incrementAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Increment inc=new Increment(TEST_ROW);
+      inc.addColumn(TEST_FAMILY,TEST_QUALIFIER,1);
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.increment(inc);
+      }
+       return null;
+    }
+  }
+;
+  verifyWrite(incrementAction);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testShutdown() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preShutdown(ObserverContext.createAndPrepare(CP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testBalance() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preBalance(ObserverContext.createAndPrepare(CP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=180000) public void testAccessControlClientUserPerms() throws Exception {
+  TableName tname=TableName.valueOf("testAccessControlClientUserPerms");
+  createTestTable(tname);
+  try {
+    final String regex=tname.getNameWithNamespaceInclAsString();
+    User testUserPerms=User.createUserForTesting(conf,"testUserPerms",new String[0]);
+    assertEquals(0,testUserPerms.runAs(getPrivilegedAction(regex)).size());
+    grantOnTable(TEST_UTIL,testUserPerms.getShortName(),tname,null,null,Action.ADMIN);
+    List<UserPermission> perms=testUserPerms.runAs(getPrivilegedAction(regex));
+    assertNotNull(perms);
+    assertEquals(2,perms.size());
+  }
+  finally {
+    deleteTable(TEST_UTIL,tname);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableDeletion() throws Exception {
+  User TABLE_ADMIN=User.createUserForTesting(conf,"TestUser",new String[0]);
+  final TableName tname=TableName.valueOf("testTableDeletion");
+  createTestTable(tname);
+  grantOnTable(TEST_UTIL,TABLE_ADMIN.getShortName(),tname,null,null,Permission.Action.ADMIN);
+  AccessTestAction deleteTableAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Connection unmanagedConnection=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration());
+      Admin admin=unmanagedConnection.getAdmin();
+      try {
+        deleteTable(TEST_UTIL,admin,tname);
+      }
+  finally {
+        admin.close();
+        unmanagedConnection.close();
+      }
+      return null;
+    }
+  }
+;
+  verifyDenied(deleteTableAction,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+  verifyAllowed(deleteTableAction,TABLE_ADMIN);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testListProcedures() throws Exception {
+  final TableName tableName=TableName.valueOf("testAbortProcedure");
+  final ProcedureExecutor<MasterProcedureEnv> procExec=TEST_UTIL.getHBaseCluster().getMaster().getMasterProcedureExecutor();
+  Procedure proc=new TestTableDDLProcedure(procExec.getEnvironment(),tableName);
+  proc.setOwner(USER_OWNER.getShortName());
+  final long procId=procExec.submitProcedure(proc);
+  final List<ProcedureInfo> procInfoList=procExec.listProcedures();
+  AccessTestAction listProceduresAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      List<ProcedureInfo> procInfoListClone=new ArrayList<ProcedureInfo>(procInfoList.size());
+      for (      ProcedureInfo pi : procInfoList) {
+        procInfoListClone.add(pi.clone());
+      }
+      ACCESS_CONTROLLER.postListProcedures(ObserverContext.createAndPrepare(CP_ENV,null),procInfoListClone);
+      return null;
+    }
+  }
+;
+  verifyAllowed(listProceduresAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyAllowed(listProceduresAction,USER_OWNER);
+  verifyIfNull(listProceduresAction,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableEnable() throws Exception {
+  AccessTestAction enableTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preEnableTable(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE);
+      return null;
+    }
+  }
+;
+  verifyAllowed(enableTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(enableTable,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testDeleteColumn() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDeleteColumnFamily(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE,TEST_FAMILY);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_ADMIN_CF,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testRead() throws Exception {
+  AccessTestAction getAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Get g=new Get(TEST_ROW);
+      g.addFamily(TEST_FAMILY);
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.get(g);
+      }
+       return null;
+    }
+  }
+;
+  verifyRead(getAction);
+  AccessTestAction scanAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Scan s=new Scan();
+      s.addFamily(TEST_FAMILY);
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table table=conn.getTable(TEST_TABLE)){
+        ResultScanner scanner=table.getScanner(s);
+        try {
+          for (Result r=scanner.next(); r != null; r=scanner.next()) {
+          }
+        }
+ catch (        IOException e) {
+        }
+ finally {
+          scanner.close();
+        }
+      }
+       return null;
+    }
+  }
+;
+  verifyRead(scanAction);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testSplit() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSplit(ObserverContext.createAndPrepare(RCP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAppend() throws Exception {
+  AccessTestAction appendAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      byte[] row=TEST_ROW;
+      byte[] qualifier=TEST_QUALIFIER;
+      Put put=new Put(row);
+      put.addColumn(TEST_FAMILY,qualifier,Bytes.toBytes(1));
+      Append append=new Append(row);
+      append.add(TEST_FAMILY,qualifier,Bytes.toBytes(2));
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.put(put);
+        t.append(append);
+      }
+       return null;
+    }
+  }
+;
+  verifyAllowed(appendAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_CREATE,USER_RW,USER_GROUP_WRITE);
+  verifyDenied(appendAction,USER_RO,USER_NONE,USER_GROUP_CREATE,USER_GROUP_READ,USER_GROUP_ADMIN);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testModifyColumn() throws Exception {
+  final HColumnDescriptor hcd=new HColumnDescriptor(TEST_FAMILY);
+  hcd.setMaxVersions(10);
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preModifyColumnFamily(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE,hcd);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_ADMIN_CF,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testBulkLoad() throws Exception {
+  try {
+    FileSystem fs=TEST_UTIL.getTestFileSystem();
+    final Path dir=TEST_UTIL.getDataTestDirOnTestFS("testBulkLoad");
+    fs.mkdirs(dir);
+    fs.setPermission(dir,FsPermission.valueOf("-rwxrwxrwx"));
+    AccessTestAction bulkLoadAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        int numRows=3;
+        byte[][][] hfileRanges={{{(byte)0},{(byte)9}}};
+        Path bulkLoadBasePath=new Path(dir,new Path(User.getCurrent().getName()));
+        new BulkLoadHelper(bulkLoadBasePath).bulkLoadHFile(TEST_TABLE,TEST_FAMILY,TEST_QUALIFIER,hfileRanges,numRows);
+        return null;
+      }
+    }
+;
+    verifyAllowed(bulkLoadAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_CREATE,USER_GROUP_CREATE);
+    verifyDenied(bulkLoadAction,USER_RW,USER_NONE,USER_RO,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_ADMIN);
+  }
+  finally {
+    TEST_UTIL.getHBaseAdmin().disableTable(TEST_TABLE);
+    TEST_UTIL.getHBaseAdmin().enableTable(TEST_TABLE);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableDisable() throws Exception {
+  AccessTestAction disableTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDisableTable(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE);
+      return null;
+    }
+  }
+;
+  AccessTestAction disableAclTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDisableTable(ObserverContext.createAndPrepare(CP_ENV,null),AccessControlLists.ACL_TABLE_NAME);
+      return null;
+    }
+  }
+;
+  verifyAllowed(disableTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(disableTable,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+  verifyDenied(disableAclTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_GROUP_CREATE,USER_GROUP_ADMIN,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testGetNamespacePermission() throws Exception {
+  String namespace="testGetNamespacePermission";
+  NamespaceDescriptor desc=NamespaceDescriptor.create(namespace).build();
+  createNamespace(TEST_UTIL,desc);
+  grantOnNamespace(TEST_UTIL,USER_NONE.getShortName(),namespace,Permission.Action.READ);
+  try {
+    List<UserPermission> namespacePermissions=AccessControlClient.getUserPermissions(systemUserConnection,AccessControlLists.toNamespaceEntry(namespace));
+    assertTrue(namespacePermissions != null);
+    assertTrue(namespacePermissions.size() == 1);
+  }
+ catch (  Throwable thw) {
+    throw new HBaseException(thw);
+  }
+  deleteNamespace(TEST_UTIL,namespace);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testCoprocessorExec() throws Exception {
+  for (  JVMClusterUtil.RegionServerThread thread : TEST_UTIL.getMiniHBaseCluster().getRegionServerThreads()) {
+    HRegionServer rs=thread.getRegionServer();
+    for (    Region region : rs.getOnlineRegions(TEST_TABLE)) {
+      region.getCoprocessorHost().load(PingCoprocessor.class,Coprocessor.PRIORITY_USER,conf);
+    }
+  }
+  User userA=User.createUserForTesting(conf,"UserA",new String[0]);
+  User userB=User.createUserForTesting(conf,"UserB",new String[0]);
+  grantOnTable(TEST_UTIL,userA.getShortName(),TEST_TABLE,null,null,Permission.Action.EXEC);
+  try {
+    AccessTestAction execEndpointAction=new AccessTestAction(){
+      @Override public Object run() throws Exception {
+        try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+          BlockingRpcChannel service=t.coprocessorService(HConstants.EMPTY_BYTE_ARRAY);
+          PingCoprocessor.newBlockingStub(service).noop(null,NoopRequest.newBuilder().build());
+        }
+         return null;
+      }
+    }
+;
+    String namespace=TEST_TABLE.getNamespaceAsString();
+    grantOnNamespace(TEST_UTIL,userB.getShortName(),namespace,Permission.Action.EXEC);
+    verifyAllowed(execEndpointAction,userA,userB);
+    revokeFromNamespace(TEST_UTIL,userB.getShortName(),namespace,Permission.Action.EXEC);
+    verifyDenied(execEndpointAction,userB);
+    verifyAllowed(execEndpointAction,userA);
+  }
+  finally {
+    revokeFromTable(TEST_UTIL,userA.getShortName(),TEST_TABLE,null,null,Permission.Action.EXEC);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testReplicateLogEntries() throws Exception {
+  AccessTestAction replicateLogEntriesAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preReplicateLogEntries(ObserverContext.createAndPrepare(RSCP_ENV,null),null,null);
+      ACCESS_CONTROLLER.postReplicateLogEntries(ObserverContext.createAndPrepare(RSCP_ENV,null),null,null);
+      return null;
+    }
+  }
+;
+  verifyAllowed(replicateLogEntriesAction,SUPERUSER,USER_ADMIN,USER_GROUP_WRITE);
+  verifyDenied(replicateLogEntriesAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_ADMIN,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testMove() throws Exception {
+  List<HRegionLocation> regions;
+  try (RegionLocator locator=systemUserConnection.getRegionLocator(TEST_TABLE)){
+    regions=locator.getAllRegionLocations();
+  }
+   HRegionLocation location=regions.get(0);
+  final HRegionInfo hri=location.getRegionInfo();
+  final ServerName server=location.getServerName();
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preMove(ObserverContext.createAndPrepare(CP_ENV,null),hri,server,server);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testNamespaceUserGrant() throws Exception {
+  AccessTestAction getAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        return t.get(new Get(TEST_ROW));
+      }
+     }
+  }
+;
+  String namespace=TEST_TABLE.getNamespaceAsString();
+  grantOnNamespace(TEST_UTIL,USER_NONE.getShortName(),namespace,Permission.Action.READ);
+  verifyAllowed(getAction,USER_NONE);
+  revokeFromNamespace(TEST_UTIL,USER_NONE.getShortName(),namespace,Permission.Action.READ);
+  verifyDenied(getAction,USER_NONE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testRollWALWriterRequest() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preRollWALWriterRequest(ObserverContext.createAndPrepare(RSCP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testStopRegionServer() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preStopRegionServer(ObserverContext.createAndPrepare(RSCP_ENV,null));
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAssign() throws Exception {
+  List<HRegionLocation> regions;
+  try (RegionLocator locator=systemUserConnection.getRegionLocator(TEST_TABLE)){
+    regions=locator.getAllRegionLocations();
+  }
+   HRegionLocation location=regions.get(0);
+  final HRegionInfo hri=location.getRegionInfo();
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preAssign(ObserverContext.createAndPrepare(CP_ENV,null),hri);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testAccessControlClientGrantRevokeOnNamespace() throws Exception {
+  User testNS=User.createUserForTesting(conf,"testNS",new String[0]);
+  AccessTestAction getAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        return t.get(new Get(TEST_ROW));
+      }
+     }
+  }
+;
+  verifyDenied(getAction,testNS);
+  String userName=testNS.getShortName();
+  String namespace=TEST_TABLE.getNamespaceAsString();
+  try {
+    grantOnNamespaceUsingAccessControlClient(TEST_UTIL,systemUserConnection,userName,namespace,Permission.Action.READ);
+  }
+ catch (  Throwable e) {
+    LOG.error("error during call of AccessControlClient.grant. ",e);
+  }
+  try {
+    verifyAllowed(getAction,testNS);
+    try {
+      revokeFromNamespaceUsingAccessControlClient(TEST_UTIL,systemUserConnection,userName,namespace,Permission.Action.READ);
+    }
+ catch (    Throwable e) {
+      LOG.error("error during call of AccessControlClient.revoke ",e);
+    }
+    verifyDenied(getAction,testNS);
+  }
+  finally {
+    revokeFromNamespace(TEST_UTIL,userName,namespace,Permission.Action.READ);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testBalanceSwitch() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preBalanceSwitch(ObserverContext.createAndPrepare(CP_ENV,null),true);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_OWNER,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testGlobalPermissionList() throws Exception {
+  List<UserPermission> perms;
+  Table acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+  try {
+    BlockingRpcChannel service=acl.coprocessorService(HConstants.EMPTY_START_ROW);
+    AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+    perms=ProtobufUtil.getUserPermissions(protocol);
+  }
+  finally {
+    acl.close();
+  }
+  List<UserPermission> adminPerms=new ArrayList<UserPermission>();
+  adminPerms.add(new UserPermission(Bytes.toBytes(USER_ADMIN.getShortName()),AccessControlLists.ACL_TABLE_NAME,null,null,Bytes.toBytes("ACRW")));
+  List<String> superUsers=Superusers.getSuperUsers();
+  for (  String user : superUsers) {
+    adminPerms.add(new UserPermission(Bytes.toBytes(user),AccessControlLists.ACL_TABLE_NAME,null,null,Action.values()));
+  }
+  assertTrue("Only super users, global users and user admin has permission on table hbase:acl " + "per setup",perms.size() == 5 + superUsers.size() && hasFoundUserPermission(adminPerms,perms));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testReadWrite() throws Exception {
+  AccessTestAction checkAndDeleteAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Delete d=new Delete(TEST_ROW);
+      d.addFamily(TEST_FAMILY);
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.checkAndDelete(TEST_ROW,TEST_FAMILY,TEST_QUALIFIER,Bytes.toBytes("test_value"),d);
+      }
+       return null;
+    }
+  }
+;
+  verifyReadWrite(checkAndDeleteAction);
+  AccessTestAction checkAndPut=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Put p=new Put(TEST_ROW);
+      p.addColumn(TEST_FAMILY,TEST_QUALIFIER,Bytes.toBytes(1));
+      try (Connection conn=ConnectionFactory.createConnection(conf);Table t=conn.getTable(TEST_TABLE)){
+        t.checkAndPut(TEST_ROW,TEST_FAMILY,TEST_QUALIFIER,Bytes.toBytes("test_value"),p);
+      }
+       return null;
+    }
+  }
+;
+  verifyReadWrite(checkAndPut);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testSnapshot() throws Exception {
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  final HTableDescriptor htd=admin.getTableDescriptor(TEST_TABLE);
+  SnapshotDescription.Builder builder=SnapshotDescription.newBuilder();
+  builder.setName(TEST_TABLE.getNameAsString() + "-snapshot");
+  builder.setTable(TEST_TABLE.getNameAsString());
+  final SnapshotDescription snapshot=builder.build();
+  AccessTestAction snapshotAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot,htd);
+      return null;
+    }
+  }
+;
+  AccessTestAction deleteAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDeleteSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot);
+      return null;
+    }
+  }
+;
+  AccessTestAction restoreAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preRestoreSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),snapshot,htd);
+      return null;
+    }
+  }
+;
+  AccessTestAction cloneAction=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preCloneSnapshot(ObserverContext.createAndPrepare(CP_ENV,null),null,null);
+      return null;
+    }
+  }
+;
+  verifyAllowed(snapshotAction,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(snapshotAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(cloneAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(deleteAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(restoreAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(restoreAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+  verifyAllowed(deleteAction,SUPERUSER,USER_ADMIN,USER_GROUP_ADMIN);
+  verifyDenied(cloneAction,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_OWNER,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testPermissionList() throws Exception {
+  final TableName tableName=TableName.valueOf("testPermissionList");
+  final byte[] family1=Bytes.toBytes("f1");
+  final byte[] family2=Bytes.toBytes("f2");
+  final byte[] qualifier=Bytes.toBytes("q");
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  if (admin.tableExists(tableName)) {
+    deleteTable(TEST_UTIL,tableName);
+  }
+  HTableDescriptor htd=new HTableDescriptor(tableName);
+  htd.addFamily(new HColumnDescriptor(family1));
+  htd.addFamily(new HColumnDescriptor(family2));
+  htd.setOwner(USER_OWNER);
+  createTable(TEST_UTIL,htd);
+  try {
+    List<UserPermission> perms;
+    Table acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel service=acl.coprocessorService(tableName.getName());
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+      perms=ProtobufUtil.getUserPermissions(protocol,tableName);
+    }
+  finally {
+      acl.close();
+    }
+    UserPermission ownerperm=new UserPermission(Bytes.toBytes(USER_OWNER.getName()),tableName,null,Action.values());
+    assertTrue("Owner should have all permissions on table",hasFoundUserPermission(ownerperm,perms));
+    User user=User.createUserForTesting(TEST_UTIL.getConfiguration(),"user",new String[0]);
+    byte[] userName=Bytes.toBytes(user.getShortName());
+    UserPermission up=new UserPermission(userName,tableName,family1,qualifier,Permission.Action.READ);
+    assertFalse("User should not be granted permission: " + up.toString(),hasFoundUserPermission(up,perms));
+    grantOnTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.READ);
+    acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel service=acl.coprocessorService(tableName.getName());
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+      perms=ProtobufUtil.getUserPermissions(protocol,tableName);
+    }
+  finally {
+      acl.close();
+    }
+    UserPermission upToVerify=new UserPermission(userName,tableName,family1,qualifier,Permission.Action.READ);
+    assertTrue("User should be granted permission: " + upToVerify.toString(),hasFoundUserPermission(upToVerify,perms));
+    upToVerify=new UserPermission(userName,tableName,family1,qualifier,Permission.Action.WRITE);
+    assertFalse("User should not be granted permission: " + upToVerify.toString(),hasFoundUserPermission(upToVerify,perms));
+    grantOnTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.WRITE,Permission.Action.READ);
+    acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel service=acl.coprocessorService(tableName.getName());
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+      perms=ProtobufUtil.getUserPermissions(protocol,tableName);
+    }
+  finally {
+      acl.close();
+    }
+    upToVerify=new UserPermission(userName,tableName,family1,qualifier,Permission.Action.WRITE,Permission.Action.READ);
+    assertTrue("User should be granted permission: " + upToVerify.toString(),hasFoundUserPermission(upToVerify,perms));
+    revokeFromTable(TEST_UTIL,user.getShortName(),tableName,family1,qualifier,Permission.Action.WRITE,Permission.Action.READ);
+    acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel service=acl.coprocessorService(tableName.getName());
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+      perms=ProtobufUtil.getUserPermissions(protocol,tableName);
+    }
+  finally {
+      acl.close();
+    }
+    assertFalse("User should not be granted permission: " + upToVerify.toString(),hasFoundUserPermission(upToVerify,perms));
+    admin.disableTable(tableName);
+    User newOwner=User.createUserForTesting(conf,"new_owner",new String[]{});
+    htd.setOwner(newOwner);
+    admin.modifyTable(tableName,htd);
+    acl=systemUserConnection.getTable(AccessControlLists.ACL_TABLE_NAME);
+    try {
+      BlockingRpcChannel service=acl.coprocessorService(tableName.getName());
+      AccessControlService.BlockingInterface protocol=AccessControlService.newBlockingStub(service);
+      perms=ProtobufUtil.getUserPermissions(protocol,tableName);
+    }
+  finally {
+      acl.close();
+    }
+    UserPermission newOwnerperm=new UserPermission(Bytes.toBytes(newOwner.getName()),tableName,null,Action.values());
+    assertTrue("New owner should have all permissions on table",hasFoundUserPermission(newOwnerperm,perms));
+  }
+  finally {
+    deleteTable(TEST_UTIL,tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testTableDelete() throws Exception {
+  AccessTestAction deleteTable=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preDeleteTable(ObserverContext.createAndPrepare(CP_ENV,null),TEST_TABLE);
+      return null;
+    }
+  }
+;
+  verifyAllowed(deleteTable,SUPERUSER,USER_ADMIN,USER_CREATE,USER_OWNER,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(deleteTable,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=180000) public void testAccessControllerUserPermsRegexHandling() throws Exception {
+  User testRegexHandler=User.createUserForTesting(conf,"testRegexHandling",new String[0]);
+  final String REGEX_ALL_TABLES=".*";
+  final String tableName="testRegex";
+  final TableName table1=TableName.valueOf(tableName);
+  final byte[] family=Bytes.toBytes("f1");
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  HTableDescriptor htd=new HTableDescriptor(table1);
+  htd.addFamily(new HColumnDescriptor(family));
+  createTable(TEST_UTIL,htd);
+  String ns="testNamespace";
+  NamespaceDescriptor desc=NamespaceDescriptor.create(ns).build();
+  final TableName table2=TableName.valueOf(ns,tableName);
+  createNamespace(TEST_UTIL,desc);
+  htd=new HTableDescriptor(table2);
+  htd.addFamily(new HColumnDescriptor(family));
+  createTable(TEST_UTIL,htd);
+  String aclTableName=AccessControlLists.ACL_TABLE_NAME.getNameAsString();
+  assertEquals(5,SUPERUSER.runAs(getPrivilegedAction(aclTableName)).size());
+  assertEquals(0,testRegexHandler.runAs(getPrivilegedAction(aclTableName)).size());
+  assertEquals(0,testRegexHandler.runAs(getPrivilegedAction(REGEX_ALL_TABLES)).size());
+  grantOnTable(TEST_UTIL,testRegexHandler.getShortName(),table1,null,null,Action.ADMIN);
+  assertEquals(2,testRegexHandler.runAs(getPrivilegedAction(REGEX_ALL_TABLES)).size());
+  grantOnTable(TEST_UTIL,testRegexHandler.getShortName(),table2,null,null,Action.ADMIN);
+  assertEquals(4,testRegexHandler.runAs(getPrivilegedAction(REGEX_ALL_TABLES)).size());
+  assertEquals(2,testRegexHandler.runAs(getPrivilegedAction(tableName)).size());
+  assertEquals(2,testRegexHandler.runAs(getPrivilegedAction(NamespaceDescriptor.DEFAULT_NAMESPACE_NAME_STR + TableName.NAMESPACE_DELIM + tableName)).size());
+  assertEquals(2,testRegexHandler.runAs(getPrivilegedAction(ns + TableName.NAMESPACE_DELIM + tableName)).size());
+  assertEquals(0,testRegexHandler.runAs(getPrivilegedAction("notMatchingAny")).size());
+  deleteTable(TEST_UTIL,table1);
+  deleteTable(TEST_UTIL,table2);
+  deleteNamespace(TEST_UTIL,ns);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testCompact() throws Exception {
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preCompact(ObserverContext.createAndPrepare(RCP_ENV,null),null,null,ScanType.COMPACT_RETAIN_DELETES);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_CREATE,USER_GROUP_CREATE,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testRegionOffline() throws Exception {
+  List<HRegionLocation> regions;
+  try (RegionLocator locator=systemUserConnection.getRegionLocator(TEST_TABLE)){
+    regions=locator.getAllRegionLocations();
+  }
+   HRegionLocation location=regions.get(0);
+  final HRegionInfo hri=location.getRegionInfo();
+  AccessTestAction action=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      ACCESS_CONTROLLER.preRegionOffline(ObserverContext.createAndPrepare(CP_ENV,null),hri);
+      return null;
+    }
+  }
+;
+  verifyAllowed(action,SUPERUSER,USER_ADMIN,USER_OWNER,USER_GROUP_ADMIN);
+  verifyDenied(action,USER_CREATE,USER_RW,USER_RO,USER_NONE,USER_GROUP_READ,USER_GROUP_WRITE,USER_GROUP_CREATE);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=180000) public void testTruncatePerms() throws Exception {
+  try {
+    List<UserPermission> existingPerms=AccessControlClient.getUserPermissions(systemUserConnection,TEST_TABLE.getNameAsString());
+    assertTrue(existingPerms != null);
+    assertTrue(existingPerms.size() > 1);
+    TEST_UTIL.getHBaseAdmin().disableTable(TEST_TABLE);
+    TEST_UTIL.truncateTable(TEST_TABLE);
+    TEST_UTIL.waitTableAvailable(TEST_TABLE);
+    List<UserPermission> perms=AccessControlClient.getUserPermissions(systemUserConnection,TEST_TABLE.getNameAsString());
+    assertTrue(perms != null);
+    assertEquals(existingPerms.size(),perms.size());
+  }
+ catch (  Throwable e) {
+    throw new HBaseIOException(e);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

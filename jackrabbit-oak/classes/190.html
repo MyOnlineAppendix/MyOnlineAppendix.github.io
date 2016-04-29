@@ -1,0 +1,172 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.document.BulkCreateOrUpdateClusterTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 type-9 type-12 type-5 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Run multiple batch updates concurrently. Each thread modifies only its own documents.
+ */
+@Test public void testConcurrentNoConflict() throws InterruptedException {
+  int amountPerThread=100;
+  int threadCount=10;
+  int amount=amountPerThread * threadCount;
+  List<UpdateOp> updates=new ArrayList<UpdateOp>(amount);
+  for (int i=0; i < amount; i+=2) {
+    String id=this.getClass().getName() + ".testConcurrentNoConflict" + i;
+    UpdateOp up=new UpdateOp(id,true);
+    up.set("_id",id);
+    up.set("prop",100);
+    updates.add(up);
+  }
+  ds1.create(Collection.NODES,updates);
+  final Set<Exception> exceptions=new HashSet<Exception>();
+  List<Thread> threads=new ArrayList<Thread>();
+  final Map<String,NodeDocument> oldDocs=new ConcurrentHashMap<String,NodeDocument>();
+  for (int i=0; i < threadCount; i++) {
+    final DocumentStore selectedDs=i % 2 == 0 ? this.ds1 : this.ds2;
+    final List<UpdateOp> threadUpdates=new ArrayList<UpdateOp>(amountPerThread);
+    for (int j=0; j < amountPerThread; j++) {
+      String id=this.getClass().getName() + ".testConcurrentNoConflict" + (j + i * amountPerThread);
+      UpdateOp up=new UpdateOp(id,true);
+      up.set("_id",id);
+      up.set("prop",200 + i + j);
+      threadUpdates.add(up);
+      removeMe.add(id);
+    }
+    shuffle(threadUpdates);
+    threads.add(new Thread(){
+      public void run(){
+        try {
+          for (          NodeDocument d : selectedDs.createOrUpdate(Collection.NODES,threadUpdates)) {
+            if (d == null) {
+              continue;
+            }
+            oldDocs.put(d.getId(),d);
+          }
+        }
+ catch (        Exception ex) {
+          exceptions.add(ex);
+        }
+      }
+    }
+);
+  }
+  for (  Thread t : threads) {
+    t.start();
+  }
+  for (  Thread t : threads) {
+    t.join();
+    if (t.isAlive()) {
+      fail("Thread hasn't finished in 10s");
+    }
+  }
+  if (!exceptions.isEmpty()) {
+    String msg=exceptions.size() + " out of " + threadCount+ " failed with exceptions, the first being: "+ exceptions.iterator().next();
+    fail(msg);
+  }
+  for (int i=0; i < amount; i++) {
+    String id=this.getClass().getName() + ".testConcurrentNoConflict" + i;
+    NodeDocument oldDoc=oldDocs.get(id);
+    NodeDocument newDoc;
+    if (i % 2 == 1) {
+      assertNull("The returned value should be null for created doc",oldDoc);
+      newDoc=ds1.find(Collection.NODES,id);
+    }
+ else {
+      assertNotNull("The returned doc shouldn't be null for updated doc",oldDoc);
+      assertEquals("The old value is not correct",100l,oldDoc.get("prop"));
+      newDoc=ds2.find(Collection.NODES,id);
+    }
+    assertNotEquals("The document hasn't been updated",100l,newDoc.get("prop"));
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-9 type-12 type-5 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Run multiple batch updates concurrently. Each thread modifies the same set of documents.
+ */
+@Test public void testConcurrentWithConflict() throws InterruptedException {
+  int threadCount=10;
+  int amount=500;
+  List<UpdateOp> updates=new ArrayList<UpdateOp>(amount);
+  for (int i=0; i < amount; i+=2) {
+    String id=this.getClass().getName() + ".testConcurrentNoConflict" + i;
+    UpdateOp up=new UpdateOp(id,true);
+    up.set("_id",id);
+    up.set("prop",100);
+    updates.add(up);
+    removeMe.add(id);
+  }
+  ds1.create(Collection.NODES,updates);
+  final Set<Exception> exceptions=new HashSet<Exception>();
+  List<Thread> threads=new ArrayList<Thread>();
+  for (int i=0; i < threadCount; i++) {
+    final DocumentStore selectedDs=i % 2 == 0 ? this.ds1 : this.ds2;
+    final List<UpdateOp> threadUpdates=new ArrayList<UpdateOp>(amount);
+    for (int j=0; j < amount; j++) {
+      String id=this.getClass().getName() + ".testConcurrentWithConflict" + j;
+      UpdateOp up=new UpdateOp(id,true);
+      up.set("_id",id);
+      up.set("prop",200 + i * amount + j);
+      threadUpdates.add(up);
+      removeMe.add(id);
+    }
+    shuffle(threadUpdates);
+    threads.add(new Thread(){
+      public void run(){
+        try {
+          selectedDs.createOrUpdate(Collection.NODES,threadUpdates);
+        }
+ catch (        Exception ex) {
+          exceptions.add(ex);
+        }
+      }
+    }
+);
+  }
+  for (  Thread t : threads) {
+    t.start();
+  }
+  for (  Thread t : threads) {
+    t.join(10000);
+    if (t.isAlive()) {
+      fail("Thread hasn't finished in 10s");
+    }
+  }
+  if (!exceptions.isEmpty()) {
+    String msg=exceptions.size() + " out of " + threadCount+ " failed with exceptions, the first being: "+ exceptions.iterator().next();
+    fail(msg);
+  }
+  for (int i=0; i < amount; i++) {
+    String id=this.getClass().getName() + ".testConcurrentWithConflict" + i;
+    NodeDocument newDoc=ds1.find(Collection.NODES,id);
+    assertNotNull("The document hasn't been inserted",newDoc);
+    assertNotEquals("The document hasn't been updated",100l,newDoc.get("prop"));
+    newDoc=ds2.find(Collection.NODES,id);
+    assertNotNull("The document hasn't been inserted",newDoc);
+    assertNotEquals("The document hasn't been updated",100l,newDoc.get("prop"));
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

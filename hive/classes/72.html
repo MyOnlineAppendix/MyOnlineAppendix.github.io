@@ -1,0 +1,515 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hive.metastore.hbase.TestHBaseAggrStatsCacheIntegration (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void shutdown() throws Exception {
+  HBaseIntegrationTests.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-5 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void hit() throws Exception {
+  String dbName="default";
+  String tableName="hit";
+  List<String> partVals1=Arrays.asList("today");
+  List<String> partVals2=Arrays.asList("yesterday");
+  long now=System.currentTimeMillis();
+  List<FieldSchema> cols=new ArrayList<>();
+  cols.add(new FieldSchema("col1","boolean","nocomment"));
+  cols.add(new FieldSchema("col2","varchar","nocomment"));
+  SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+  StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+  List<FieldSchema> partCols=new ArrayList<>();
+  partCols.add(new FieldSchema("ds","string",""));
+  Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+  store.createTable(table);
+  for (  List<String> partVals : Arrays.asList(partVals1,partVals2)) {
+    StorageDescriptor psd=new StorageDescriptor(sd);
+    psd.setLocation("file:/tmp/default/hit/ds=" + partVals.get(0));
+    Partition part=new Partition(partVals,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+    store.addPartition(part);
+    ColumnStatistics cs=new ColumnStatistics();
+    ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+    desc.setLastAnalyzed(now);
+    desc.setPartName("ds=" + partVals.get(0));
+    cs.setStatsDesc(desc);
+    ColumnStatisticsObj obj=new ColumnStatisticsObj();
+    obj.setColName("col1");
+    obj.setColType("boolean");
+    ColumnStatisticsData data=new ColumnStatisticsData();
+    BooleanColumnStatsData bcsd=new BooleanColumnStatsData();
+    bcsd.setNumFalses(10);
+    bcsd.setNumTrues(20);
+    bcsd.setNumNulls(30);
+    data.setBooleanStats(bcsd);
+    obj.setStatsData(data);
+    cs.addToStatsObj(obj);
+    obj=new ColumnStatisticsObj();
+    obj.setColName("col2");
+    obj.setColType("varchar");
+    data=new ColumnStatisticsData();
+    StringColumnStatsData scsd=new StringColumnStatsData();
+    scsd.setAvgColLen(10.3);
+    scsd.setMaxColLen(2000);
+    scsd.setNumNulls(3);
+    scsd.setNumDVs(12342);
+    data.setStringStats(scsd);
+    obj.setStatsData(data);
+    cs.addToStatsObj(obj);
+    store.updatePartitionColumnStatistics(cs,partVals);
+  }
+  Checker statChecker=new Checker(){
+    @Override public void checkStats(    AggrStats aggrStats) throws Exception {
+      Assert.assertEquals(2,aggrStats.getPartsFound());
+      Assert.assertEquals(2,aggrStats.getColStatsSize());
+      ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+      Assert.assertEquals("col1",cso.getColName());
+      Assert.assertEquals("boolean",cso.getColType());
+      BooleanColumnStatsData bcsd=cso.getStatsData().getBooleanStats();
+      Assert.assertEquals(20,bcsd.getNumFalses());
+      Assert.assertEquals(40,bcsd.getNumTrues());
+      Assert.assertEquals(60,bcsd.getNumNulls());
+      cso=aggrStats.getColStats().get(1);
+      Assert.assertEquals("col2",cso.getColName());
+      Assert.assertEquals("varchar",cso.getColType());
+      StringColumnStatsData scsd=cso.getStatsData().getStringStats();
+      Assert.assertEquals(10.3,scsd.getAvgColLen(),0.1);
+      Assert.assertEquals(2000,scsd.getMaxColLen());
+      Assert.assertEquals(6,scsd.getNumNulls());
+      Assert.assertEquals(12342,scsd.getNumDVs());
+    }
+  }
+;
+  AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1","col2"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+  aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1","col2"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(4,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+  store.backdoor().getStatsCache().flushMemory();
+  aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1","col2"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(2,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(6,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  setupConnection();
+  setupHBaseStore();
+  store.backdoor().getStatsCache().resetCounters();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void alterInvalidation() throws Exception {
+  try {
+    String dbName="default";
+    String tableName="ai";
+    List<String> partVals1=Arrays.asList("today");
+    List<String> partVals2=Arrays.asList("yesterday");
+    List<String> partVals3=Arrays.asList("tomorrow");
+    long now=System.currentTimeMillis();
+    List<FieldSchema> cols=new ArrayList<>();
+    cols.add(new FieldSchema("col1","boolean","nocomment"));
+    SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+    StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+    List<FieldSchema> partCols=new ArrayList<>();
+    partCols.add(new FieldSchema("ds","string",""));
+    Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+    store.createTable(table);
+    Partition[] partitions=new Partition[3];
+    int partnum=0;
+    for (    List<String> partVals : Arrays.asList(partVals1,partVals2,partVals3)) {
+      StorageDescriptor psd=new StorageDescriptor(sd);
+      psd.setLocation("file:/tmp/default/invalidation/ds=" + partVals.get(0));
+      Partition part=new Partition(partVals,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+      partitions[partnum++]=part;
+      store.addPartition(part);
+      ColumnStatistics cs=new ColumnStatistics();
+      ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+      desc.setLastAnalyzed(now);
+      desc.setPartName("ds=" + partVals.get(0));
+      cs.setStatsDesc(desc);
+      ColumnStatisticsObj obj=new ColumnStatisticsObj();
+      obj.setColName("col1");
+      obj.setColType("boolean");
+      ColumnStatisticsData data=new ColumnStatisticsData();
+      BooleanColumnStatsData bcsd=new BooleanColumnStatsData();
+      bcsd.setNumFalses(10);
+      bcsd.setNumTrues(20);
+      bcsd.setNumNulls(30);
+      data.setBooleanStats(bcsd);
+      obj.setStatsData(data);
+      cs.addToStatsObj(obj);
+      store.updatePartitionColumnStatistics(cs,partVals);
+    }
+    AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=tomorrow"),Arrays.asList("col1"));
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+    store.backdoor().getStatsCache().wakeInvalidator();
+    Partition newPart=new Partition(partitions[2]);
+    newPart.setLastAccessTime((int)System.currentTimeMillis());
+    store.alterPartition(dbName,tableName,partVals3,newPart);
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(100);
+    store.backdoor().getStatsCache().wakeInvalidator();
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().misses.getCnt());
+  }
+  finally {
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(5000);
+    store.backdoor().getStatsCache().setMaxTimeInCache(500000);
+    store.backdoor().getStatsCache().wakeInvalidator();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void altersInvalidation() throws Exception {
+  try {
+    String dbName="default";
+    String tableName="asi";
+    List<String> partVals1=Arrays.asList("today");
+    List<String> partVals2=Arrays.asList("yesterday");
+    List<String> partVals3=Arrays.asList("tomorrow");
+    long now=System.currentTimeMillis();
+    List<FieldSchema> cols=new ArrayList<>();
+    cols.add(new FieldSchema("col1","boolean","nocomment"));
+    SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+    StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+    List<FieldSchema> partCols=new ArrayList<>();
+    partCols.add(new FieldSchema("ds","string",""));
+    Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+    store.createTable(table);
+    Partition[] partitions=new Partition[3];
+    int partnum=0;
+    for (    List<String> partVals : Arrays.asList(partVals1,partVals2,partVals3)) {
+      StorageDescriptor psd=new StorageDescriptor(sd);
+      psd.setLocation("file:/tmp/default/invalidation/ds=" + partVals.get(0));
+      Partition part=new Partition(partVals,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+      partitions[partnum++]=part;
+      store.addPartition(part);
+      ColumnStatistics cs=new ColumnStatistics();
+      ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+      desc.setLastAnalyzed(now);
+      desc.setPartName("ds=" + partVals.get(0));
+      cs.setStatsDesc(desc);
+      ColumnStatisticsObj obj=new ColumnStatisticsObj();
+      obj.setColName("col1");
+      obj.setColType("boolean");
+      ColumnStatisticsData data=new ColumnStatisticsData();
+      BooleanColumnStatsData bcsd=new BooleanColumnStatsData();
+      bcsd.setNumFalses(10);
+      bcsd.setNumTrues(20);
+      bcsd.setNumNulls(30);
+      data.setBooleanStats(bcsd);
+      obj.setStatsData(data);
+      cs.addToStatsObj(obj);
+      store.updatePartitionColumnStatistics(cs,partVals);
+    }
+    AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=tomorrow"),Arrays.asList("col1"));
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+    store.backdoor().getStatsCache().wakeInvalidator();
+    Partition[] newParts=new Partition[2];
+    newParts[0]=new Partition(partitions[0]);
+    newParts[0].setLastAccessTime((int)System.currentTimeMillis());
+    newParts[1]=new Partition(partitions[2]);
+    newParts[1].setLastAccessTime((int)System.currentTimeMillis());
+    store.alterPartitions(dbName,tableName,Arrays.asList(partVals1,partVals3),Arrays.asList(newParts));
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(100);
+    store.backdoor().getStatsCache().wakeInvalidator();
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().misses.getCnt());
+  }
+  finally {
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(5000);
+    store.backdoor().getStatsCache().setMaxTimeInCache(500000);
+    store.backdoor().getStatsCache().wakeInvalidator();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void someWithStats() throws Exception {
+  String dbName="default";
+  String tableName="psws";
+  List<String> partVals1=Arrays.asList("today");
+  List<String> partVals2=Arrays.asList("yesterday");
+  long now=System.currentTimeMillis();
+  List<FieldSchema> cols=new ArrayList<>();
+  cols.add(new FieldSchema("col1","long","nocomment"));
+  SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+  StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+  List<FieldSchema> partCols=new ArrayList<>();
+  partCols.add(new FieldSchema("ds","string",""));
+  Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+  store.createTable(table);
+  boolean first=true;
+  for (  List<String> partVals : Arrays.asList(partVals1,partVals2)) {
+    StorageDescriptor psd=new StorageDescriptor(sd);
+    psd.setLocation("file:/tmp/default/psws/ds=" + partVals.get(0));
+    Partition part=new Partition(partVals,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+    store.addPartition(part);
+    if (first) {
+      ColumnStatistics cs=new ColumnStatistics();
+      ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+      desc.setLastAnalyzed(now);
+      desc.setPartName("ds=" + partVals.get(0));
+      cs.setStatsDesc(desc);
+      ColumnStatisticsObj obj=new ColumnStatisticsObj();
+      obj.setColName("col1");
+      obj.setColType("long");
+      ColumnStatisticsData data=new ColumnStatisticsData();
+      LongColumnStatsData lcsd=new LongColumnStatsData();
+      lcsd.setHighValue(192L);
+      lcsd.setLowValue(-20L);
+      lcsd.setNumNulls(30);
+      lcsd.setNumDVs(32);
+      data.setLongStats(lcsd);
+      obj.setStatsData(data);
+      cs.addToStatsObj(obj);
+      store.updatePartitionColumnStatistics(cs,partVals);
+      first=false;
+    }
+  }
+  Checker statChecker=new Checker(){
+    @Override public void checkStats(    AggrStats aggrStats) throws Exception {
+      Assert.assertEquals(1,aggrStats.getPartsFound());
+      Assert.assertEquals(1,aggrStats.getColStatsSize());
+      ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+      Assert.assertEquals("col1",cso.getColName());
+      Assert.assertEquals("long",cso.getColType());
+      LongColumnStatsData lcsd=cso.getStatsData().getLongStats();
+      Assert.assertEquals(192L,lcsd.getHighValue());
+      Assert.assertEquals(-20L,lcsd.getLowValue());
+      Assert.assertEquals(30,lcsd.getNumNulls());
+      Assert.assertEquals(32,lcsd.getNumDVs());
+    }
+  }
+;
+  AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+  aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+  store.backdoor().getStatsCache().flushMemory();
+  aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(1,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(3,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+}
+
+</code></pre>
+
+<pre class="type-5 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void invalidation() throws Exception {
+  try {
+    String dbName="default";
+    String tableName="invalidation";
+    List<String> partVals1=Arrays.asList("today");
+    List<String> partVals2=Arrays.asList("yesterday");
+    List<String> partVals3=Arrays.asList("tomorrow");
+    long now=System.currentTimeMillis();
+    List<FieldSchema> cols=new ArrayList<>();
+    cols.add(new FieldSchema("col1","boolean","nocomment"));
+    SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+    StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+    List<FieldSchema> partCols=new ArrayList<>();
+    partCols.add(new FieldSchema("ds","string",""));
+    Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+    store.createTable(table);
+    for (    List<String> partVals : Arrays.asList(partVals1,partVals2,partVals3)) {
+      StorageDescriptor psd=new StorageDescriptor(sd);
+      psd.setLocation("file:/tmp/default/invalidation/ds=" + partVals.get(0));
+      Partition part=new Partition(partVals,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+      store.addPartition(part);
+      ColumnStatistics cs=new ColumnStatistics();
+      ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+      desc.setLastAnalyzed(now);
+      desc.setPartName("ds=" + partVals.get(0));
+      cs.setStatsDesc(desc);
+      ColumnStatisticsObj obj=new ColumnStatisticsObj();
+      obj.setColName("col1");
+      obj.setColType("boolean");
+      ColumnStatisticsData data=new ColumnStatisticsData();
+      BooleanColumnStatsData bcsd=new BooleanColumnStatsData();
+      bcsd.setNumFalses(10);
+      bcsd.setNumTrues(20);
+      bcsd.setNumNulls(30);
+      data.setBooleanStats(bcsd);
+      obj.setStatsData(data);
+      cs.addToStatsObj(obj);
+      store.updatePartitionColumnStatistics(cs,partVals);
+    }
+    Checker statChecker=new Checker(){
+      @Override public void checkStats(      AggrStats aggrStats) throws Exception {
+        Assert.assertEquals(2,aggrStats.getPartsFound());
+        Assert.assertEquals(1,aggrStats.getColStatsSize());
+        ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+        Assert.assertEquals("col1",cso.getColName());
+        Assert.assertEquals("boolean",cso.getColType());
+        BooleanColumnStatsData bcsd=cso.getStatsData().getBooleanStats();
+        Assert.assertEquals(20,bcsd.getNumFalses());
+        Assert.assertEquals(40,bcsd.getNumTrues());
+        Assert.assertEquals(60,bcsd.getNumNulls());
+      }
+    }
+;
+    AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(1,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+    store.backdoor().getStatsCache().wakeInvalidator();
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(5,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(2,store.backdoor().getStatsCache().misses.getCnt());
+    ColumnStatistics cs=new ColumnStatistics();
+    ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+    desc.setLastAnalyzed(now);
+    desc.setPartName("ds=" + partVals3.get(0));
+    cs.setStatsDesc(desc);
+    ColumnStatisticsObj obj=new ColumnStatisticsObj();
+    obj.setColName("col1");
+    obj.setColType("boolean");
+    ColumnStatisticsData data=new ColumnStatisticsData();
+    BooleanColumnStatsData bcsd=new BooleanColumnStatsData();
+    bcsd.setNumFalses(100);
+    bcsd.setNumTrues(200);
+    bcsd.setNumNulls(300);
+    data.setBooleanStats(bcsd);
+    obj.setStatsData(data);
+    cs.addToStatsObj(obj);
+    Checker afterUpdate=new Checker(){
+      @Override public void checkStats(      AggrStats aggrStats) throws Exception {
+        Assert.assertEquals(2,aggrStats.getPartsFound());
+        Assert.assertEquals(1,aggrStats.getColStatsSize());
+        ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+        Assert.assertEquals("col1",cso.getColName());
+        Assert.assertEquals("boolean",cso.getColType());
+        BooleanColumnStatsData bcsd=cso.getStatsData().getBooleanStats();
+        Assert.assertEquals(110,bcsd.getNumFalses());
+        Assert.assertEquals(220,bcsd.getNumTrues());
+        Assert.assertEquals(330,bcsd.getNumNulls());
+      }
+    }
+;
+    store.updatePartitionColumnStatistics(cs,partVals3);
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(100);
+    store.backdoor().getStatsCache().wakeInvalidator();
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    afterUpdate.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(6,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+    statChecker.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(7,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(3,store.backdoor().getStatsCache().misses.getCnt());
+    store.dropPartition(dbName,tableName,partVals2);
+    store.backdoor().getStatsCache().wakeInvalidator();
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+    new Checker(){
+      @Override public void checkStats(      AggrStats aggrStats) throws Exception {
+        Assert.assertEquals(1,aggrStats.getPartsFound());
+        Assert.assertEquals(1,aggrStats.getColStatsSize());
+        ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+        Assert.assertEquals("col1",cso.getColName());
+        Assert.assertEquals("boolean",cso.getColType());
+        BooleanColumnStatsData bcsd=cso.getStatsData().getBooleanStats();
+        Assert.assertEquals(10,bcsd.getNumFalses());
+        Assert.assertEquals(20,bcsd.getNumTrues());
+        Assert.assertEquals(30,bcsd.getNumNulls());
+      }
+    }
+.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(8,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().misses.getCnt());
+    aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=tomorrow","ds=today"),Arrays.asList("col1"));
+    afterUpdate.checkStats(aggrStats);
+    Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+    Assert.assertEquals(9,store.backdoor().getStatsCache().totalGets.getCnt());
+    Assert.assertEquals(4,store.backdoor().getStatsCache().misses.getCnt());
+  }
+  finally {
+    store.backdoor().getStatsCache().setRunInvalidatorEvery(5000);
+    store.backdoor().getStatsCache().setMaxTimeInCache(500000);
+    store.backdoor().getStatsCache().wakeInvalidator();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

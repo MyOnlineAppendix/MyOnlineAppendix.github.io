@@ -1,0 +1,53 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.functional.RecoveryWithEmptyRFileIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-5 type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void replaceMissingRFile() throws Exception {
+  log.info("Ingest some data, verify it was stored properly, replace an underlying rfile with an empty one and verify we can scan.");
+  Connector connector=getConnector();
+  String tableName=getUniqueNames(1)[0];
+  ReadWriteIT.ingest(connector,cluster.getClientConfig(),"root",ROWS,COLS,50,0,tableName);
+  ReadWriteIT.verify(connector,cluster.getClientConfig(),"root",ROWS,COLS,50,0,tableName);
+  connector.tableOperations().flush(tableName,null,null,true);
+  connector.tableOperations().offline(tableName,true);
+  log.debug("Replacing rfile(s) with empty");
+  Scanner meta=connector.createScanner(MetadataTable.NAME,Authorizations.EMPTY);
+  String tableId=connector.tableOperations().tableIdMap().get(tableName);
+  meta.setRange(new Range(new Text(tableId + ";"),new Text(tableId + "<")));
+  meta.fetchColumnFamily(DataFileColumnFamily.NAME);
+  boolean foundFile=false;
+  for (  Entry<Key,Value> entry : meta) {
+    foundFile=true;
+    Path rfile=new Path(entry.getKey().getColumnQualifier().toString());
+    log.debug("Removing rfile '" + rfile + "'");
+    cluster.getFileSystem().delete(rfile,false);
+    Process info=cluster.exec(CreateEmpty.class,rfile.toString());
+    assertEquals(0,info.waitFor());
+  }
+  meta.close();
+  assertTrue(foundFile);
+  log.trace("invalidate cached file handles by issuing a compaction");
+  connector.tableOperations().online(tableName,true);
+  connector.tableOperations().compact(tableName,null,null,false,true);
+  log.debug("make sure we can still scan");
+  Scanner scan=connector.createScanner(tableName,Authorizations.EMPTY);
+  scan.setRange(new Range());
+  long cells=0l;
+  for (  Entry<Key,Value> entry : scan) {
+    if (entry != null)     cells++;
+  }
+  scan.close();
+  assertEquals(0l,cells);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

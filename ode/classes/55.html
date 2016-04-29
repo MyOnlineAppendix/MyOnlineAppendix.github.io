@@ -1,0 +1,91 @@
+<h3 style="margin:0px">Class: org.apache.ode.test.BPELTestAbstract (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  for (  Deployment d : _deployed) {
+    try {
+      store.undeploy(d.deployDir);
+    }
+ catch (    Exception ex) {
+      ex.printStackTrace();
+      System.err.println("Error undeploying " + d);
+    }
+  }
+  if (em != null)   em.close();
+  if (emf != null)   emf.close();
+  _server.stop();
+  _failures=null;
+  _deployed=null;
+  _deployments=null;
+  _invocations=null;
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  if (_txManager == null) {
+    _txManager=createTransactionManager();
+    org.springframework.mock.jndi.SimpleNamingContextBuilder.emptyActivatedContextBuilder().bind("java:comp/UserTransaction",_txManager);
+    _dataSource=createDataSource(false);
+{
+      _txManager.begin();
+      try {
+        Connection c=_dataSource.getConnection();
+        c.prepareStatement(org.apache.commons.io.IOUtils.toString(getClass().getResourceAsStream("/scheduler-schema.sql"))).execute();
+        c.close();
+      }
+ catch (      Exception e) {
+      }
+      _txManager.commit();
+    }
+  }
+  _failures=new CopyOnWriteArrayList<Failure>();
+  _server=new BpelServerImpl();
+  Properties props=getConfigProperties();
+  _server.setConfigProperties(props);
+  mexContext=new MessageExchangeContextImpl();
+  _deployments=new ArrayList<Deployment>();
+  _invocations=new ArrayList<Invocation>();
+  _deployed=new ArrayList<Deployment>();
+{
+    JdbcDelegate del=new JdbcDelegate(_dataSource);
+    scheduler=new SimpleScheduler("node",del,props);
+    scheduler.setTransactionManager(_txManager);
+    _cf=new BpelDAOConnectionFactoryImpl(scheduler);
+    _server.setDaoConnectionFactory(_cf);
+  }
+  _server.setInMemDaoConnectionFactory(new BpelDAOConnectionFactoryImpl(scheduler));
+  _server.setScheduler(scheduler);
+  _server.setBindingContext(new BindingContextImpl());
+  _server.setMessageExchangeContext(mexContext);
+  scheduler.setJobProcessor(_server);
+  scheduler.setExecutorService(executorService);
+  store=new ProcessStoreImpl(null,_dataSource,"hib",new OdeConfigProperties(new Properties(),""),true);
+  store.registerListener(new ProcessStoreListener(){
+    public void onProcessStoreEvent(    ProcessStoreEvent event){
+      _server.unregister(event.pid);
+      if (event.type != ProcessStoreEvent.Type.UNDEPLOYED) {
+        ProcessConfImpl conf=(ProcessConfImpl)store.getProcessConfiguration(event.pid);
+        conf.setTransient(true);
+        _server.register(conf);
+      }
+    }
+  }
+);
+  _server.registerBpelEventListener(new DebugBpelEventListener());
+  _server.init();
+  _server.start();
+  scheduler.start();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,81 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.MasterRepairsDualAssignmentIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void test() throws Exception {
+  Connector c=getConnector();
+  ClientContext context=new ClientContext(c.getInstance(),new Credentials("root",new PasswordToken(ROOT_PASSWORD)),getClientConfig());
+  String table=this.getUniqueNames(1)[0];
+  c.securityOperations().grantTablePermission("root",MetadataTable.NAME,TablePermission.WRITE);
+  c.securityOperations().grantTablePermission("root",RootTable.NAME,TablePermission.WRITE);
+  c.tableOperations().create(table);
+  SortedSet<Text> partitions=new TreeSet<Text>();
+  for (  String part : "a b c d e f g h i j k l m n o p q r s t u v w x y z".split(" ")) {
+    partitions.add(new Text(part));
+  }
+  c.tableOperations().addSplits(table,partitions);
+  Set<TServerInstance> states=new HashSet<TServerInstance>();
+  Set<TabletLocationState> oldLocations=new HashSet<TabletLocationState>();
+  MetaDataStateStore store=new MetaDataStateStore(context,null);
+  while (states.size() < 2) {
+    UtilWaitThread.sleep(250);
+    oldLocations.clear();
+    for (    TabletLocationState tls : store) {
+      if (tls.current != null) {
+        states.add(tls.current);
+        oldLocations.add(tls);
+      }
+    }
+  }
+  assertEquals(2,states.size());
+  cluster.killProcess(ServerType.TABLET_SERVER,cluster.getProcesses().get(ServerType.TABLET_SERVER).iterator().next());
+  Set<TServerInstance> replStates=new HashSet<>();
+  while (true) {
+    UtilWaitThread.sleep(1000);
+    states.clear();
+    replStates.clear();
+    boolean allAssigned=true;
+    for (    TabletLocationState tls : store) {
+      if (tls != null && tls.current != null) {
+        states.add(tls.current);
+      }
+ else       if (tls != null && tls.extent.equals(new KeyExtent(new Text(ReplicationTable.ID),null,null))) {
+        replStates.add(tls.current);
+      }
+ else {
+        allAssigned=false;
+      }
+    }
+    System.out.println(states + " size " + states.size()+ " allAssigned "+ allAssigned);
+    if (states.size() != 2 && allAssigned == true)     break;
+  }
+  assertEquals(1,replStates.size());
+  assertEquals(1,states.size());
+  TabletLocationState moved=null;
+  for (  TabletLocationState old : oldLocations) {
+    if (!states.contains(old.current)) {
+      moved=old;
+    }
+  }
+  assertNotEquals(null,moved);
+  BatchWriter bw=c.createBatchWriter(MetadataTable.NAME,new BatchWriterConfig());
+  Mutation assignment=new Mutation(moved.extent.getMetadataEntry());
+  moved.current.putLocation(assignment);
+  bw.addMutation(assignment);
+  bw.close();
+  waitForCleanStore(store);
+  bw=c.createBatchWriter(MetadataTable.NAME,new BatchWriterConfig());
+  assignment=new Mutation(new KeyExtent(new Text(MetadataTable.ID),null,null).getMetadataEntry());
+  moved.current.putLocation(assignment);
+  bw.addMutation(assignment);
+  bw.close();
+  waitForCleanStore(new RootTabletStateStore(context,null));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

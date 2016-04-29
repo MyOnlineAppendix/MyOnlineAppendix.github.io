@@ -1,0 +1,382 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestNameEditsConfigs (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws IOException {
+  if (base_dir.exists() && !FileUtil.fullyDelete(base_dir)) {
+    throw new IOException("Cannot remove directory " + base_dir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test various configuration options of dfs.namenode.name.dir and dfs.namenode.edits.dir
+ * This test tries to simulate failure scenarios.
+ * 1. Start cluster with shared name and edits dir
+ * 2. Restart cluster by adding separate name and edits dirs
+ * 3. Restart cluster by removing shared name and edits dir
+ * 4. Restart cluster with old shared name and edits dir, but only latest 
+ * name dir. This should fail since we don't have latest edits dir
+ * 5. Restart cluster with old shared name and edits dir, but only latest
+ * edits dir. This should succeed since the latest edits will have
+ * segments leading all the way from the image in name_and_edits.
+ */
+@Test public void testNameEditsConfigsFailure() throws IOException {
+  Path file1=new Path("TestNameEditsConfigs1");
+  Path file2=new Path("TestNameEditsConfigs2");
+  Path file3=new Path("TestNameEditsConfigs3");
+  MiniDFSCluster cluster=null;
+  Configuration conf=null;
+  FileSystem fileSys=null;
+  File nameOnlyDir=new File(base_dir,"name");
+  File editsOnlyDir=new File(base_dir,"edits");
+  File nameAndEditsDir=new File(base_dir,"name_and_edits");
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).manageNameDfsDirs(false).build();
+    cluster.waitActive();
+    assertTrue(new File(nameAndEditsDir,"current/VERSION").exists());
+    fileSys=cluster.getFileSystem();
+    assertTrue(!fileSys.exists(file1));
+    DFSTestUtil.createFile(fileSys,file1,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file1,replication);
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+  }
+  conf=new HdfsConfiguration();
+  assertTrue(nameOnlyDir.mkdir());
+  assertTrue(editsOnlyDir.mkdir());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEditsDir.getPath() + "," + nameOnlyDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.getPath() + "," + editsOnlyDir.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+    cluster.waitActive();
+    assertTrue(new File(nameAndEditsDir,"current/VERSION").exists());
+    assertTrue(new File(nameOnlyDir,"current/VERSION").exists());
+    assertTrue(new File(editsOnlyDir,"current/VERSION").exists());
+    fileSys=cluster.getFileSystem();
+    assertTrue(fileSys.exists(file1));
+    checkFile(fileSys,file1,replication);
+    cleanupFile(fileSys,file1);
+    DFSTestUtil.createFile(fileSys,file2,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file2,replication);
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+  }
+  try {
+    conf=new HdfsConfiguration();
+    conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameOnlyDir.getPath());
+    conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,editsOnlyDir.getPath());
+    replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    assertFalse(fileSys.exists(file1));
+    assertTrue(fileSys.exists(file2));
+    checkFile(fileSys,file2,replication);
+    cleanupFile(fileSys,file2);
+    DFSTestUtil.createFile(fileSys,file3,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file3,replication);
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+  }
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameOnlyDir.getPath() + "," + nameAndEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+    fail("Successfully started cluster but should not have been able to.");
+  }
+ catch (  IOException e) {
+    LOG.info("EXPECTED: cluster start failed due to missing " + "latest edits dir",e);
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+    cluster=null;
+  }
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,editsOnlyDir.getPath() + "," + nameAndEditsDir.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+    fileSys=cluster.getFileSystem();
+    assertFalse(fileSys.exists(file1));
+    assertFalse(fileSys.exists(file2));
+    assertTrue(fileSys.exists(file3));
+    checkFile(fileSys,file3,replication);
+    cleanupFile(fileSys,file3);
+    DFSTestUtil.createFile(fileSys,file3,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file3,replication);
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test various configuration options of dfs.namenode.name.dir and dfs.namenode.edits.dir
+ * The test creates files and restarts cluster with different configs.
+ * 1. Starts cluster with shared name and edits dirs
+ * 2. Restarts cluster by adding additional (different) name and edits dirs
+ * 3. Restarts cluster by removing shared name and edits dirs by allowing to 
+ * start using separate name and edits dirs
+ * 4. Restart cluster by adding shared directory again, but make sure we 
+ * do not read any stale image or edits. 
+ * All along the test, we create and delete files at reach restart to make
+ * sure we are reading proper edits and image.
+ * @throws Exception 
+ */
+@Test public void testNameEditsConfigs() throws Exception {
+  Path file1=new Path("TestNameEditsConfigs1");
+  Path file2=new Path("TestNameEditsConfigs2");
+  Path file3=new Path("TestNameEditsConfigs3");
+  MiniDFSCluster cluster=null;
+  SecondaryNameNode secondary=null;
+  Configuration conf=null;
+  FileSystem fileSys=null;
+  final File newNameDir=new File(base_dir,"name");
+  final File newEditsDir=new File(base_dir,"edits");
+  final File nameAndEdits=new File(base_dir,"name_and_edits");
+  final File checkpointNameDir=new File(base_dir,"secondname");
+  final File checkpointEditsDir=new File(base_dir,"secondedits");
+  final File checkpointNameAndEdits=new File(base_dir,"second_name_and_edits");
+  ImmutableList<File> allCurrentDirs=ImmutableList.of(new File(nameAndEdits,"current"),new File(newNameDir,"current"),new File(newEditsDir,"current"),new File(checkpointNameAndEdits,"current"),new File(checkpointNameDir,"current"),new File(checkpointEditsDir,"current"));
+  ImmutableList<File> imageCurrentDirs=ImmutableList.of(new File(nameAndEdits,"current"),new File(newNameDir,"current"),new File(checkpointNameAndEdits,"current"),new File(checkpointNameDir,"current"));
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEdits.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEdits.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY,checkpointNameAndEdits.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY,checkpointNameAndEdits.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).manageNameDfsDirs(false).build();
+  cluster.waitActive();
+  secondary=startSecondaryNameNode(conf);
+  fileSys=cluster.getFileSystem();
+  try {
+    assertTrue(!fileSys.exists(file1));
+    DFSTestUtil.createFile(fileSys,file1,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file1,replication);
+    secondary.doCheckpoint();
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+    secondary.shutdown();
+  }
+  conf=new HdfsConfiguration();
+  assertTrue(newNameDir.mkdir());
+  assertTrue(newEditsDir.mkdir());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEdits.getPath() + "," + newNameDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEdits.getPath() + "," + newEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY,checkpointNameDir.getPath() + "," + checkpointNameAndEdits.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY,checkpointEditsDir.getPath() + "," + checkpointNameAndEdits.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+  cluster.waitActive();
+  secondary=startSecondaryNameNode(conf);
+  fileSys=cluster.getFileSystem();
+  try {
+    assertTrue(fileSys.exists(file1));
+    checkFile(fileSys,file1,replication);
+    cleanupFile(fileSys,file1);
+    DFSTestUtil.createFile(fileSys,file2,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file2,replication);
+    secondary.doCheckpoint();
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+    secondary.shutdown();
+  }
+  FSImageTestUtil.assertParallelFilesAreIdentical(allCurrentDirs,ImmutableSet.of("VERSION"));
+  FSImageTestUtil.assertSameNewestImage(imageCurrentDirs);
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,newNameDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,newEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY,checkpointNameDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY,checkpointEditsDir.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+  cluster.waitActive();
+  secondary=startSecondaryNameNode(conf);
+  fileSys=cluster.getFileSystem();
+  try {
+    assertTrue(!fileSys.exists(file1));
+    assertTrue(fileSys.exists(file2));
+    checkFile(fileSys,file2,replication);
+    cleanupFile(fileSys,file2);
+    DFSTestUtil.createFile(fileSys,file3,FILE_SIZE,FILE_SIZE,BLOCK_SIZE,replication,SEED);
+    checkFile(fileSys,file3,replication);
+    secondary.doCheckpoint();
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+    secondary.shutdown();
+  }
+  checkImageAndEditsFilesExistence(newNameDir,true,false);
+  checkImageAndEditsFilesExistence(newEditsDir,false,true);
+  checkImageAndEditsFilesExistence(checkpointNameDir,true,false);
+  checkImageAndEditsFilesExistence(checkpointEditsDir,false,true);
+  assertTrue(FileUtil.fullyDelete(new File(nameAndEdits,"current")));
+  assertTrue(FileUtil.fullyDelete(new File(checkpointNameAndEdits,"current")));
+  conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameAndEdits.getPath() + "," + newNameDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEdits + "," + newEditsDir.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY,checkpointNameDir.getPath() + "," + checkpointNameAndEdits.getPath());
+  conf.set(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY,checkpointEditsDir.getPath() + "," + checkpointNameAndEdits.getPath());
+  replication=(short)conf.getInt(DFSConfigKeys.DFS_REPLICATION_KEY,3);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).format(false).manageNameDfsDirs(false).build();
+  cluster.waitActive();
+  secondary=startSecondaryNameNode(conf);
+  fileSys=cluster.getFileSystem();
+  try {
+    assertTrue(!fileSys.exists(file1));
+    assertTrue(!fileSys.exists(file2));
+    assertTrue(fileSys.exists(file3));
+    checkFile(fileSys,file3,replication);
+    secondary.doCheckpoint();
+  }
+  finally {
+    fileSys.close();
+    cluster.shutdown();
+    secondary.shutdown();
+  }
+  checkImageAndEditsFilesExistence(nameAndEdits,true,true);
+  checkImageAndEditsFilesExistence(checkpointNameAndEdits,true,true);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test dfs.namenode.checkpoint.dir and dfs.namenode.checkpoint.edits.dir
+ * should tolerate white space between values.
+ */
+@Test public void testCheckPointDirsAreTrimmed() throws Exception {
+  MiniDFSCluster cluster=null;
+  SecondaryNameNode secondary=null;
+  File checkpointNameDir1=new File(base_dir,"chkptName1");
+  File checkpointEditsDir1=new File(base_dir,"chkptEdits1");
+  File checkpointNameDir2=new File(base_dir,"chkptName2");
+  File checkpointEditsDir2=new File(base_dir,"chkptEdits2");
+  File nameDir=new File(base_dir,"name1");
+  String whiteSpace="  \n   \n  ";
+  Configuration conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameDir.getPath());
+  conf.setStrings(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_DIR_KEY,whiteSpace + checkpointNameDir1.getPath() + whiteSpace,whiteSpace + checkpointNameDir2.getPath() + whiteSpace);
+  conf.setStrings(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY,whiteSpace + checkpointEditsDir1.getPath() + whiteSpace,whiteSpace + checkpointEditsDir2.getPath() + whiteSpace);
+  cluster=new MiniDFSCluster.Builder(conf).manageNameDfsDirs(false).numDataNodes(3).build();
+  try {
+    cluster.waitActive();
+    secondary=startSecondaryNameNode(conf);
+    secondary.doCheckpoint();
+    assertTrue(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY + " must be trimmed ",checkpointNameDir1.exists());
+    assertTrue(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY + " must be trimmed ",checkpointNameDir2.exists());
+    assertTrue(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY + " must be trimmed ",checkpointEditsDir1.exists());
+    assertTrue(DFSConfigKeys.DFS_NAMENODE_CHECKPOINT_EDITS_DIR_KEY + " must be trimmed ",checkpointEditsDir2.exists());
+  }
+  finally {
+    secondary.shutdown();
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test edits.dir.required configuration options.
+ * 1. Directory present in dfs.namenode.edits.dir.required but not in
+ * dfs.namenode.edits.dir. Expected to fail.
+ * 2. Directory present in both dfs.namenode.edits.dir.required and
+ * dfs.namenode.edits.dir. Expected to succeed.
+ * 3. Directory present only in dfs.namenode.edits.dir. Expected to
+ * succeed.
+ */
+@Test public void testNameEditsRequiredConfigs() throws IOException {
+  MiniDFSCluster cluster=null;
+  File nameAndEditsDir=new File(base_dir,"name_and_edits");
+  File nameAndEditsDir2=new File(base_dir,"name_and_edits2");
+  File nameDir=new File(base_dir,"name");
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameDir.getAbsolutePath());
+    conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_REQUIRED_KEY,nameAndEditsDir2.toURI().toString());
+    conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.toURI().toString());
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).manageNameDfsDirs(false).build();
+    fail("Successfully started cluster but should not have been able to.");
+  }
+ catch (  IllegalArgumentException iae) {
+    LOG.info("EXPECTED: cluster start failed due to bad configuration" + iae);
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+    cluster=null;
+  }
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameDir.getAbsolutePath());
+    conf.setStrings(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.toURI().toString(),nameAndEditsDir2.toURI().toString());
+    conf.set(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_REQUIRED_KEY,nameAndEditsDir2.toURI().toString());
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).manageNameDfsDirs(false).build();
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,nameDir.getAbsolutePath());
+    conf.setStrings(DFSConfigKeys.DFS_NAMENODE_EDITS_DIR_KEY,nameAndEditsDir.toURI().toString(),nameAndEditsDir2.toURI().toString());
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).manageNameDfsDirs(false).build();
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

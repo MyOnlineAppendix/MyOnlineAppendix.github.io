@@ -1,0 +1,144 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.io.sstable.SSTableWriterTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAbortTxnWithClosedWriterShouldRemoveSSTable() throws InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  File dir=cfs.getDirectories().getDirectoryForNewSSTables();
+  LifecycleTransaction txn=LifecycleTransaction.offline(OperationType.STREAM);
+  try (SSTableWriter writer=getWriter(cfs,dir,txn)){
+    for (int i=0; i < 10000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer.append(builder.build().unfilteredIterator());
+    }
+    assertFileCounts(dir.list());
+    for (int i=10000; i < 20000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer.append(builder.build().unfilteredIterator());
+    }
+    SSTableReader sstable=writer.finish(true);
+    int datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,1);
+    sstable.selfRef().release();
+    if (!FBUtilities.isWindows()) {
+      LifecycleTransaction.waitForDeletions();
+      assertFileCounts(dir.list());
+    }
+    txn.abort();
+    LifecycleTransaction.waitForDeletions();
+    datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,0);
+    validateCFS(cfs);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAbortTxnWithOpenEarlyShouldRemoveSSTable() throws InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  File dir=cfs.getDirectories().getDirectoryForNewSSTables();
+  LifecycleTransaction txn=LifecycleTransaction.offline(OperationType.WRITE);
+  try (SSTableWriter writer=getWriter(cfs,dir,txn)){
+    for (int i=0; i < 10000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer.append(builder.build().unfilteredIterator());
+    }
+    SSTableReader s=writer.setMaxDataAge(1000).openEarly();
+    assert s != null;
+    assertFileCounts(dir.list());
+    for (int i=10000; i < 20000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer.append(builder.build().unfilteredIterator());
+    }
+    SSTableReader s2=writer.setMaxDataAge(1000).openEarly();
+    assertTrue(s.last.compareTo(s2.last) < 0);
+    assertFileCounts(dir.list());
+    s.selfRef().release();
+    s2.selfRef().release();
+    int datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,1);
+    if (!FBUtilities.isWindows()) {
+      LifecycleTransaction.waitForDeletions();
+      assertFileCounts(dir.list());
+    }
+    writer.abort();
+    txn.abort();
+    LifecycleTransaction.waitForDeletions();
+    datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,0);
+    validateCFS(cfs);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAbortTxnWithClosedAndOpenWriterShouldRemoveAllSSTables() throws InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  truncate(cfs);
+  File dir=cfs.getDirectories().getDirectoryForNewSSTables();
+  LifecycleTransaction txn=LifecycleTransaction.offline(OperationType.STREAM);
+  SSTableWriter writer1=getWriter(cfs,dir,txn);
+  SSTableWriter writer2=getWriter(cfs,dir,txn);
+  try {
+    for (int i=0; i < 10000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer1.append(builder.build().unfilteredIterator());
+    }
+    assertFileCounts(dir.list());
+    for (int i=10000; i < 20000; i++) {
+      UpdateBuilder builder=UpdateBuilder.create(cfs.metadata,random(i,10)).withTimestamp(1);
+      for (int j=0; j < 100; j++)       builder.newRow("" + j).add("val",ByteBuffer.allocate(1000));
+      writer2.append(builder.build().unfilteredIterator());
+    }
+    SSTableReader sstable=writer1.finish(true);
+    txn.update(sstable,false);
+    assertFileCounts(dir.list());
+    int datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,2);
+    if (!FBUtilities.isWindows()) {
+      LifecycleTransaction.waitForDeletions();
+      assertFileCounts(dir.list());
+    }
+    txn.abort();
+    LifecycleTransaction.waitForDeletions();
+    datafiles=assertFileCounts(dir.list());
+    assertEquals(datafiles,0);
+    validateCFS(cfs);
+  }
+  finally {
+    writer1.close();
+    writer2.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

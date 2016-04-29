@@ -1,0 +1,177 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.backup.example.TestZooKeeperTableArchiveClient (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void cleanupTest() throws Exception {
+  try {
+    CONNECTION.close();
+    UTIL.shutdownMiniZKCluster();
+  }
+ catch (  Exception e) {
+    LOG.warn("problem shutting down cluster",e);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  try {
+    FileSystem fs=UTIL.getTestFileSystem();
+    for (    Path file : toCleanup) {
+      FSUtils.delete(fs,file,true);
+    }
+  }
+ catch (  IOException e) {
+    LOG.warn("Failure to delete archive directory",e);
+  }
+ finally {
+    toCleanup.clear();
+  }
+  archivingClient.disableHFileBackup();
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test archiving/cleaning across multiple tables, where some are retained, and others aren't
+ * @throws Exception on failure
+ */
+@Test(timeout=300000) public void testMultipleTables() throws Exception {
+  createArchiveDirectory();
+  String otherTable="otherTable";
+  FileSystem fs=UTIL.getTestFileSystem();
+  Path archiveDir=getArchiveDir();
+  Path tableDir=getTableDir(STRING_TABLE_NAME);
+  Path otherTableDir=getTableDir(otherTable);
+  toCleanup.add(archiveDir);
+  toCleanup.add(tableDir);
+  toCleanup.add(otherTableDir);
+  Configuration conf=UTIL.getConfiguration();
+  Stoppable stop=new StoppableImplementation();
+  final ChoreService choreService=new ChoreService("TEST_SERVER_NAME");
+  HFileCleaner cleaner=setupAndCreateCleaner(conf,fs,archiveDir,stop);
+  List<BaseHFileCleanerDelegate> cleaners=turnOnArchiving(STRING_TABLE_NAME,cleaner);
+  final LongTermArchivingHFileCleaner delegate=(LongTermArchivingHFileCleaner)cleaners.get(0);
+  HColumnDescriptor hcd=new HColumnDescriptor(TEST_FAM);
+  HRegion region=UTIL.createTestRegion(STRING_TABLE_NAME,hcd);
+  List<Region> regions=new ArrayList<Region>();
+  regions.add(region);
+  when(rss.getOnlineRegions()).thenReturn(regions);
+  final CompactedHFilesDischarger compactionCleaner=new CompactedHFilesDischarger(100,stop,rss,false);
+  loadFlushAndCompact(region,TEST_FAM);
+  compactionCleaner.chore();
+  hcd=new HColumnDescriptor(TEST_FAM);
+  HRegion otherRegion=UTIL.createTestRegion(otherTable,hcd);
+  regions=new ArrayList<Region>();
+  regions.add(otherRegion);
+  when(rss.getOnlineRegions()).thenReturn(regions);
+  final CompactedHFilesDischarger compactionCleaner1=new CompactedHFilesDischarger(100,stop,rss,false);
+  loadFlushAndCompact(otherRegion,TEST_FAM);
+  compactionCleaner1.chore();
+  List<Path> files=getAllFiles(fs,archiveDir);
+  if (files == null) {
+    FSUtils.logFileSystemState(fs,archiveDir,LOG);
+    throw new RuntimeException("Didn't load archive any files!");
+  }
+  int initialCountForPrimary=0;
+  int initialCountForOtherTable=0;
+  for (  Path file : files) {
+    String tableName=file.getParent().getParent().getParent().getName();
+    if (tableName.equals(otherTable))     initialCountForOtherTable++;
+ else     if (tableName.equals(STRING_TABLE_NAME))     initialCountForPrimary++;
+  }
+  assertTrue("Didn't archive files for:" + STRING_TABLE_NAME,initialCountForPrimary > 0);
+  assertTrue("Didn't archive files for:" + otherTable,initialCountForOtherTable > 0);
+  CountDownLatch finished=setupCleanerWatching(delegate,cleaners,files.size() + 3);
+  choreService.scheduleChore(cleaner);
+  finished.await();
+  stop.stop("");
+  List<Path> archivedFiles=getAllFiles(fs,archiveDir);
+  int archivedForPrimary=0;
+  for (  Path file : archivedFiles) {
+    String tableName=file.getParent().getParent().getParent().getName();
+    assertFalse("Have a file from the non-archived table: " + file,tableName.equals(otherTable));
+    if (tableName.equals(STRING_TABLE_NAME))     archivedForPrimary++;
+  }
+  assertEquals("Not all archived files for the primary table were retained.",initialCountForPrimary,archivedForPrimary);
+  assertTrue("Archive directory was deleted via archiver",fs.exists(archiveDir));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test turning on/off archiving
+ */
+@Test(timeout=300000) public void testArchivingEnableDisable() throws Exception {
+  LOG.debug("----Starting archiving");
+  archivingClient.enableHFileBackupAsync(TABLE_NAME);
+  assertTrue("Archving didn't get turned on",archivingClient.getArchivingEnabled(TABLE_NAME));
+  archivingClient.disableHFileBackup();
+  assertFalse("Archving didn't get turned off.",archivingClient.getArchivingEnabled(TABLE_NAME));
+  archivingClient.enableHFileBackupAsync(TABLE_NAME);
+  assertTrue("Archving didn't get turned on",archivingClient.getArchivingEnabled(TABLE_NAME));
+  archivingClient.disableHFileBackup(TABLE_NAME);
+  assertFalse("Archving didn't get turned off for " + STRING_TABLE_NAME,archivingClient.getArchivingEnabled(TABLE_NAME));
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=300000) public void testArchivingOnSingleTable() throws Exception {
+  createArchiveDirectory();
+  FileSystem fs=UTIL.getTestFileSystem();
+  Path archiveDir=getArchiveDir();
+  Path tableDir=getTableDir(STRING_TABLE_NAME);
+  toCleanup.add(archiveDir);
+  toCleanup.add(tableDir);
+  Configuration conf=UTIL.getConfiguration();
+  Stoppable stop=new StoppableImplementation();
+  HFileCleaner cleaner=setupAndCreateCleaner(conf,fs,archiveDir,stop);
+  List<BaseHFileCleanerDelegate> cleaners=turnOnArchiving(STRING_TABLE_NAME,cleaner);
+  final LongTermArchivingHFileCleaner delegate=(LongTermArchivingHFileCleaner)cleaners.get(0);
+  HColumnDescriptor hcd=new HColumnDescriptor(TEST_FAM);
+  HRegion region=UTIL.createTestRegion(STRING_TABLE_NAME,hcd);
+  List<Region> regions=new ArrayList<Region>();
+  regions.add(region);
+  when(rss.getOnlineRegions()).thenReturn(regions);
+  final CompactedHFilesDischarger compactionCleaner=new CompactedHFilesDischarger(100,stop,rss,false);
+  loadFlushAndCompact(region,TEST_FAM);
+  compactionCleaner.chore();
+  List<Path> files=getAllFiles(fs,archiveDir);
+  if (files == null) {
+    FSUtils.logFileSystemState(fs,UTIL.getDataTestDir(),LOG);
+    throw new RuntimeException("Didn't archive any files!");
+  }
+  CountDownLatch finished=setupCleanerWatching(delegate,cleaners,files.size());
+  runCleaner(cleaner,finished,stop);
+  List<Path> archivedFiles=getAllFiles(fs,archiveDir);
+  assertEquals("Archived files changed after running archive cleaner.",files,archivedFiles);
+  assertTrue(fs.exists(HFileArchiveUtil.getArchivePath(UTIL.getConfiguration())));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

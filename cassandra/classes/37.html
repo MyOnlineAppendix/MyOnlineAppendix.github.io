@@ -1,0 +1,100 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.cql3.ViewLongTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void end() throws Throwable {
+  for (  String viewName : views)   executeNet(protocolVersion,"DROP MATERIALIZED VIEW " + viewName);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testConflictResolution() throws Throwable {
+  final int writers=96;
+  final int insertsPerWriter=50;
+  final Map<Integer,Exception> failedWrites=new ConcurrentHashMap<>();
+  createTable("CREATE TABLE %s (" + "a int," + "b int,"+ "c int,"+ "PRIMARY KEY (a, b))");
+  executeNet(protocolVersion,"USE " + keyspace());
+  createView("mv","CREATE MATERIALIZED VIEW %s AS SELECT * FROM %%s WHERE c IS NOT NULL AND a IS NOT NULL AND b IS NOT NULL PRIMARY KEY (c, a, b)");
+  CyclicBarrier semaphore=new CyclicBarrier(writers);
+  Thread[] threads=new Thread[writers];
+  for (int i=0; i < writers; i++) {
+    final int writer=i;
+    Thread t=new Thread(new WrappedRunnable(){
+      public void runMayThrow(){
+        try {
+          int writerOffset=writer * insertsPerWriter;
+          semaphore.await();
+          for (int i=0; i < insertsPerWriter; i++) {
+            try {
+              executeNet(protocolVersion,"INSERT INTO %s (a, b, c) VALUES (?, ?, ?) USING TIMESTAMP 1",1,1,i + writerOffset);
+            }
+ catch (            NoHostAvailableException|WriteTimeoutException e) {
+              failedWrites.put(i + writerOffset,e);
+            }
+          }
+        }
+ catch (        Throwable e) {
+          throw new RuntimeException(e);
+        }
+      }
+    }
+);
+    t.start();
+    threads[i]=t;
+  }
+  for (int i=0; i < writers; i++)   threads[i].join();
+  for (int i=0; i < writers * insertsPerWriter; i++) {
+    if (executeNet(protocolVersion,"SELECT COUNT(*) FROM system.batchlog").one().getLong(0) == 0)     break;
+    try {
+      BatchlogManager.instance.startBatchlogReplay().get();
+    }
+ catch (    Throwable ignore) {
+    }
+  }
+  int value=executeNet(protocolVersion,"SELECT c FROM %s WHERE a = 1 AND b = 1").one().getInt("c");
+  List<Row> rows=executeNet(protocolVersion,"SELECT c FROM " + keyspace() + ".mv").all();
+  boolean containsC=false;
+  StringBuilder others=new StringBuilder();
+  StringBuilder overlappingFailedWrites=new StringBuilder();
+  for (  Row row : rows) {
+    int c=row.getInt("c");
+    if (c == value)     containsC=true;
+ else {
+      if (others.length() != 0)       others.append(' ');
+      others.append(c);
+      if (failedWrites.containsKey(c)) {
+        if (overlappingFailedWrites.length() != 0)         overlappingFailedWrites.append(' ');
+        overlappingFailedWrites.append(c).append(':').append(failedWrites.get(c).getMessage());
+      }
+    }
+  }
+  if (rows.size() > 1) {
+    throw new AssertionError(String.format("Expected 1 row, but found %d; %s c = %d, and (%s) of which (%s) failed to insert",rows.size(),containsC ? "found row with" : "no rows contained",value,others,overlappingFailedWrites));
+  }
+ else   if (rows.isEmpty()) {
+    throw new AssertionError(String.format("Could not find row with c = %d",value));
+  }
+ else   if (rows.size() == 1 && !containsC) {
+    throw new AssertionError(String.format("Single row had c = %d, expected %d",rows.get(0).getInt("c"),value));
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void begin(){
+  views.clear();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

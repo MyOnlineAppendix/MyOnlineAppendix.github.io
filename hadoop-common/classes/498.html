@@ -1,0 +1,277 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestFSImageWithSnapshot (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the fsimage saving/loading while file appending.
+ */
+@Test(timeout=60000) public void testSaveLoadImageWithAppending() throws Exception {
+  Path sub1=new Path(dir,"sub1");
+  Path sub1file1=new Path(sub1,"sub1file1");
+  Path sub1file2=new Path(sub1,"sub1file2");
+  DFSTestUtil.createFile(hdfs,sub1file1,BLOCKSIZE,REPLICATION,seed);
+  DFSTestUtil.createFile(hdfs,sub1file2,BLOCKSIZE,REPLICATION,seed);
+  hdfs.allowSnapshot(dir);
+  hdfs.createSnapshot(dir,"s0");
+  HdfsDataOutputStream out=appendFileWithoutClosing(sub1file1,BLOCKSIZE);
+  out.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH));
+  DFSTestUtil.appendFile(hdfs,sub1file2,BLOCKSIZE);
+  hdfs.createSnapshot(dir,"s1");
+  out.close();
+  out=appendFileWithoutClosing(sub1file1,BLOCKSIZE);
+  out.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH));
+  hdfs.createSnapshot(dir,"s2");
+  out.close();
+  out=appendFileWithoutClosing(sub1file1,BLOCKSIZE);
+  out.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH));
+  File fsnBefore=dumpTree2File("before");
+  File imageFile=saveFSImageToTempFile();
+  out.close();
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(true).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+  loadFSImageFromTempFile(imageFile);
+  File fsnAfter=dumpTree2File("after");
+  SnapshotTestHelper.compareDumpedTreeInFile(fsnBefore,fsnAfter,true);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Testing steps:
+ * <pre>
+ * 1. Creating/modifying directories/files while snapshots are being taken.
+ * 2. Dump the FSDirectory tree of the namesystem.
+ * 3. Save the namesystem to a temp file (FSImage saving).
+ * 4. Restart the cluster and format the namesystem.
+ * 5. Load the namesystem from the temp file (FSImage loading).
+ * 6. Dump the FSDirectory again and compare the two dumped string.
+ * </pre>
+ */
+@Test public void testSaveLoadImage() throws Exception {
+  int s=0;
+  hdfs.mkdirs(dir);
+  SnapshotTestHelper.createSnapshot(hdfs,dir,"s" + ++s);
+  Path sub1=new Path(dir,"sub1");
+  hdfs.mkdirs(sub1);
+  hdfs.setPermission(sub1,new FsPermission((short)0777));
+  Path sub11=new Path(sub1,"sub11");
+  hdfs.mkdirs(sub11);
+  checkImage(s);
+  hdfs.createSnapshot(dir,"s" + ++s);
+  Path sub1file1=new Path(sub1,"sub1file1");
+  Path sub1file2=new Path(sub1,"sub1file2");
+  DFSTestUtil.createFile(hdfs,sub1file1,BLOCKSIZE,REPLICATION,seed);
+  DFSTestUtil.createFile(hdfs,sub1file2,BLOCKSIZE,REPLICATION,seed);
+  checkImage(s);
+  hdfs.createSnapshot(dir,"s" + ++s);
+  Path sub2=new Path(dir,"sub2");
+  Path sub2file1=new Path(sub2,"sub2file1");
+  Path sub2file2=new Path(sub2,"sub2file2");
+  DFSTestUtil.createFile(hdfs,sub2file1,BLOCKSIZE,REPLICATION,seed);
+  DFSTestUtil.createFile(hdfs,sub2file2,BLOCKSIZE,REPLICATION,seed);
+  checkImage(s);
+  hdfs.createSnapshot(dir,"s" + ++s);
+  hdfs.setReplication(sub1file1,(short)(REPLICATION - 1));
+  hdfs.delete(sub1file2,true);
+  hdfs.setOwner(sub2,"dr.who","unknown");
+  hdfs.delete(sub2file1,true);
+  checkImage(s);
+  hdfs.createSnapshot(dir,"s" + ++s);
+  Path sub1_sub2file2=new Path(sub1,"sub2file2");
+  hdfs.rename(sub2file2,sub1_sub2file2);
+  hdfs.rename(sub1file1,sub2file1);
+  checkImage(s);
+  hdfs.rename(sub2file1,sub2file2);
+  checkImage(s);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  if (cluster != null) {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test when there is snapshot taken on root
+ */
+@Test public void testSnapshotOnRoot() throws Exception {
+  final Path root=new Path("/");
+  hdfs.allowSnapshot(root);
+  hdfs.createSnapshot(root,"s1");
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+  hdfs.saveNamespace();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+  INodeDirectory rootNode=fsn.dir.getINode4Write(root.toString()).asDirectory();
+  assertTrue("The children list of root should be empty",rootNode.getChildrenList(Snapshot.CURRENT_STATE_ID).isEmpty());
+  List<DirectoryDiff> diffList=rootNode.getDiffs().asList();
+  assertEquals(1,diffList.size());
+  Snapshot s1=rootNode.getSnapshot(DFSUtil.string2Bytes("s1"));
+  assertEquals(s1.getId(),diffList.get(0).getSnapshotId());
+  assertEquals(1,fsn.getSnapshotManager().getNumSnapshottableDirs());
+  SnapshottableDirectoryStatus[] sdirs=fsn.getSnapshotManager().getSnapshottableDirListing(null);
+  assertEquals(root,sdirs[0].getFullPath());
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+  hdfs.saveNamespace();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test fsimage loading when 1) there is an empty file loaded from fsimage,
+ * and 2) there is later an append operation to be applied from edit log.
+ */
+@Test(timeout=60000) public void testLoadImageWithEmptyFile() throws Exception {
+  Path file=new Path(dir,"file");
+  FSDataOutputStream out=hdfs.create(file);
+  out.close();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+  hdfs.saveNamespace();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  out=hdfs.append(file);
+  out.write(1);
+  out.close();
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  hdfs=cluster.getFileSystem();
+  FileStatus status=hdfs.getFileStatus(file);
+  assertEquals(1,status.getLen());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Testing a special case with snapshots. When the following steps happen:
+ * <pre>
+ * 1. Take snapshot s1 on dir.
+ * 2. Create new dir and files under subsubDir, which is descendant of dir.
+ * 3. Take snapshot s2 on dir.
+ * 4. Delete subsubDir.
+ * 5. Delete snapshot s2.
+ * </pre>
+ * When we merge the diff from s2 to s1 (since we deleted s2), we need to make
+ * sure all the files/dirs created after s1 should be destroyed. Otherwise
+ * we may save these files/dirs to the fsimage, and cause FileNotFound 
+ * Exception while loading fsimage.  
+ */
+@Test(timeout=300000) public void testSaveLoadImageAfterSnapshotDeletion() throws Exception {
+  Path dir=new Path("/dir");
+  Path subDir=new Path(dir,"subdir");
+  Path subsubDir=new Path(subDir,"subsubdir");
+  hdfs.mkdirs(subsubDir);
+  SnapshotTestHelper.createSnapshot(hdfs,dir,"s1");
+  Path newDir=new Path(subsubDir,"newdir");
+  Path newFile=new Path(newDir,"newfile");
+  hdfs.mkdirs(newDir);
+  DFSTestUtil.createFile(hdfs,newFile,BLOCKSIZE,REPLICATION,seed);
+  SnapshotTestHelper.createSnapshot(hdfs,dir,"s2");
+  hdfs.delete(subsubDir,true);
+  hdfs.deleteSnapshot(dir,"s2");
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(REPLICATION).format(false).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+  hdfs.saveNamespace();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  conf=new Configuration();
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the fsimage loading while there is file under construction.
+ */
+@Test(timeout=60000) public void testLoadImageWithAppending() throws Exception {
+  Path sub1=new Path(dir,"sub1");
+  Path sub1file1=new Path(sub1,"sub1file1");
+  Path sub1file2=new Path(sub1,"sub1file2");
+  DFSTestUtil.createFile(hdfs,sub1file1,BLOCKSIZE,REPLICATION,seed);
+  DFSTestUtil.createFile(hdfs,sub1file2,BLOCKSIZE,REPLICATION,seed);
+  hdfs.allowSnapshot(dir);
+  hdfs.createSnapshot(dir,"s0");
+  HdfsDataOutputStream out=appendFileWithoutClosing(sub1file1,BLOCKSIZE);
+  out.hsync(EnumSet.of(SyncFlag.UPDATE_LENGTH));
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+  hdfs.saveNamespace();
+  hdfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  cluster.shutdown();
+  cluster=new MiniDFSCluster.Builder(conf).format(false).numDataNodes(REPLICATION).build();
+  cluster.waitActive();
+  fsn=cluster.getNamesystem();
+  hdfs=cluster.getFileSystem();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

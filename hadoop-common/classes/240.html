@@ -1,0 +1,213 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestClientProtocolForPipelineRecovery (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetNewStamp() throws IOException {
+  int numDataNodes=1;
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+  try {
+    cluster.waitActive();
+    FileSystem fileSys=cluster.getFileSystem();
+    NamenodeProtocols namenode=cluster.getNameNodeRpc();
+    Path file=new Path("dataprotocol.dat");
+    DFSTestUtil.createFile(fileSys,file,1L,(short)numDataNodes,0L);
+    ExtendedBlock firstBlock=DFSTestUtil.getFirstBlock(fileSys,file);
+    try {
+      namenode.updateBlockForPipeline(firstBlock,"");
+      Assert.fail("Can not get a new GS from a finalized block");
+    }
+ catch (    IOException e) {
+      Assert.assertTrue(e.getMessage().contains("is not under Construction"));
+    }
+    try {
+      long newBlockId=firstBlock.getBlockId() + 1;
+      ExtendedBlock newBlock=new ExtendedBlock(firstBlock.getBlockPoolId(),newBlockId,0,firstBlock.getGenerationStamp());
+      namenode.updateBlockForPipeline(newBlock,"");
+      Assert.fail("Cannot get a new GS from a non-existent block");
+    }
+ catch (    IOException e) {
+      Assert.assertTrue(e.getMessage().contains("does not exist"));
+    }
+    DFSOutputStream out=null;
+    try {
+      out=(DFSOutputStream)(fileSys.append(file).getWrappedStream());
+      out.write(1);
+      out.hflush();
+      FSDataInputStream in=null;
+      try {
+        in=fileSys.open(file);
+        firstBlock=DFSTestUtil.getAllBlocks(in).get(0).getBlock();
+      }
+  finally {
+        IOUtils.closeStream(in);
+      }
+      DFSClient dfs=((DistributedFileSystem)fileSys).dfs;
+      try {
+        namenode.updateBlockForPipeline(firstBlock,"test" + dfs.clientName);
+        Assert.fail("Cannot get a new GS for a non lease holder");
+      }
+ catch (      LeaseExpiredException e) {
+        Assert.assertTrue(e.getMessage().startsWith("Lease mismatch"));
+      }
+      try {
+        namenode.updateBlockForPipeline(firstBlock,null);
+        Assert.fail("Cannot get a new GS for a null lease holder");
+      }
+ catch (      LeaseExpiredException e) {
+        Assert.assertTrue(e.getMessage().startsWith("Lease mismatch"));
+      }
+      namenode.updateBlockForPipeline(firstBlock,dfs.clientName);
+    }
+  finally {
+      IOUtils.closeStream(out);
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test whether corrupt replicas are detected correctly during pipeline
+ * recoveries.
+ */
+@Test public void testPipelineRecoveryForLastBlock() throws IOException {
+  DFSClientFaultInjector faultInjector=Mockito.mock(DFSClientFaultInjector.class);
+  DFSClientFaultInjector oldInjector=DFSClientFaultInjector.instance;
+  DFSClientFaultInjector.instance=faultInjector;
+  Configuration conf=new HdfsConfiguration();
+  conf.setInt(DFSConfigKeys.DFS_CLIENT_BLOCK_WRITE_LOCATEFOLLOWINGBLOCK_RETRIES_KEY,3);
+  MiniDFSCluster cluster=null;
+  try {
+    int numDataNodes=3;
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    FileSystem fileSys=cluster.getFileSystem();
+    Path file=new Path("dataprotocol1.dat");
+    Mockito.when(faultInjector.failPacket()).thenReturn(true);
+    DFSTestUtil.createFile(fileSys,file,68000000L,(short)numDataNodes,0L);
+    FSDataInputStream in=fileSys.open(file);
+    try {
+      int c=in.read();
+    }
+ catch (    org.apache.hadoop.hdfs.BlockMissingException bme) {
+      Assert.fail("Block is missing because the file was closed with" + " corrupt replicas.");
+    }
+  }
+  finally {
+    DFSClientFaultInjector.instance=oldInjector;
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test recovery on restart OOB message. It also tests the delivery of 
+ * OOB ack originating from the primary datanode. Since there is only
+ * one node in the cluster, failure of restart-recovery will fail the
+ * test.
+ */
+@Test public void testPipelineRecoveryOnOOB() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_CLIENT_DATANODE_RESTART_TIMEOUT_KEY,"15");
+  MiniDFSCluster cluster=null;
+  try {
+    int numDataNodes=1;
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    FileSystem fileSys=cluster.getFileSystem();
+    Path file=new Path("dataprotocol2.dat");
+    DFSTestUtil.createFile(fileSys,file,10240L,(short)1,0L);
+    DFSOutputStream out=(DFSOutputStream)(fileSys.append(file).getWrappedStream());
+    out.write(1);
+    out.hflush();
+    DFSAdmin dfsadmin=new DFSAdmin(conf);
+    DataNode dn=cluster.getDataNodes().get(0);
+    final String dnAddr=dn.getDatanodeId().getIpcAddr(false);
+    final String[] args1={"-shutdownDatanode",dnAddr,"upgrade"};
+    Assert.assertEquals(0,dfsadmin.run(args1));
+    Thread.sleep(4000);
+    cluster.restartDataNode(0,true);
+    out.close();
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test restart timeout 
+ */
+@Test public void testPipelineRecoveryOnRestartFailure() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_CLIENT_DATANODE_RESTART_TIMEOUT_KEY,"5");
+  MiniDFSCluster cluster=null;
+  try {
+    int numDataNodes=2;
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    FileSystem fileSys=cluster.getFileSystem();
+    Path file=new Path("dataprotocol3.dat");
+    DFSTestUtil.createFile(fileSys,file,10240L,(short)2,0L);
+    DFSOutputStream out=(DFSOutputStream)(fileSys.append(file).getWrappedStream());
+    out.write(1);
+    out.hflush();
+    DFSAdmin dfsadmin=new DFSAdmin(conf);
+    DataNode dn=cluster.getDataNodes().get(0);
+    final String dnAddr1=dn.getDatanodeId().getIpcAddr(false);
+    final String[] args1={"-shutdownDatanode",dnAddr1,"upgrade"};
+    Assert.assertEquals(0,dfsadmin.run(args1));
+    Thread.sleep(4000);
+    out.close();
+    out=(DFSOutputStream)(fileSys.append(file).getWrappedStream());
+    out.write(1);
+    out.hflush();
+    dn=cluster.getDataNodes().get(1);
+    final String dnAddr2=dn.getDatanodeId().getIpcAddr(false);
+    final String[] args2={"-shutdownDatanode",dnAddr2,"upgrade"};
+    Assert.assertEquals(0,dfsadmin.run(args2));
+    Thread.sleep(4000);
+    try {
+      out.close();
+      assert false;
+    }
+ catch (    IOException ioe) {
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,115 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestMultiColumnScanner (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultiColumnScanner() throws IOException {
+  Region region=TEST_UTIL.createTestRegion(TABLE_NAME,new HColumnDescriptor(FAMILY).setCompressionType(comprAlgo).setBloomFilterType(bloomType).setMaxVersions(MAX_VERSIONS).setDataBlockEncoding(dataBlockEncoding));
+  List<String> rows=sequentialStrings("row",NUM_ROWS);
+  List<String> qualifiers=sequentialStrings("qual",NUM_COLUMNS);
+  List<KeyValue> kvs=new ArrayList<KeyValue>();
+  Set<String> keySet=new HashSet<String>();
+  Map<String,Long> lastDelTimeMap=new HashMap<String,Long>();
+  Random rand=new Random(29372937L);
+  Set<String> rowQualSkip=new HashSet<String>();
+  for (  String row : rows)   for (  String qual : qualifiers)   if (rand.nextDouble() < COLUMN_SKIP_IN_ROW_PROB) {
+    LOG.info("Skipping " + qual + " in row "+ row);
+    rowQualSkip.add(rowQualKey(row,qual));
+  }
+  for (  String qual : qualifiers)   if (rand.nextDouble() < COLUMN_SKIP_EVERYWHERE_PROB) {
+    LOG.info("Skipping " + qual + " in all rows");
+    for (    String row : rows)     rowQualSkip.add(rowQualKey(row,qual));
+  }
+  for (int iFlush=0; iFlush < NUM_FLUSHES; ++iFlush) {
+    for (    String qual : qualifiers) {
+      if (rand.nextDouble() < COLUMN_SKIP_IN_STORE_FILE_PROB)       continue;
+      byte[] qualBytes=Bytes.toBytes(qual);
+      for (      String row : rows) {
+        Put p=new Put(Bytes.toBytes(row));
+        for (        long ts : TIMESTAMPS) {
+          String value=createValue(row,qual,ts);
+          KeyValue kv=KeyValueTestUtil.create(row,FAMILY,qual,ts,value);
+          assertEquals(kv.getTimestamp(),ts);
+          p.add(kv);
+          String keyAsString=kv.toString();
+          if (!keySet.contains(keyAsString)) {
+            keySet.add(keyAsString);
+            kvs.add(kv);
+          }
+        }
+        region.put(p);
+        Delete d=new Delete(Bytes.toBytes(row));
+        boolean deletedSomething=false;
+        for (        long ts : TIMESTAMPS)         if (rand.nextDouble() < DELETE_PROBABILITY) {
+          d.addColumns(FAMILY_BYTES,qualBytes,ts);
+          String rowAndQual=row + "_" + qual;
+          Long whenDeleted=lastDelTimeMap.get(rowAndQual);
+          lastDelTimeMap.put(rowAndQual,whenDeleted == null ? ts : Math.max(ts,whenDeleted));
+          deletedSomething=true;
+        }
+        if (deletedSomething)         region.delete(d);
+      }
+    }
+    region.flush(true);
+  }
+  Collections.sort(kvs,CellComparator.COMPARATOR);
+  for (int maxVersions=1; maxVersions <= TIMESTAMPS.length; ++maxVersions) {
+    for (int columnBitMask=1; columnBitMask <= MAX_COLUMN_BIT_MASK; ++columnBitMask) {
+      Scan scan=new Scan();
+      scan.setMaxVersions(maxVersions);
+      Set<String> qualSet=new TreeSet<String>();
+{
+        int columnMaskTmp=columnBitMask;
+        for (        String qual : qualifiers) {
+          if ((columnMaskTmp & 1) != 0) {
+            scan.addColumn(FAMILY_BYTES,Bytes.toBytes(qual));
+            qualSet.add(qual);
+          }
+          columnMaskTmp>>=1;
+        }
+        assertEquals(0,columnMaskTmp);
+      }
+      InternalScanner scanner=region.getScanner(scan);
+      List<Cell> results=new ArrayList<Cell>();
+      int kvPos=0;
+      int numResults=0;
+      String queryInfo="columns queried: " + qualSet + " (columnBitMask="+ columnBitMask+ "), maxVersions="+ maxVersions;
+      while (scanner.next(results) || results.size() > 0) {
+        for (        Cell kv : results) {
+          while (kvPos < kvs.size() && !matchesQuery(kvs.get(kvPos),qualSet,maxVersions,lastDelTimeMap)) {
+            ++kvPos;
+          }
+          String rowQual=getRowQualStr(kv);
+          String deleteInfo="";
+          Long lastDelTS=lastDelTimeMap.get(rowQual);
+          if (lastDelTS != null) {
+            deleteInfo="; last timestamp when row/column " + rowQual + " was deleted: "+ lastDelTS;
+          }
+          assertTrue("Scanner returned additional key/value: " + kv + ", "+ queryInfo+ deleteInfo+ ";",kvPos < kvs.size());
+          assertTrue("Scanner returned wrong key/value; " + queryInfo + deleteInfo+ ";",CellUtil.equalsIgnoreMvccVersion(kvs.get(kvPos),(kv)));
+          ++kvPos;
+          ++numResults;
+        }
+        results.clear();
+      }
+      for (; kvPos < kvs.size(); ++kvPos) {
+        KeyValue remainingKV=kvs.get(kvPos);
+        assertFalse("Matching column not returned by scanner: " + remainingKV + ", "+ queryInfo+ ", results returned: "+ numResults,matchesQuery(remainingKV,qualSet,maxVersions,lastDelTimeMap));
+      }
+    }
+  }
+  assertTrue("This test is supposed to delete at least some row/column " + "pairs",lastDelTimeMap.size() > 0);
+  LOG.info("Number of row/col pairs deleted at least once: " + lastDelTimeMap.size());
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

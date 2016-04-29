@@ -1,0 +1,787 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestSplitTransactionOnCluster (18 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-11 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSplitWithRegionReplicas() throws Exception {
+  final TableName tableName=TableName.valueOf("foobar");
+  HTableDescriptor htd=TESTING_UTIL.createTableDescriptor("foobar");
+  htd.setRegionReplication(2);
+  htd.addCoprocessor(SlowMeCopro.class.getName());
+  Table t=TESTING_UTIL.createTable(htd,new byte[][]{Bytes.toBytes("cf")},null);
+  List<HRegion> oldRegions;
+  do {
+    oldRegions=cluster.getRegions(tableName);
+    Thread.sleep(10);
+  }
+ while (oldRegions.size() != 2);
+  for (  HRegion h : oldRegions)   LOG.debug("OLDREGION " + h.getRegionInfo());
+  try {
+    int regionServerIndex=cluster.getServerWith(oldRegions.get(0).getRegionInfo().getRegionName());
+    HRegionServer regionServer=cluster.getRegionServer(regionServerIndex);
+    insertData(tableName,admin,t);
+    admin.setBalancerRunning(false,true);
+    cluster.getMaster().setCatalogJanitorEnabled(false);
+    boolean tableExists=MetaTableAccessor.tableExists(regionServer.getConnection(),tableName);
+    assertEquals("The specified table should be present.",true,tableExists);
+    final HRegion region=findSplittableRegion(oldRegions);
+    regionServerIndex=cluster.getServerWith(region.getRegionInfo().getRegionName());
+    regionServer=cluster.getRegionServer(regionServerIndex);
+    assertTrue("not able to find a splittable region",region != null);
+    SplitTransactionImpl st=new SplitTransactionImpl(region,Bytes.toBytes("row2"));
+    try {
+      st.prepare();
+      st.execute(regionServer,regionServer);
+    }
+ catch (    IOException e) {
+      e.printStackTrace();
+      fail("Split execution should have succeeded with no exceptions thrown " + e);
+    }
+    List<HRegion> newRegions;
+    do {
+      newRegions=cluster.getRegions(tableName);
+      for (      HRegion h : newRegions)       LOG.debug("NEWREGION " + h.getRegionInfo());
+      Thread.sleep(1000);
+    }
+ while ((newRegions.contains(oldRegions.get(0)) || newRegions.contains(oldRegions.get(1))) || newRegions.size() != 4);
+    tableExists=MetaTableAccessor.tableExists(regionServer.getConnection(),tableName);
+    assertEquals("The specified table should be present.",true,tableExists);
+    byte[] b1="row1".getBytes();
+    Get g=new Get(b1);
+    g.setConsistency(Consistency.STRONG);
+    Result r=t.get(g);
+    Assert.assertFalse(r.isStale());
+    LOG.info("exists stale after flush done");
+    SlowMeCopro.getCdl().set(new CountDownLatch(1));
+    g=new Get(b1);
+    g.setConsistency(Consistency.TIMELINE);
+    r=t.get(g);
+    Assert.assertTrue(r.isStale());
+    SlowMeCopro.getCdl().get().countDown();
+  }
+  finally {
+    SlowMeCopro.getCdl().get().countDown();
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    t.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testSplitFailedCompactionAndSplit() throws Exception {
+  final TableName tableName=TableName.valueOf("testSplitFailedCompactionAndSplit");
+  HTableDescriptor htd=new HTableDescriptor(tableName);
+  byte[] cf=Bytes.toBytes("cf");
+  htd.addFamily(new HColumnDescriptor(cf));
+  admin.createTable(htd);
+  for (int i=0; cluster.getRegions(tableName).size() == 0 && i < 100; i++) {
+    Thread.sleep(100);
+  }
+  assertEquals(1,cluster.getRegions(tableName).size());
+  HRegion region=cluster.getRegions(tableName).get(0);
+  Store store=region.getStore(cf);
+  int regionServerIndex=cluster.getServerWith(region.getRegionInfo().getRegionName());
+  HRegionServer regionServer=cluster.getRegionServer(regionServerIndex);
+  Table t=TESTING_UTIL.getConnection().getTable(tableName);
+  insertData(tableName,admin,t);
+  insertData(tableName,admin,t);
+  int fileNum=store.getStorefiles().size();
+  store.triggerMajorCompaction();
+  CompactionContext cc=store.requestCompaction();
+  assertNotNull(cc);
+  assertEquals(2,region.close(false).get(cf).size());
+  region.initialize();
+  assertFalse(region.compact(cc,store,NoLimitThroughputController.INSTANCE));
+  assertTrue(fileNum > store.getStorefiles().size());
+  SplitTransactionImpl st=new SplitTransactionImpl(region,Bytes.toBytes("row3"));
+  assertTrue(st.prepare());
+  st.execute(regionServer,regionServer);
+  assertEquals(2,cluster.getRegions(tableName).size());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testTableExistsIfTheSpecifiedTableRegionIsSplitParent() throws Exception {
+  final TableName tableName=TableName.valueOf("testTableExistsIfTheSpecifiedTableRegionIsSplitParent");
+  Table t=createTableAndWait(tableName,Bytes.toBytes("cf"));
+  List<HRegion> regions=null;
+  try {
+    regions=cluster.getRegions(tableName);
+    int regionServerIndex=cluster.getServerWith(regions.get(0).getRegionInfo().getRegionName());
+    HRegionServer regionServer=cluster.getRegionServer(regionServerIndex);
+    insertData(tableName,admin,t);
+    admin.setBalancerRunning(false,true);
+    cluster.getMaster().setCatalogJanitorEnabled(false);
+    boolean tableExists=MetaTableAccessor.tableExists(regionServer.getConnection(),tableName);
+    assertEquals("The specified table should present.",true,tableExists);
+    final HRegion region=findSplittableRegion(regions);
+    assertTrue("not able to find a splittable region",region != null);
+    SplitTransactionImpl st=new SplitTransactionImpl(region,Bytes.toBytes("row2"));
+    try {
+      st.prepare();
+      st.createDaughters(regionServer,regionServer,null);
+    }
+ catch (    IOException e) {
+    }
+    tableExists=MetaTableAccessor.tableExists(regionServer.getConnection(),tableName);
+    assertEquals("The specified table should present.",true,tableExists);
+    Map<String,RegionState> rit=cluster.getMaster().getAssignmentManager().getRegionStates().getRegionsInTransition();
+    assertTrue(rit.size() == 3);
+    cluster.getMaster().getAssignmentManager().regionOffline(st.getFirstDaughter());
+    cluster.getMaster().getAssignmentManager().regionOffline(st.getSecondDaughter());
+    cluster.getMaster().getAssignmentManager().regionOffline(region.getRegionInfo());
+    rit=cluster.getMaster().getAssignmentManager().getRegionStates().getRegionsInTransition();
+    assertTrue(rit.size() == 0);
+  }
+  finally {
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    t.close();
+    TESTING_UTIL.deleteTable(tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * While transitioning node from RS_ZK_REGION_SPLITTING to
+ * RS_ZK_REGION_SPLITTING during region split,if zookeper went down split always
+ * fails for the region. HBASE-6088 fixes this scenario.
+ * This test case is to test the znode is deleted(if created) or not in roll back.
+ * @throws IOException
+ * @throws InterruptedException
+ * @throws KeeperException
+ */
+@Test(timeout=60000) public void testSplitBeforeSettingSplittingInZK() throws Exception, InterruptedException, KeeperException {
+  testSplitBeforeSettingSplittingInZKInternals();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testRITStateForRollback() throws Exception {
+  final TableName tableName=TableName.valueOf("testRITStateForRollback");
+  try {
+    Table t=createTableAndWait(tableName,Bytes.toBytes("cf"));
+    final List<HRegion> regions=cluster.getRegions(tableName);
+    final HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+    insertData(tableName,admin,t);
+    t.close();
+    this.admin.setBalancerRunning(false,true);
+    cluster.getMaster().setCatalogJanitorEnabled(false);
+    final HRegion region=findSplittableRegion(regions);
+    assertTrue("not able to find a splittable region",region != null);
+    region.getCoprocessorHost().load(FailingSplitRegionObserver.class,Coprocessor.PRIORITY_USER,region.getBaseConf());
+    this.admin.splitRegion(region.getRegionInfo().getRegionName(),new byte[]{42});
+    FailingSplitRegionObserver observer=(FailingSplitRegionObserver)region.getCoprocessorHost().findCoprocessor(FailingSplitRegionObserver.class.getName());
+    assertNotNull(observer);
+    observer.latch.await();
+    LOG.info("Waiting for region to come out of RIT");
+    TESTING_UTIL.waitFor(60000,1000,new Waiter.Predicate<Exception>(){
+      @Override public boolean evaluate() throws Exception {
+        RegionStates regionStates=cluster.getMaster().getAssignmentManager().getRegionStates();
+        Map<String,RegionState> rit=regionStates.getRegionsInTransition();
+        return !rit.containsKey(hri.getEncodedName());
+      }
+    }
+);
+  }
+  finally {
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    TESTING_UTIL.deleteTable(tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=300000) public void testSSHCleanupDaugtherRegionsOfAbortedSplit() throws Exception {
+  TableName table=TableName.valueOf("testSSHCleanupDaugtherRegionsOfAbortedSplit");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.addFamily(new HColumnDescriptor(Bytes.toBytes("f")));
+    admin.createTable(desc);
+    Connection connection=ConnectionFactory.createConnection(cluster.getConfiguration());
+    Table hTable=connection.getTable(desc.getTableName());
+    for (int i=1; i < 5; i++) {
+      Put p1=new Put(("r" + i).getBytes());
+      p1.addColumn(Bytes.toBytes("f"),"q1".getBytes(),"v".getBytes());
+      hTable.put(p1);
+    }
+    admin.flush(desc.getTableName());
+    List<HRegion> regions=cluster.getRegions(desc.getTableName());
+    int serverWith=cluster.getServerWith(regions.get(0).getRegionInfo().getRegionName());
+    HRegionServer regionServer=cluster.getRegionServer(serverWith);
+    SplitTransactionImpl st=new SplitTransactionImpl(regions.get(0),Bytes.toBytes("r3"));
+    st.prepare();
+    st.stepsBeforePONR(regionServer,regionServer,false);
+    Path tableDir=FSUtils.getTableDir(cluster.getMaster().getMasterFileSystem().getRootDir(),desc.getTableName());
+    List<Path> regionDirs=FSUtils.getRegionDirs(tableDir.getFileSystem(cluster.getConfiguration()),tableDir);
+    assertEquals(3,regionDirs.size());
+    regionServer.kill();
+    while (!cluster.getMaster().getServerManager().getDeadServers().isDeadServer(regionServer.serverName)) {
+      Thread.sleep(10);
+    }
+    while (cluster.getMaster().getServerManager().areDeadServersInProgress()) {
+      Thread.sleep(10);
+    }
+    AssignmentManager am=cluster.getMaster().getAssignmentManager();
+    assertEquals(am.getRegionStates().getRegionsInTransition().toString(),0,am.getRegionStates().getRegionsInTransition().size());
+    regionDirs=FSUtils.getRegionDirs(tableDir.getFileSystem(cluster.getConfiguration()),tableDir);
+    assertEquals(1,regionDirs.size());
+  }
+  finally {
+    TESTING_UTIL.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  this.admin.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-11 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * If a table has regions that have no store files in a region, they should split successfully
+ * into two regions with no store files.
+ */
+@Test(timeout=60000) public void testSplitRegionWithNoStoreFiles() throws Exception {
+  final TableName tableName=TableName.valueOf("testSplitRegionWithNoStoreFiles");
+  createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  int regionServerIndex=cluster.getServerWith(regions.get(0).getRegionInfo().getRegionName());
+  HRegionServer regionServer=cluster.getRegionServer(regionServerIndex);
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  try {
+    printOutRegions(regionServer,"Initial regions: ");
+    Configuration conf=cluster.getConfiguration();
+    HBaseFsck.debugLsr(conf,new Path("/"));
+    Path rootDir=FSUtils.getRootDir(conf);
+    FileSystem fs=TESTING_UTIL.getDFSCluster().getFileSystem();
+    Map<String,Path> storefiles=FSUtils.getTableStoreFilePathMap(null,fs,rootDir,tableName);
+    assertEquals("Expected nothing but found " + storefiles.toString(),storefiles.size(),0);
+    regions=cluster.getRegions(tableName);
+    final HRegion region=findSplittableRegion(regions);
+    assertTrue("not able to find a splittable region",region != null);
+    SplitTransactionImpl st=new MockedSplitTransaction(region,Bytes.toBytes("row2"));
+    try {
+      st.prepare();
+      st.execute(regionServer,regionServer);
+    }
+ catch (    IOException e) {
+      fail("Split execution should have succeeded with no exceptions thrown");
+    }
+    List<HRegion> daughters=cluster.getRegions(tableName);
+    assertTrue(daughters.size() == 2);
+    HBaseFsck.debugLsr(conf,new Path("/"));
+    Map<String,Path> storefilesAfter=FSUtils.getTableStoreFilePathMap(null,fs,rootDir,tableName);
+    assertEquals("Expected nothing but found " + storefilesAfter.toString(),storefilesAfter.size(),0);
+    hri=region.getRegionInfo();
+    AssignmentManager am=cluster.getMaster().getAssignmentManager();
+    RegionStates regionStates=am.getRegionStates();
+    long start=EnvironmentEdgeManager.currentTime();
+    while (!regionStates.isRegionInState(hri,State.SPLIT)) {
+      assertFalse("Timed out in waiting split parent to be in state SPLIT",EnvironmentEdgeManager.currentTime() - start > 60000);
+      Thread.sleep(500);
+    }
+    am.assign(hri,true);
+    assertFalse("Split region can't be assigned",regionStates.isRegionInTransition(hri));
+    assertTrue(regionStates.isRegionInState(hri,State.SPLIT));
+    am.unassign(hri,null);
+    assertFalse("Split region can't be unassigned",regionStates.isRegionInTransition(hri));
+    assertTrue(regionStates.isRegionInState(hri,State.SPLIT));
+  }
+  finally {
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=300000) public void testExistingZnodeBlocksSplitAndWeRollback() throws IOException, InterruptedException, NodeExistsException, KeeperException, ServiceException {
+  final TableName tableName=TableName.valueOf("testExistingZnodeBlocksSplitAndWeRollback");
+  Table t=createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  int tableRegionIndex=ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  RegionStates regionStates=cluster.getMaster().getAssignmentManager().getRegionStates();
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  try {
+    TESTING_UTIL.loadTable(t,HConstants.CATALOG_FAMILY,false);
+    HRegionServer server=cluster.getRegionServer(tableRegionIndex);
+    printOutRegions(server,"Initial regions: ");
+    int regionCount=ProtobufUtil.getOnlineRegions(server.getRSRpcServices()).size();
+    regionStates.updateRegionState(hri,RegionState.State.CLOSING);
+    this.admin.splitRegion(hri.getRegionName());
+    this.admin.splitRegion(hri.getRegionName());
+    this.admin.splitRegion(hri.getRegionName());
+    for (int i=0; i < 10; i++) {
+      Thread.sleep(100);
+      assertEquals(regionCount,ProtobufUtil.getOnlineRegions(server.getRSRpcServices()).size());
+    }
+    regionStates.regionOnline(hri,server.getServerName());
+    split(hri,server,regionCount);
+    checkAndGetDaughters(tableName);
+  }
+  finally {
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    t.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void after() throws Exception {
+  TESTING_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-11 type-7 type-8 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Not really restarting the master. Simulate it by clear of new region
+ * state since it is not persisted, will be lost after master restarts.
+ */
+@Test(timeout=180000) public void testSplitAndRestartingMaster() throws Exception {
+  LOG.info("Starting testSplitAndRestartingMaster");
+  final TableName tableName=TableName.valueOf("testSplitAndRestartingMaster");
+  createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  int regionServerIndex=cluster.getServerWith(regions.get(0).getRegionInfo().getRegionName());
+  HRegionServer regionServer=cluster.getRegionServer(regionServerIndex);
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  try {
+    MyMasterRpcServices.enabled.set(true);
+    regions=cluster.getRegions(tableName);
+    final HRegion region=findSplittableRegion(regions);
+    assertTrue("not able to find a splittable region",region != null);
+    SplitTransactionImpl st=new SplitTransactionImpl(region,Bytes.toBytes("row2"));
+    try {
+      st.prepare();
+      st.execute(regionServer,regionServer);
+    }
+ catch (    IOException e) {
+      fail("Split execution should have succeeded with no exceptions thrown");
+    }
+    List<HRegion> daughters=cluster.getRegions(tableName);
+    LOG.info("xxx " + regions.size() + AssignmentManager.TEST_SKIP_SPLIT_HANDLING);
+    assertTrue(daughters.size() == 2);
+  }
+  finally {
+    MyMasterRpcServices.enabled.set(false);
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that if daughter split on us, we won't do the shutdown handler fixup
+ * just because we can't find the immediate daughter of an offlined parent.
+ * @throws IOException
+ * @throws InterruptedException
+ */
+@Test(timeout=300000) public void testShutdownFixupWhenDaughterHasSplit() throws IOException, InterruptedException {
+  final TableName tableName=TableName.valueOf("testShutdownFixupWhenDaughterHasSplit");
+  Table t=createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  int tableRegionIndex=ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  try {
+    TESTING_UTIL.loadTable(t,HConstants.CATALOG_FAMILY);
+    HRegionServer server=cluster.getRegionServer(tableRegionIndex);
+    printOutRegions(server,"Initial regions: ");
+    int regionCount=ProtobufUtil.getOnlineRegions(server.getRSRpcServices()).size();
+    split(hri,server,regionCount);
+    List<HRegion> daughters=checkAndGetDaughters(tableName);
+    regionCount=ProtobufUtil.getOnlineRegions(server.getRSRpcServices()).size();
+    HRegionInfo daughter=daughters.get(0).getRegionInfo();
+    LOG.info("Daughter we are going to split: " + daughter);
+    this.admin.compactRegion(daughter.getRegionName());
+    daughters=cluster.getRegions(tableName);
+    HRegion daughterRegion=null;
+    for (    HRegion r : daughters) {
+      if (r.getRegionInfo().equals(daughter)) {
+        daughterRegion=r;
+        LOG.info("Found matching HRI: " + daughterRegion);
+        break;
+      }
+    }
+    assertTrue(daughterRegion != null);
+    for (int i=0; i < 100; i++) {
+      if (!daughterRegion.hasReferences())       break;
+      Threads.sleep(100);
+    }
+    assertFalse("Waiting for reference to be compacted",daughterRegion.hasReferences());
+    LOG.info("Daughter hri before split (has been compacted): " + daughter);
+    split(daughter,server,regionCount);
+    daughters=cluster.getRegions(tableName);
+    for (    HRegion d : daughters) {
+      LOG.info("Regions before crash: " + d);
+    }
+    cluster.abortRegionServer(tableRegionIndex);
+    waitUntilRegionServerDead();
+    awaitDaughters(tableName,daughters.size());
+    regions=cluster.getRegions(tableName);
+    for (    HRegion d : daughters) {
+      LOG.info("Regions after crash: " + d);
+    }
+    assertEquals(daughters.size(),regions.size());
+    for (    HRegion r : regions) {
+      LOG.info("Regions post crash " + r);
+      assertTrue("Missing region post crash " + r,daughters.contains(r));
+    }
+  }
+  finally {
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    t.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=180000) public void testSplitShouldNotThrowNPEEvenARegionHasEmptySplitFiles() throws Exception {
+  TableName userTableName=TableName.valueOf("testSplitShouldNotThrowNPEEvenARegionHasEmptySplitFiles");
+  HTableDescriptor htd=new HTableDescriptor(userTableName);
+  HColumnDescriptor hcd=new HColumnDescriptor("col");
+  htd.addFamily(hcd);
+  admin.createTable(htd);
+  Table table=TESTING_UTIL.getConnection().getTable(userTableName);
+  try {
+    for (int i=0; i <= 5; i++) {
+      String row="row" + i;
+      Put p=new Put(row.getBytes());
+      String val="Val" + i;
+      p.addColumn("col".getBytes(),"ql".getBytes(),val.getBytes());
+      table.put(p);
+      admin.flush(userTableName);
+      Delete d=new Delete(row.getBytes());
+      table.delete(d);
+      admin.flush(userTableName);
+    }
+    admin.majorCompact(userTableName);
+    List<HRegionInfo> regionsOfTable=TESTING_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionsOfTable(userTableName);
+    HRegionInfo hRegionInfo=regionsOfTable.get(0);
+    Put p=new Put("row6".getBytes());
+    p.addColumn("col".getBytes(),"ql".getBytes(),"val".getBytes());
+    table.put(p);
+    p=new Put("row7".getBytes());
+    p.addColumn("col".getBytes(),"ql".getBytes(),"val".getBytes());
+    table.put(p);
+    p=new Put("row8".getBytes());
+    p.addColumn("col".getBytes(),"ql".getBytes(),"val".getBytes());
+    table.put(p);
+    admin.flush(userTableName);
+    admin.splitRegion(hRegionInfo.getRegionName(),"row7".getBytes());
+    regionsOfTable=TESTING_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionsOfTable(userTableName);
+    while (regionsOfTable.size() != 2) {
+      Thread.sleep(2000);
+      regionsOfTable=TESTING_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionsOfTable(userTableName);
+    }
+    Assert.assertEquals(2,regionsOfTable.size());
+    Scan s=new Scan();
+    ResultScanner scanner=table.getScanner(s);
+    int mainTableCount=0;
+    for (Result rr=scanner.next(); rr != null; rr=scanner.next()) {
+      mainTableCount++;
+    }
+    Assert.assertEquals(3,mainTableCount);
+  }
+  finally {
+    table.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  TESTING_UTIL.ensureSomeNonStoppedRegionServersAvailable(NB_SERVERS);
+  this.admin=TESTING_UTIL.getHBaseAdmin();
+  this.cluster=TESTING_UTIL.getMiniHBaseCluster();
+}
+
+</code></pre>
+
+<pre class="type-10 type-11 type-7 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=180000) public void testSplitHooksBeforeAndAfterPONR() throws Exception {
+  TableName firstTable=TableName.valueOf("testSplitHooksBeforeAndAfterPONR_1");
+  TableName secondTable=TableName.valueOf("testSplitHooksBeforeAndAfterPONR_2");
+  HColumnDescriptor hcd=new HColumnDescriptor("cf");
+  HTableDescriptor desc=new HTableDescriptor(firstTable);
+  desc.addCoprocessor(MockedRegionObserver.class.getName());
+  desc.addFamily(hcd);
+  admin.createTable(desc);
+  TESTING_UTIL.waitUntilAllRegionsAssigned(firstTable);
+  desc=new HTableDescriptor(secondTable);
+  desc.addFamily(hcd);
+  admin.createTable(desc);
+  TESTING_UTIL.waitUntilAllRegionsAssigned(secondTable);
+  List<HRegion> firstTableRegions=cluster.getRegions(firstTable);
+  List<HRegion> secondTableRegions=cluster.getRegions(secondTable);
+  if (firstTableRegions.size() == 0 || secondTableRegions.size() == 0) {
+    fail("Each table should have at least one region.");
+  }
+  ServerName serverName=cluster.getServerHoldingRegion(firstTable,firstTableRegions.get(0).getRegionInfo().getRegionName());
+  admin.move(secondTableRegions.get(0).getRegionInfo().getEncodedNameAsBytes(),Bytes.toBytes(serverName.getServerName()));
+  Table table1=null;
+  Table table2=null;
+  try {
+    table1=TESTING_UTIL.getConnection().getTable(firstTable);
+    table2=TESTING_UTIL.getConnection().getTable(firstTable);
+    insertData(firstTable,admin,table1);
+    insertData(secondTable,admin,table2);
+    admin.split(firstTable,"row2".getBytes());
+    firstTableRegions=cluster.getRegions(firstTable);
+    while (firstTableRegions.size() != 2) {
+      Thread.sleep(1000);
+      firstTableRegions=cluster.getRegions(firstTable);
+    }
+    assertEquals("Number of regions after split should be 2.",2,firstTableRegions.size());
+    secondTableRegions=cluster.getRegions(secondTable);
+    assertEquals("Number of regions after split should be 2.",2,secondTableRegions.size());
+  }
+  finally {
+    if (table1 != null) {
+      table1.close();
+    }
+    if (table2 != null) {
+      table2.close();
+    }
+    TESTING_UTIL.deleteTable(firstTable);
+    TESTING_UTIL.deleteTable(secondTable);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreFileReferenceCreationWhenSplitPolicySaysToSkipRangeCheck() throws Exception {
+  final TableName tableName=TableName.valueOf("testStoreFileReferenceCreationWhenSplitPolicySaysToSkipRangeCheck");
+  try {
+    HTableDescriptor htd=new HTableDescriptor(tableName);
+    htd.addFamily(new HColumnDescriptor("f"));
+    htd.addFamily(new HColumnDescriptor("i_f"));
+    htd.setRegionSplitPolicyClassName(CustomSplitPolicy.class.getName());
+    admin.createTable(htd);
+    List<HRegion> regions=awaitTableRegions(tableName);
+    HRegion region=regions.get(0);
+    for (int i=3; i < 9; i++) {
+      Put p=new Put(Bytes.toBytes("row" + i));
+      p.addColumn(Bytes.toBytes("f"),Bytes.toBytes("q"),Bytes.toBytes("value" + i));
+      p.addColumn(Bytes.toBytes("i_f"),Bytes.toBytes("q"),Bytes.toBytes("value" + i));
+      region.put(p);
+    }
+    region.flush(true);
+    Store store=region.getStore(Bytes.toBytes("f"));
+    Collection<StoreFile> storefiles=store.getStorefiles();
+    assertEquals(storefiles.size(),1);
+    assertFalse(region.hasReferences());
+    Path referencePath=region.getRegionFileSystem().splitStoreFile(region.getRegionInfo(),"f",storefiles.iterator().next(),Bytes.toBytes("row1"),false,region.getSplitPolicy());
+    assertNull(referencePath);
+    referencePath=region.getRegionFileSystem().splitStoreFile(region.getRegionInfo(),"i_f",storefiles.iterator().next(),Bytes.toBytes("row1"),false,region.getSplitPolicy());
+    assertNotNull(referencePath);
+  }
+  finally {
+    TESTING_UTIL.deleteTable(tableName);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Verifies HBASE-5806.  Here the case is that splitting is completed but before the
+ * CJ could remove the parent region the master is killed and restarted.
+ * @throws IOException
+ * @throws InterruptedException
+ * @throws NodeExistsException
+ * @throws KeeperException
+ */
+@Test(timeout=300000) public void testMasterRestartAtRegionSplitPendingCatalogJanitor() throws IOException, InterruptedException, NodeExistsException, KeeperException, ServiceException {
+  final TableName tableName=TableName.valueOf("testMasterRestartAtRegionSplitPendingCatalogJanitor");
+  Table t=createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  int tableRegionIndex=ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  ZooKeeperWatcher zkw=new ZooKeeperWatcher(t.getConfiguration(),"testMasterRestartAtRegionSplitPendingCatalogJanitor",new UselessTestAbortable());
+  try {
+    TESTING_UTIL.loadTable(t,HConstants.CATALOG_FAMILY,false);
+    HRegionServer server=cluster.getRegionServer(tableRegionIndex);
+    printOutRegions(server,"Initial regions: ");
+    this.admin.splitRegion(hri.getRegionName());
+    checkAndGetDaughters(tableName);
+    HMaster master=abortAndWaitForMaster();
+    this.admin=TESTING_UTIL.getHBaseAdmin();
+    hri.setOffline(true);
+    hri.setSplit(true);
+    RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+    assertTrue("Split parent should be in SPLIT state",regionStates.isRegionInState(hri,State.SPLIT));
+    ServerName regionServerOfRegion=regionStates.getRegionServerOfRegion(hri);
+    assertTrue(regionServerOfRegion == null);
+  }
+  finally {
+    this.admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    t.close();
+    zkw.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * A test that intentionally has master fail the processing of the split message.
+ * Tests that after we process server shutdown, the daughters are up on line.
+ * @throws IOException
+ * @throws InterruptedException
+ * @throws ServiceException
+ */
+@Test(timeout=300000) public void testRSSplitDaughtersAreOnlinedAfterShutdownHandling() throws IOException, InterruptedException, ServiceException {
+  final TableName tableName=TableName.valueOf("testRSSplitDaughtersAreOnlinedAfterShutdownHandling");
+  Table t=createTableAndWait(tableName,HConstants.CATALOG_FAMILY);
+  List<HRegion> regions=cluster.getRegions(tableName);
+  HRegionInfo hri=getAndCheckSingleTableRegion(regions);
+  int tableRegionIndex=ensureTableRegionNotOnSameServerAsMeta(admin,hri);
+  this.admin.setBalancerRunning(false,true);
+  cluster.getMaster().setCatalogJanitorEnabled(false);
+  try {
+    TESTING_UTIL.loadTable(t,HConstants.CATALOG_FAMILY,false);
+    HRegionServer server=cluster.getRegionServer(tableRegionIndex);
+    printOutRegions(server,"Initial regions: ");
+    int regionCount=ProtobufUtil.getOnlineRegions(server.getRSRpcServices()).size();
+    AssignmentManager.TEST_SKIP_SPLIT_HANDLING=true;
+    try {
+      split(hri,server,regionCount);
+    }
+ catch (    RegionServerStoppedException rsse) {
+    }
+    waitUntilRegionServerDead();
+    awaitDaughters(tableName,2);
+  }
+  finally {
+    AssignmentManager.TEST_SKIP_SPLIT_HANDLING=false;
+    admin.setBalancerRunning(true,false);
+    cluster.getMaster().setCatalogJanitorEnabled(true);
+    cluster.startRegionServer();
+    t.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

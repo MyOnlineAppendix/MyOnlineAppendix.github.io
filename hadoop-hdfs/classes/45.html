@@ -1,0 +1,588 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestQuota (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test commands that change the size of the name space:
+ * mkdirs, rename, and delete 
+ */
+@Test public void testNamespaceCommands() throws Exception {
+  final Configuration conf=new HdfsConfiguration();
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  final FileSystem fs=cluster.getFileSystem();
+  assertTrue("Not a HDFS: " + fs.getUri(),fs instanceof DistributedFileSystem);
+  final DistributedFileSystem dfs=(DistributedFileSystem)fs;
+  try {
+    assertTrue(dfs.mkdirs(new Path("/nqdir0/qdir1/qdir20/nqdir30")));
+    final Path quotaDir1=new Path("/nqdir0/qdir1");
+    dfs.setQuota(quotaDir1,6,FSConstants.QUOTA_DONT_SET);
+    ContentSummary c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),3);
+    assertEquals(c.getQuota(),6);
+    final Path quotaDir2=new Path("/nqdir0/qdir1/qdir20");
+    dfs.setQuota(quotaDir2,7,FSConstants.QUOTA_DONT_SET);
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),2);
+    assertEquals(c.getQuota(),7);
+    final Path quotaDir3=new Path("/nqdir0/qdir1/qdir21");
+    assertTrue(dfs.mkdirs(quotaDir3));
+    dfs.setQuota(quotaDir3,2,FSConstants.QUOTA_DONT_SET);
+    c=dfs.getContentSummary(quotaDir3);
+    assertEquals(c.getDirectoryCount(),1);
+    assertEquals(c.getQuota(),2);
+    Path tempPath=new Path(quotaDir3,"nqdir32");
+    assertTrue(dfs.mkdirs(tempPath));
+    c=dfs.getContentSummary(quotaDir3);
+    assertEquals(c.getDirectoryCount(),2);
+    assertEquals(c.getQuota(),2);
+    tempPath=new Path(quotaDir3,"nqdir33");
+    boolean hasException=false;
+    try {
+      assertFalse(dfs.mkdirs(tempPath));
+    }
+ catch (    NSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    c=dfs.getContentSummary(quotaDir3);
+    assertEquals(c.getDirectoryCount(),2);
+    assertEquals(c.getQuota(),2);
+    tempPath=new Path(quotaDir2,"nqdir31");
+    assertTrue(dfs.mkdirs(tempPath));
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),3);
+    assertEquals(c.getQuota(),7);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),6);
+    assertEquals(c.getQuota(),6);
+    tempPath=new Path(quotaDir2,"nqdir33");
+    hasException=false;
+    try {
+      assertFalse(dfs.mkdirs(tempPath));
+    }
+ catch (    NSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    tempPath=new Path(quotaDir2,"nqdir30");
+    dfs.rename(new Path(quotaDir3,"nqdir32"),tempPath);
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),4);
+    assertEquals(c.getQuota(),7);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),6);
+    assertEquals(c.getQuota(),6);
+    hasException=false;
+    try {
+      assertFalse(dfs.rename(tempPath,quotaDir3));
+    }
+ catch (    NSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    assertTrue(dfs.exists(tempPath));
+    assertFalse(dfs.exists(new Path(quotaDir3,"nqdir30")));
+    hasException=false;
+    try {
+      assertFalse(dfs.rename(tempPath,new Path(quotaDir3,"nqdir32")));
+    }
+ catch (    QuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    assertTrue(dfs.exists(tempPath));
+    assertFalse(dfs.exists(new Path(quotaDir3,"nqdir32")));
+    assertTrue(dfs.rename(tempPath,new Path("/nqdir0")));
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),2);
+    assertEquals(c.getQuota(),7);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),4);
+    assertEquals(c.getQuota(),6);
+    assertTrue(dfs.mkdirs(new Path("/nqdir0/nqdir30/nqdir33")));
+    hasException=false;
+    try {
+      assertFalse(dfs.rename(new Path("/nqdir0/nqdir30"),tempPath));
+    }
+ catch (    NSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    assertTrue(dfs.rename(quotaDir3,quotaDir2));
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),4);
+    assertEquals(c.getQuota(),6);
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),3);
+    assertEquals(c.getQuota(),7);
+    tempPath=new Path(quotaDir2,"qdir21");
+    c=dfs.getContentSummary(tempPath);
+    assertEquals(c.getDirectoryCount(),1);
+    assertEquals(c.getQuota(),2);
+    dfs.delete(tempPath,true);
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),2);
+    assertEquals(c.getQuota(),7);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),3);
+    assertEquals(c.getQuota(),6);
+    assertTrue(dfs.rename(new Path("/nqdir0/nqdir30"),quotaDir2));
+    c=dfs.getContentSummary(quotaDir2);
+    assertEquals(c.getDirectoryCount(),5);
+    assertEquals(c.getQuota(),7);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getDirectoryCount(),6);
+    assertEquals(c.getQuota(),6);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Like the previous test but create many files. This covers bugs where
+ * the quota adjustment is incorrect but it takes many files to accrue 
+ * a big enough accounting error to violate the quota.
+ */
+@Test public void testMultipleFilesSmallerThanOneBlock() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  final int BLOCK_SIZE=6 * 1024;
+  conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,BLOCK_SIZE);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  cluster.waitActive();
+  FileSystem fs=cluster.getFileSystem();
+  DFSAdmin admin=new DFSAdmin(conf);
+  try {
+    Path dir=new Path("/test");
+    boolean exceededQuota=false;
+    ContentSummary c;
+    final int FILE_SIZE=1024;
+    final int QUOTA_SIZE=32 * (int)fs.getDefaultBlockSize();
+    assertEquals(6 * 1024,fs.getDefaultBlockSize());
+    assertEquals(192 * 1024,QUOTA_SIZE);
+    assertTrue(fs.mkdirs(dir));
+    runCommand(admin,false,"-setSpaceQuota",Integer.toString(QUOTA_SIZE),dir.toString());
+    for (int i=0; i < 59; i++) {
+      Path file=new Path("/test/test" + i);
+      DFSTestUtil.createFile(fs,file,FILE_SIZE,(short)3,1L);
+      DFSTestUtil.waitReplication(fs,file,(short)3);
+    }
+    c=fs.getContentSummary(dir);
+    assertEquals("Invalid space consumed",59 * FILE_SIZE * 3,c.getSpaceConsumed());
+    assertEquals("Invalid space consumed",QUOTA_SIZE - (59 * FILE_SIZE * 3),3 * (fs.getDefaultBlockSize() - FILE_SIZE));
+    try {
+      Path file=new Path("/test/test59");
+      DFSTestUtil.createFile(fs,file,FILE_SIZE,(short)3,1L);
+      DFSTestUtil.waitReplication(fs,file,(short)3);
+    }
+ catch (    QuotaExceededException e) {
+      exceededQuota=true;
+    }
+    assertTrue("Quota not exceeded",exceededQuota);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test HDFS operations that change disk space consumed by a directory tree.
+ * namely create, rename, delete, append, and setReplication.
+ * This is based on testNamespaceCommands() above.
+ */
+@Test public void testSpaceCommands() throws Exception {
+  final Configuration conf=new HdfsConfiguration();
+  conf.set(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,"512");
+  conf.setBoolean("dfs.support.append",true);
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  final FileSystem fs=cluster.getFileSystem();
+  assertTrue("Not a HDFS: " + fs.getUri(),fs instanceof DistributedFileSystem);
+  final DistributedFileSystem dfs=(DistributedFileSystem)fs;
+  try {
+    int fileLen=1024;
+    short replication=3;
+    int fileSpace=fileLen * replication;
+    assertTrue(dfs.mkdirs(new Path("/nqdir0/qdir1/qdir20/nqdir30")));
+    final Path quotaDir1=new Path("/nqdir0/qdir1");
+    dfs.setQuota(quotaDir1,FSConstants.QUOTA_DONT_SET,4 * fileSpace);
+    ContentSummary c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getSpaceQuota(),4 * fileSpace);
+    final Path quotaDir20=new Path("/nqdir0/qdir1/qdir20");
+    dfs.setQuota(quotaDir20,FSConstants.QUOTA_DONT_SET,6 * fileSpace);
+    c=dfs.getContentSummary(quotaDir20);
+    assertEquals(c.getSpaceQuota(),6 * fileSpace);
+    final Path quotaDir21=new Path("/nqdir0/qdir1/qdir21");
+    assertTrue(dfs.mkdirs(quotaDir21));
+    dfs.setQuota(quotaDir21,FSConstants.QUOTA_DONT_SET,2 * fileSpace);
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceQuota(),2 * fileSpace);
+    Path tempPath=new Path(quotaDir21,"nqdir32");
+    assertTrue(dfs.mkdirs(tempPath));
+    DFSTestUtil.createFile(dfs,new Path(tempPath,"fileDir/file1"),fileLen,replication,0);
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceConsumed(),fileSpace);
+    boolean hasException=false;
+    try {
+      DFSTestUtil.createFile(dfs,new Path(quotaDir21,"nqdir33/file2"),2 * fileLen,replication,0);
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    assertTrue(dfs.delete(new Path(quotaDir21,"nqdir33"),true));
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceConsumed(),fileSpace);
+    assertEquals(c.getSpaceQuota(),2 * fileSpace);
+    c=dfs.getContentSummary(quotaDir20);
+    assertEquals(c.getSpaceConsumed(),0);
+    Path dstPath=new Path(quotaDir20,"nqdir30");
+    Path srcPath=new Path(quotaDir21,"nqdir32");
+    assertTrue(dfs.rename(srcPath,dstPath));
+    c=dfs.getContentSummary(quotaDir20);
+    assertEquals(c.getSpaceConsumed(),fileSpace);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getSpaceConsumed(),fileSpace);
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceConsumed(),0);
+    final Path file2=new Path(dstPath,"fileDir/file2");
+    int file2Len=2 * fileLen;
+    DFSTestUtil.createFile(dfs,file2,file2Len,replication,0);
+    c=dfs.getContentSummary(quotaDir20);
+    assertEquals(c.getSpaceConsumed(),3 * fileSpace);
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceConsumed(),0);
+    hasException=false;
+    try {
+      assertFalse(dfs.rename(dstPath,srcPath));
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    assertFalse(dfs.exists(srcPath));
+    assertTrue(dfs.exists(dstPath));
+    c=dfs.getContentSummary(quotaDir20);
+    assertEquals(c.getSpaceConsumed(),3 * fileSpace);
+    c=dfs.getContentSummary(quotaDir21);
+    assertEquals(c.getSpaceConsumed(),0);
+    c=dfs.getContentSummary(quotaDir1);
+    assertEquals(c.getSpaceQuota(),4 * fileSpace);
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),3 * fileSpace);
+    OutputStream out=dfs.append(file2);
+    out.write(new byte[fileLen]);
+    out.close();
+    file2Len+=fileLen;
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),4 * fileSpace);
+    dfs.setQuota(quotaDir1,FSConstants.QUOTA_DONT_SET,5 * fileSpace);
+    out=dfs.append(file2);
+    hasException=false;
+    try {
+      out.write(new byte[fileLen + 1024]);
+      out.flush();
+      out.close();
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+      IOUtils.closeStream(out);
+    }
+    assertTrue(hasException);
+    file2Len+=fileLen;
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),5 * fileSpace);
+    dfs.setReplication(file2,(short)(replication - 1));
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),5 * fileSpace - file2Len);
+    hasException=false;
+    try {
+      dfs.setReplication(file2,(short)(replication + 1));
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),5 * fileSpace - file2Len);
+    dfs.setQuota(quotaDir1,FSConstants.QUOTA_DONT_SET,10 * fileSpace);
+    dfs.setQuota(quotaDir20,FSConstants.QUOTA_DONT_SET,10 * fileSpace);
+    dfs.setReplication(file2,(short)(replication + 1));
+    c=dfs.getContentSummary(dstPath);
+    assertEquals(c.getSpaceConsumed(),5 * fileSpace + file2Len);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Violate a space quota using files of size < 1 block. Test that block
+ * allocation conservatively assumes that for quota checking the entire
+ * space of the block is used.
+ */
+@Test public void testBlockAllocationAdjustsUsageConservatively() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  final int BLOCK_SIZE=6 * 1024;
+  conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,BLOCK_SIZE);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  cluster.waitActive();
+  FileSystem fs=cluster.getFileSystem();
+  DFSAdmin admin=new DFSAdmin(conf);
+  try {
+    Path dir=new Path("/test");
+    Path file1=new Path("/test/test1");
+    Path file2=new Path("/test/test2");
+    boolean exceededQuota=false;
+    final int QUOTA_SIZE=3 * BLOCK_SIZE;
+    final int FILE_SIZE=BLOCK_SIZE / 2;
+    ContentSummary c;
+    assertTrue(fs.mkdirs(dir));
+    runCommand(admin,false,"-setSpaceQuota",Integer.toString(QUOTA_SIZE),dir.toString());
+    DFSTestUtil.createFile(fs,file1,FILE_SIZE,(short)3,1L);
+    DFSTestUtil.waitReplication(fs,file1,(short)3);
+    c=fs.getContentSummary(dir);
+    assertEquals("Quota is half consumed",QUOTA_SIZE / 2,c.getSpaceConsumed());
+    try {
+      DFSTestUtil.createFile(fs,file2,FILE_SIZE,(short)3,1L);
+    }
+ catch (    QuotaExceededException e) {
+      exceededQuota=true;
+    }
+    assertTrue("Quota not exceeded",exceededQuota);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test quota related commands: 
+ * setQuota, clrQuota, setSpaceQuota, clrSpaceQuota, and count 
+ */
+@Test public void testQuotaCommands() throws Exception {
+  final Configuration conf=new HdfsConfiguration();
+  final int DEFAULT_BLOCK_SIZE=512;
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,DEFAULT_BLOCK_SIZE);
+  conf.setBoolean("dfs.support.append",true);
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  final FileSystem fs=cluster.getFileSystem();
+  assertTrue("Not a HDFS: " + fs.getUri(),fs instanceof DistributedFileSystem);
+  final DistributedFileSystem dfs=(DistributedFileSystem)fs;
+  DFSAdmin admin=new DFSAdmin(conf);
+  try {
+    final int fileLen=1024;
+    final short replication=5;
+    final long spaceQuota=fileLen * replication * 15 / 8;
+    final Path parent=new Path("/test");
+    assertTrue(dfs.mkdirs(parent));
+    String[] args=new String[]{"-setQuota","3",parent.toString()};
+    runCommand(admin,args,false);
+    runCommand(admin,false,"-setSpaceQuota","2t",parent.toString());
+    assertEquals(2L << 40,dfs.getContentSummary(parent).getSpaceQuota());
+    runCommand(admin,false,"-setSpaceQuota",Long.toString(spaceQuota),parent.toString());
+    final Path childDir0=new Path(parent,"data0");
+    assertTrue(dfs.mkdirs(childDir0));
+    final Path childFile0=new Path(parent,"datafile0");
+    DFSTestUtil.createFile(fs,childFile0,fileLen,replication,0);
+    ContentSummary c=dfs.getContentSummary(parent);
+    assertEquals(c.getFileCount() + c.getDirectoryCount(),3);
+    assertEquals(c.getQuota(),3);
+    assertEquals(c.getSpaceConsumed(),fileLen * replication);
+    assertEquals(c.getSpaceQuota(),spaceQuota);
+    c=dfs.getContentSummary(childDir0);
+    assertEquals(c.getFileCount() + c.getDirectoryCount(),1);
+    assertEquals(c.getQuota(),-1);
+    c=dfs.getContentSummary(parent);
+    assertEquals(c.getSpaceConsumed(),fileLen * replication);
+    final Path childDir1=new Path(parent,"data1");
+    boolean hasException=false;
+    try {
+      assertFalse(dfs.mkdirs(childDir1));
+    }
+ catch (    QuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    OutputStream fout;
+    final Path childFile1=new Path(parent,"datafile1");
+    hasException=false;
+    try {
+      fout=dfs.create(childFile1);
+    }
+ catch (    QuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    runCommand(admin,new String[]{"-clrQuota",parent.toString()},false);
+    c=dfs.getContentSummary(parent);
+    assertEquals(c.getQuota(),-1);
+    assertEquals(c.getSpaceQuota(),spaceQuota);
+    runCommand(admin,new String[]{"-clrQuota",childDir0.toString()},false);
+    c=dfs.getContentSummary(childDir0);
+    assertEquals(c.getQuota(),-1);
+    fout=dfs.create(childFile1,replication);
+    hasException=false;
+    try {
+      fout.write(new byte[fileLen]);
+      fout.close();
+    }
+ catch (    QuotaExceededException e) {
+      hasException=true;
+      IOUtils.closeStream(fout);
+    }
+    assertTrue(hasException);
+    dfs.delete(childFile1,false);
+    runCommand(admin,false,"-clrSpaceQuota",parent.toString());
+    c=dfs.getContentSummary(parent);
+    assertEquals(c.getQuota(),-1);
+    assertEquals(c.getSpaceQuota(),-1);
+    DFSTestUtil.createFile(dfs,childFile1,fileLen,replication,0);
+    args=new String[]{"-setQuota","1",parent.toString()};
+    runCommand(admin,args,false);
+    runCommand(admin,false,"-setSpaceQuota",Integer.toString(fileLen),args[2]);
+    args=new String[]{"-setQuota","1",childDir0.toString()};
+    runCommand(admin,args,false);
+    hasException=false;
+    try {
+      assertFalse(dfs.mkdirs(new Path(childDir0,"in")));
+    }
+ catch (    QuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    c=dfs.getContentSummary(childDir0);
+    assertEquals(c.getDirectoryCount() + c.getFileCount(),1);
+    assertEquals(c.getQuota(),1);
+    Path nonExistentPath=new Path("/test1");
+    assertFalse(dfs.exists(nonExistentPath));
+    args=new String[]{"-setQuota","1",nonExistentPath.toString()};
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota","1g",nonExistentPath.toString());
+    assertTrue(dfs.isFile(childFile0));
+    args[1]=childFile0.toString();
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota","1t",args[1]);
+    args[0]="-clrQuota";
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-clrSpaceQuota",args[1]);
+    args[1]=nonExistentPath.toString();
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-clrSpaceQuota",args[1]);
+    args=new String[]{"-setQuota","0",parent.toString()};
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota","0",args[2]);
+    args[1]="-1";
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota",args[1],args[2]);
+    args[1]=String.valueOf(Long.MAX_VALUE + 1L);
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota",args[1],args[2]);
+    args[1]="33aa1.5";
+    runCommand(admin,args,true);
+    runCommand(admin,true,"-setSpaceQuota",args[1],args[2]);
+    runCommand(admin,true,"-setSpaceQuota",(Long.MAX_VALUE / 1024 / 1024 + 1024) + "m",args[2]);
+    final String username="userxx";
+    UserGroupInformation ugi=UserGroupInformation.createUserForTesting(username,new String[]{"groupyy"});
+    final String[] args2=args.clone();
+    ugi.doAs(new PrivilegedExceptionAction(){
+      @Override public Object run() throws Exception {
+        assertEquals("Not running as new user",username,UserGroupInformation.getCurrentUser().getShortUserName());
+        DFSAdmin userAdmin=new DFSAdmin(conf);
+        args2[1]="100";
+        runCommand(userAdmin,args2,true);
+        runCommand(userAdmin,true,"-setSpaceQuota","1g",args2[2]);
+        String[] args3=new String[]{"-clrQuota",parent.toString()};
+        runCommand(userAdmin,args3,true);
+        runCommand(userAdmin,true,"-clrSpaceQuota",args3[1]);
+        return null;
+      }
+    }
+);
+    runCommand(admin,true,"-clrQuota","/");
+    runCommand(admin,false,"-setQuota","1000000","/");
+    runCommand(admin,true,"-clrQuota","/");
+    runCommand(admin,false,"-clrSpaceQuota","/");
+    runCommand(admin,new String[]{"-clrQuota",parent.toString()},false);
+    runCommand(admin,false,"-clrSpaceQuota",parent.toString());
+    final Path childDir2=new Path(parent,"data2");
+    assertTrue(dfs.mkdirs(childDir2));
+    final Path childFile2=new Path(childDir2,"datafile2");
+    final Path childFile3=new Path(childDir2,"datafile3");
+    final long spaceQuota2=DEFAULT_BLOCK_SIZE * replication;
+    final long fileLen2=DEFAULT_BLOCK_SIZE;
+    runCommand(admin,false,"-setSpaceQuota",Long.toString(spaceQuota2),childDir2.toString());
+    runCommand(admin,false,"-clrSpaceQuota",childDir2.toString());
+    DFSTestUtil.createFile(fs,childFile2,fileLen2,replication,0);
+    runCommand(admin,false,"-setSpaceQuota",Long.toString(spaceQuota2),childDir2.toString());
+    hasException=false;
+    try {
+      DFSTestUtil.createFile(fs,childFile3,fileLen2,replication,0);
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+    final Path childFile4=new Path("/","datafile2");
+    final Path childFile5=new Path("/","datafile3");
+    runCommand(admin,true,"-clrQuota","/");
+    runCommand(admin,false,"-clrSpaceQuota","/");
+    runCommand(admin,false,"-setSpaceQuota",Long.toString(spaceQuota2),"/");
+    runCommand(admin,false,"-clrSpaceQuota","/");
+    DFSTestUtil.createFile(fs,childFile4,fileLen2,replication,0);
+    runCommand(admin,false,"-setSpaceQuota",Long.toString(spaceQuota2),"/");
+    hasException=false;
+    try {
+      DFSTestUtil.createFile(fs,childFile5,fileLen2,replication,0);
+    }
+ catch (    DSQuotaExceededException e) {
+      hasException=true;
+    }
+    assertTrue(hasException);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

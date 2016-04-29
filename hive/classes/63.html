@@ -1,0 +1,154 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hive.metastore.TestHiveMetaStorePartitionSpecs (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test for HiveMetaStoreClient.listPartitionSpecs() and HiveMetaStoreClient.listPartitionSpecsByFilter().
+ * Check behaviour with and without Partition-grouping enabled.
+ */
+@Test public void testGetPartitionSpecs_WithAndWithoutPartitionGrouping(){
+  testGetPartitionSpecs(true);
+  testGetPartitionSpecs(false);
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 type-5 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to confirm that partitions can be added using PartitionSpecs.
+ */
+@Test public void testAddPartitions(){
+  try {
+    HiveMetaStoreClient hmsc=new HiveMetaStoreClient(hiveConf);
+    clearAndRecreateDB(hmsc);
+    createTable(hmsc,true);
+    Table table=hmsc.getTable(dbName,tableName);
+    populatePartitions(hmsc,table,Arrays.asList("isLocatedInTablePath","isLocatedOutsideTablePath"));
+    String targetTableName="cloned_" + tableName;
+    Table targetTable=new Table(table);
+    targetTable.setTableName(targetTableName);
+    StorageDescriptor targetTableSd=new StorageDescriptor(targetTable.getSd());
+    targetTableSd.setLocation(targetTableSd.getLocation().replace(tableName,targetTableName));
+    hmsc.createTable(targetTable);
+    PartitionSpecProxy partitionsForAddition=hmsc.listPartitionSpecsByFilter(dbName,tableName,"blurb = \"isLocatedInTablePath\"",-1);
+    partitionsForAddition.setTableName(targetTableName);
+    partitionsForAddition.setRootLocation(targetTableSd.getLocation());
+    Assert.assertEquals("Unexpected number of partitions added. ",partitionsForAddition.size(),hmsc.add_partitions_pspec(partitionsForAddition));
+    PartitionSpecProxy clonedPartitions=hmsc.listPartitionSpecs(dbName,targetTableName,-1);
+    Assert.assertEquals("Unexpected number of partitions returned. ",partitionsForAddition.size(),clonedPartitions.size());
+    PartitionSpecProxy.PartitionIterator sourceIterator=partitionsForAddition.getPartitionIterator(), targetIterator=clonedPartitions.getPartitionIterator();
+    while (targetIterator.hasNext()) {
+      Partition sourcePartition=sourceIterator.next(), targetPartition=targetIterator.next();
+      Assert.assertEquals("Mismatched values.",sourcePartition.getValues(),targetPartition.getValues());
+      Assert.assertEquals("Mismatched locations.",sourcePartition.getSd().getLocation(),targetPartition.getSd().getLocation());
+    }
+  }
+ catch (  Throwable t) {
+    LOG.error("Unexpected Exception!",t);
+    t.printStackTrace();
+    Assert.assertTrue("Unexpected Exception!",false);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to confirm that Partition-grouping behaves correctly when Table-schemas evolve.
+ * Partitions must be grouped by location and schema.
+ */
+@Test public void testFetchingPartitionsWithDifferentSchemas(){
+  try {
+    HiveMetaStoreClient hmsc=new HiveMetaStoreClient(hiveConf);
+    clearAndRecreateDB(hmsc);
+    createTable(hmsc,true);
+    Table table=hmsc.getTable(dbName,tableName);
+    populatePartitions(hmsc,table,Arrays.asList("isLocatedInTablePath","isLocatedOutsideTablePath"));
+    List<FieldSchema> fields=table.getSd().getCols();
+    fields.add(new FieldSchema("goo","string","Entirely new column. Doesn't apply to older partitions."));
+    table.getSd().setCols(fields);
+    hmsc.alter_table(dbName,tableName,table);
+    table=hmsc.getTable(dbName,tableName);
+    Assert.assertEquals("Unexpected number of table columns.",3,table.getSd().getColsSize());
+    populatePartitions(hmsc,table,Arrays.asList("hasNewColumn"));
+    PartitionSpecProxy partitionSpecProxy=hmsc.listPartitionSpecs(dbName,tableName,-1);
+    Assert.assertEquals("Unexpected number of partitions.",nDates * 3,partitionSpecProxy.size());
+    Assert.assertTrue("Unexpected type of PartitionSpecProxy.",partitionSpecProxy instanceof CompositePartitionSpecProxy);
+    CompositePartitionSpecProxy compositePartitionSpecProxy=(CompositePartitionSpecProxy)partitionSpecProxy;
+    List<PartitionSpec> partitionSpecs=compositePartitionSpecProxy.toPartitionSpec();
+    Assert.assertTrue("PartitionSpec[0] should have been a SharedSDPartitionSpec.",partitionSpecs.get(0).isSetSharedSDPartitionSpec());
+    Assert.assertEquals("PartitionSpec[0] should use the table-path as the common root location. ",table.getSd().getLocation(),partitionSpecs.get(0).getRootPath());
+    Assert.assertTrue("PartitionSpec[1] should have been a SharedSDPartitionSpec.",partitionSpecs.get(1).isSetSharedSDPartitionSpec());
+    Assert.assertEquals("PartitionSpec[1] should use the table-path as the common root location. ",table.getSd().getLocation(),partitionSpecs.get(1).getRootPath());
+    Assert.assertTrue("PartitionSpec[2] should have been a ListComposingPartitionSpec.",partitionSpecs.get(2).isSetPartitionList());
+    PartitionSpecProxy.PartitionIterator iterator=partitionSpecProxy.getPartitionIterator();
+    Map<String,List<Partition>> blurbToPartitionList=new HashMap<String,List<Partition>>(3);
+    while (iterator.hasNext()) {
+      Partition partition=iterator.next();
+      String blurb=partition.getValues().get(1);
+      if (!blurbToPartitionList.containsKey(blurb)) {
+        blurbToPartitionList.put(blurb,new ArrayList<Partition>(nDates));
+      }
+      blurbToPartitionList.get(blurb).add(partition);
+    }
+    for (    Partition partition : blurbToPartitionList.get("isLocatedOutsideTablePath")) {
+      Assert.assertEquals("Unexpected number of columns.",2,partition.getSd().getCols().size());
+      Assert.assertEquals("Unexpected first column.","foo",partition.getSd().getCols().get(0).getName());
+      Assert.assertEquals("Unexpected second column.","bar",partition.getSd().getCols().get(1).getName());
+      String partitionLocation=partition.getSd().getLocation();
+      String tableLocation=table.getSd().getLocation();
+      Assert.assertTrue("Unexpected partition location: " + partitionLocation + ". "+ "Partition should have been outside table location: "+ tableLocation,!partitionLocation.startsWith(tableLocation));
+    }
+    for (    Partition partition : blurbToPartitionList.get("isLocatedInTablePath")) {
+      Assert.assertEquals("Unexpected number of columns.",2,partition.getSd().getCols().size());
+      Assert.assertEquals("Unexpected first column.","foo",partition.getSd().getCols().get(0).getName());
+      Assert.assertEquals("Unexpected second column.","bar",partition.getSd().getCols().get(1).getName());
+      String partitionLocation=partition.getSd().getLocation();
+      String tableLocation=table.getSd().getLocation();
+      Assert.assertTrue("Unexpected partition location: " + partitionLocation + ". "+ "Partition should have been within table location: "+ tableLocation,partitionLocation.startsWith(tableLocation));
+    }
+    for (    Partition partition : blurbToPartitionList.get("hasNewColumn")) {
+      Assert.assertEquals("Unexpected number of columns.",3,partition.getSd().getCols().size());
+      Assert.assertEquals("Unexpected first column.","foo",partition.getSd().getCols().get(0).getName());
+      Assert.assertEquals("Unexpected second column.","bar",partition.getSd().getCols().get(1).getName());
+      Assert.assertEquals("Unexpected third column.","goo",partition.getSd().getCols().get(2).getName());
+      String partitionLocation=partition.getSd().getLocation();
+      String tableLocation=table.getSd().getLocation();
+      Assert.assertTrue("Unexpected partition location: " + partitionLocation + ". "+ "Partition should have been within table location: "+ tableLocation,partitionLocation.startsWith(tableLocation));
+    }
+  }
+ catch (  Throwable t) {
+    LOG.error("Unexpected Exception!",t);
+    t.printStackTrace();
+    Assert.assertTrue("Unexpected Exception!",false);
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDown() throws Exception {
+  LOG.info("Shutting down metastore.");
+  System.setSecurityManager(securityManager);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

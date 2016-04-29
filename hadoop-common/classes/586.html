@@ -1,0 +1,282 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.metrics.TestNameNodeMetrics (12 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test to ensure metrics reflects missing blocks 
+ */
+@Test public void testMissingBlock() throws Exception {
+  Path file=getTestPath("testMissingBlocks");
+  createFile(file,100,(short)1);
+  LocatedBlock block=NameNodeAdapter.getBlockLocations(cluster.getNameNode(),file.toString(),0,1).get(0);
+  cluster.getNamesystem().writeLock();
+  try {
+    bm.findAndMarkBlockAsCorrupt(block.getBlock(),block.getLocations()[0],"STORAGE_ID","TEST");
+  }
+  finally {
+    cluster.getNamesystem().writeUnlock();
+  }
+  Thread.sleep(1000);
+  MetricsRecordBuilder rb=getMetrics(NS_METRICS);
+  assertGauge("UnderReplicatedBlocks",1L,rb);
+  assertGauge("MissingBlocks",1L,rb);
+  fs.delete(file,true);
+  waitForDnMetricValue(NS_METRICS,"UnderReplicatedBlocks",0L);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  cluster=new MiniDFSCluster.Builder(CONF).numDataNodes(DATANODE_COUNT).build();
+  cluster.waitActive();
+  namesystem=cluster.getNamesystem();
+  bm=namesystem.getBlockManager();
+  fs=cluster.getFileSystem();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test metrics indicating the number of stale DataNodes 
+ */
+@Test public void testStaleNodes() throws Exception {
+  for (int i=0; i < 2; i++) {
+    DataNode dn=cluster.getDataNodes().get(i);
+    DataNodeTestUtils.setHeartbeatsDisabledForTests(dn,true);
+    long staleInterval=CONF.getLong(DFSConfigKeys.DFS_NAMENODE_STALE_DATANODE_INTERVAL_KEY,DFSConfigKeys.DFS_NAMENODE_STALE_DATANODE_INTERVAL_DEFAULT);
+    cluster.getNameNode().getNamesystem().getBlockManager().getDatanodeManager().getDatanode(dn.getDatanodeId()).setLastUpdate(Time.now() - staleInterval - 1);
+  }
+  BlockManagerTestUtil.checkHeartbeat(cluster.getNameNode().getNamesystem().getBlockManager());
+  assertGauge("StaleDataNodes",2,getMetrics(NS_METRICS));
+  for (int i=0; i < 2; i++) {
+    DataNode dn=cluster.getDataNodes().get(i);
+    DataNodeTestUtils.setHeartbeatsDisabledForTests(dn,false);
+    cluster.getNameNode().getNamesystem().getBlockManager().getDatanodeManager().getDatanode(dn.getDatanodeId()).setLastUpdate(Time.now());
+  }
+  BlockManagerTestUtil.checkHeartbeat(cluster.getNameNode().getNamesystem().getBlockManager());
+  assertGauge("StaleDataNodes",0,getMetrics(NS_METRICS));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRenameMetrics() throws Exception {
+  Path src=getTestPath("src");
+  createFile(src,100,(short)1);
+  Path target=getTestPath("target");
+  createFile(target,100,(short)1);
+  fs.rename(src,target,Rename.OVERWRITE);
+  MetricsRecordBuilder rb=getMetrics(NN_METRICS);
+  assertCounter("FilesRenamed",1L,rb);
+  assertCounter("FilesDeleted",1L,rb);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that capacity metrics are exported and pass
+ * basic sanity tests.
+ */
+@Test(timeout=1800) public void testCapacityMetrics() throws Exception {
+  MetricsRecordBuilder rb=getMetrics(NS_METRICS);
+  long capacityTotal=MetricsAsserts.getLongGauge("CapacityTotal",rb);
+  assert (capacityTotal != 0);
+  long capacityUsed=MetricsAsserts.getLongGauge("CapacityUsed",rb);
+  long capacityRemaining=MetricsAsserts.getLongGauge("CapacityRemaining",rb);
+  long capacityUsedNonDFS=MetricsAsserts.getLongGauge("CapacityUsedNonDFS",rb);
+  assert (capacityUsed + capacityRemaining + capacityUsedNonDFS == capacityTotal);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Create excess blocks by reducing the replication factor for
+ * for a file and ensure metrics reflects it
+ */
+@Test public void testExcessBlocks() throws Exception {
+  Path file=getTestPath("testExcessBlocks");
+  createFile(file,100,(short)2);
+  long totalBlocks=1;
+  NameNodeAdapter.setReplication(namesystem,file.toString(),(short)1);
+  MetricsRecordBuilder rb=getMetrics(NS_METRICS);
+  assertGauge("ExcessBlocks",totalBlocks,rb);
+  fs.delete(file,true);
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test NN checkpoint and transaction-related metrics.
+ */
+@Test public void testTransactionAndCheckpointMetrics() throws Exception {
+  long lastCkptTime=MetricsAsserts.getLongGauge("LastCheckpointTime",getMetrics(NS_METRICS));
+  assertGauge("LastCheckpointTime",lastCkptTime,getMetrics(NS_METRICS));
+  assertGauge("LastWrittenTransactionId",1L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastCheckpoint",1L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastLogRoll",1L,getMetrics(NS_METRICS));
+  fs.mkdirs(new Path(TEST_ROOT_DIR_PATH,"/tmp"));
+  assertGauge("LastCheckpointTime",lastCkptTime,getMetrics(NS_METRICS));
+  assertGauge("LastWrittenTransactionId",2L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastCheckpoint",2L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastLogRoll",2L,getMetrics(NS_METRICS));
+  cluster.getNameNodeRpc().rollEditLog();
+  assertGauge("LastCheckpointTime",lastCkptTime,getMetrics(NS_METRICS));
+  assertGauge("LastWrittenTransactionId",4L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastCheckpoint",4L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastLogRoll",1L,getMetrics(NS_METRICS));
+  cluster.getNameNodeRpc().setSafeMode(SafeModeAction.SAFEMODE_ENTER,false);
+  cluster.getNameNodeRpc().saveNamespace();
+  cluster.getNameNodeRpc().setSafeMode(SafeModeAction.SAFEMODE_LEAVE,false);
+  long newLastCkptTime=MetricsAsserts.getLongGauge("LastCheckpointTime",getMetrics(NS_METRICS));
+  assertTrue(lastCkptTime < newLastCkptTime);
+  assertGauge("LastWrittenTransactionId",6L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastCheckpoint",1L,getMetrics(NS_METRICS));
+  assertGauge("TransactionsSinceLastLogRoll",1L,getMetrics(NS_METRICS));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that the sync and block report metrics get updated on cluster
+ * startup.
+ */
+@Test public void testSyncAndBlockReportMetric() throws Exception {
+  MetricsRecordBuilder rb=getMetrics(NN_METRICS);
+  assertCounter("SyncsNumOps",1L,rb);
+  assertCounter("BlockReportNumOps",(long)DATANODE_COUNT * cluster.getStoragesPerDatanode(),rb);
+  Thread.sleep((PERCENTILES_INTERVAL + 1) * 1000);
+  assertQuantileGauges("Syncs1s",rb);
+  assertQuantileGauges("BlockReport1s",rb);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test numGetBlockLocations metric   
+ * Test initiates and performs file operations (create,read,close,open file )
+ * which results in metrics changes. These metrics changes are updated and 
+ * tested for correctness.
+ * create file operation does not increment numGetBlockLocation
+ * one read file operation increments numGetBlockLocation by 1
+ * @throws IOException in case of an error
+ */
+@Test public void testGetBlockLocationMetric() throws Exception {
+  Path file1_Path=new Path(TEST_ROOT_DIR_PATH,"file1.dat");
+  assertCounter("GetBlockLocations",0L,getMetrics(NN_METRICS));
+  createFile(file1_Path,100,(short)2);
+  assertCounter("GetBlockLocations",0L,getMetrics(NN_METRICS));
+  readFile(fs,file1_Path);
+  assertCounter("GetBlockLocations",1L,getMetrics(NN_METRICS));
+  readFile(fs,file1_Path);
+  readFile(fs,file1_Path);
+  assertCounter("GetBlockLocations",3L,getMetrics(NN_METRICS));
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  MetricsSource source=DefaultMetricsSystem.instance().getSource("UgiMetrics");
+  if (source != null) {
+    MetricsRecordBuilder rb=getMetrics(source);
+    assertQuantileGauges("GetGroups1s",rb);
+  }
+  cluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test metrics associated with addition of a file 
+ */
+@Test public void testFileAdd() throws Exception {
+  final Path file=getTestPath("testFileAdd");
+  createFile(file,3200,(short)3);
+  final long blockCount=32;
+  int blockCapacity=namesystem.getBlockCapacity();
+  assertGauge("BlockCapacity",blockCapacity,getMetrics(NS_METRICS));
+  MetricsRecordBuilder rb=getMetrics(NN_METRICS);
+  assertCounter("CreateFileOps",1L,rb);
+  assertCounter("FilesCreated",(long)file.depth(),rb);
+  long filesTotal=file.depth() + 1;
+  rb=getMetrics(NS_METRICS);
+  assertGauge("FilesTotal",filesTotal,rb);
+  assertGauge("BlocksTotal",blockCount,rb);
+  fs.delete(file,true);
+  filesTotal--;
+  rb=waitForDnMetricValue(NS_METRICS,"FilesTotal",filesTotal);
+  assertGauge("BlocksTotal",0L,rb);
+  assertGauge("PendingDeletionBlocks",0L,rb);
+  rb=getMetrics(NN_METRICS);
+  assertCounter("DeleteFileOps",1L,rb);
+  assertCounter("FilesDeleted",1L,rb);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Corrupt a block and ensure metrics reflects it 
+ */
+@Test public void testCorruptBlock() throws Exception {
+  final Path file=getTestPath("testCorruptBlock");
+  createFile(file,100,(short)2);
+  for (  DataNode dn : cluster.getDataNodes()) {
+    DataNodeTestUtils.setHeartbeatsDisabledForTests(dn,true);
+  }
+  LocatedBlock block=NameNodeAdapter.getBlockLocations(cluster.getNameNode(),file.toString(),0,1).get(0);
+  cluster.getNamesystem().writeLock();
+  try {
+    bm.findAndMarkBlockAsCorrupt(block.getBlock(),block.getLocations()[0],"STORAGE_ID","TEST");
+  }
+  finally {
+    cluster.getNamesystem().writeUnlock();
+  }
+  BlockManagerTestUtil.getComputedDatanodeWork(bm);
+  MetricsRecordBuilder rb=getMetrics(NS_METRICS);
+  assertGauge("CorruptBlocks",1L,rb);
+  assertGauge("PendingReplicationBlocks",1L,rb);
+  fs.delete(file,true);
+  rb=waitForDnMetricValue(NS_METRICS,"CorruptBlocks",0L);
+  assertGauge("PendingReplicationBlocks",0L,rb);
+  assertGauge("ScheduledReplicationBlocks",0L,rb);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,172 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.util.TestHBaseFsckReplicas (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=180000) public void testHbckWithExcessReplica() throws Exception {
+  TableName table=TableName.valueOf("testHbckWithExcessReplica");
+  try {
+    setupTableWithRegionReplica(table,2);
+    admin.flush(table);
+    assertNoErrors(doFsck(conf,false));
+    assertEquals(ROWKEYS.length,countRows());
+    Table meta=connection.getTable(TableName.META_TABLE_NAME,tableExecutorService);
+    List<HRegionInfo> regions=admin.getTableRegions(table);
+    byte[] startKey=Bytes.toBytes("B");
+    byte[] endKey=Bytes.toBytes("C");
+    byte[] metaKey=null;
+    HRegionInfo newHri=null;
+    for (    HRegionInfo h : regions) {
+      if (Bytes.compareTo(h.getStartKey(),startKey) == 0 && Bytes.compareTo(h.getEndKey(),endKey) == 0 && h.getReplicaId() == HRegionInfo.DEFAULT_REPLICA_ID) {
+        metaKey=h.getRegionName();
+        newHri=RegionReplicaUtil.getRegionInfoForReplica(h,2);
+        break;
+      }
+    }
+    Put put=new Put(metaKey);
+    Collection<ServerName> var=admin.getClusterStatus().getServers();
+    ServerName sn=var.toArray(new ServerName[var.size()])[0];
+    MetaTableAccessor.addLocation(put,sn,sn.getStartcode(),-1,2);
+    meta.put(put);
+    HBaseFsckRepair.fixUnassigned(admin,newHri);
+    HBaseFsckRepair.waitUntilAssigned(admin,newHri);
+    Delete delete=new Delete(metaKey);
+    delete.addColumns(HConstants.CATALOG_FAMILY,MetaTableAccessor.getServerColumn(2));
+    delete.addColumns(HConstants.CATALOG_FAMILY,MetaTableAccessor.getStartCodeColumn(2));
+    delete.addColumns(HConstants.CATALOG_FAMILY,MetaTableAccessor.getSeqNumColumn(2));
+    meta.delete(delete);
+    meta.close();
+    HBaseFsck hbck=doFsck(conf,false);
+    assertErrors(hbck,new HBaseFsck.ErrorReporter.ERROR_CODE[]{HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_META});
+    hbck=doFsck(conf,true);
+    hbck=doFsck(conf,false);
+    assertErrors(hbck,new HBaseFsck.ErrorReporter.ERROR_CODE[]{});
+  }
+  finally {
+    cleanupTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=180000) public void testHbckWithFewerReplica() throws Exception {
+  TableName table=TableName.valueOf("testHbckWithFewerReplica");
+  try {
+    setupTableWithRegionReplica(table,2);
+    admin.flush(table);
+    assertNoErrors(doFsck(conf,false));
+    assertEquals(ROWKEYS.length,countRows());
+    deleteRegion(conf,tbl.getTableDescriptor(),Bytes.toBytes("B"),Bytes.toBytes("C"),true,false,false,false,1);
+    HBaseFsck hbck=doFsck(conf,false);
+    assertErrors(hbck,new HBaseFsck.ErrorReporter.ERROR_CODE[]{HBaseFsck.ErrorReporter.ERROR_CODE.NOT_DEPLOYED});
+    hbck=doFsck(conf,true);
+    hbck=doFsck(conf,false);
+    assertErrors(hbck,new HBaseFsck.ErrorReporter.ERROR_CODE[]{});
+  }
+  finally {
+    cleanupTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  EnvironmentEdgeManager.reset();
+}
+
+</code></pre>
+
+<pre class="type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This creates and fixes a bad table with a region that is in meta but has
+ * no deployment or data hdfs. The table has region_replication set to 2.
+ */
+@Test(timeout=180000) public void testNotInHdfsWithReplicas() throws Exception {
+  TableName table=TableName.valueOf("tableNotInHdfs");
+  try {
+    HRegionInfo[] oldHris=new HRegionInfo[2];
+    setupTableWithRegionReplica(table,2);
+    assertEquals(ROWKEYS.length,countRows());
+    NavigableMap<HRegionInfo,ServerName> map=MetaTableAccessor.allTableRegions(TEST_UTIL.getConnection(),tbl.getName());
+    int i=0;
+    for (    Map.Entry<HRegionInfo,ServerName> m : map.entrySet()) {
+      if (m.getKey().getStartKey().length > 0 && m.getKey().getStartKey()[0] == Bytes.toBytes("B")[0]) {
+        LOG.debug("Initially server hosting " + m.getKey() + " is "+ m.getValue());
+        oldHris[i++]=m.getKey();
+      }
+    }
+    admin.flush(table);
+    deleteRegion(conf,tbl.getTableDescriptor(),Bytes.toBytes("B"),Bytes.toBytes("C"),false,false,true);
+    HBaseFsck hbck=doFsck(conf,false);
+    assertErrors(hbck,new HBaseFsck.ErrorReporter.ERROR_CODE[]{HBaseFsck.ErrorReporter.ERROR_CODE.NOT_IN_HDFS});
+    doFsck(conf,true);
+    assertNoErrors(doFsck(conf,false));
+    assertEquals(ROWKEYS.length - 2,countRows());
+    i=0;
+    HRegionInfo[] newHris=new HRegionInfo[2];
+    map=MetaTableAccessor.allTableRegions(TEST_UTIL.getConnection(),tbl.getName());
+    for (    Map.Entry<HRegionInfo,ServerName> m : map.entrySet()) {
+      if (m.getKey().getStartKey().length > 0 && m.getKey().getStartKey()[0] == Bytes.toBytes("B")[0]) {
+        newHris[i++]=m.getKey();
+      }
+    }
+    Collection<ServerName> servers=admin.getClusterStatus().getServers();
+    Set<HRegionInfo> onlineRegions=new HashSet<HRegionInfo>();
+    for (    ServerName s : servers) {
+      List<HRegionInfo> list=admin.getOnlineRegions(s);
+      onlineRegions.addAll(list);
+    }
+    assertTrue(onlineRegions.containsAll(Arrays.asList(newHris)));
+    assertFalse(onlineRegions.removeAll(Arrays.asList(oldHris)));
+  }
+  finally {
+    cleanupTable(table);
+    admin.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  tableExecutorService.shutdown();
+  hbfsckExecutorService.shutdown();
+  admin.close();
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testHbckWithRegionReplica() throws Exception {
+  TableName table=TableName.valueOf("testHbckWithRegionReplica");
+  try {
+    setupTableWithRegionReplica(table,2);
+    admin.flush(table);
+    assertNoErrors(doFsck(conf,false));
+  }
+  finally {
+    cleanupTable(table);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

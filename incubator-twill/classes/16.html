@@ -1,0 +1,429 @@
+<h3 style="margin:0px">Class: org.apache.twill.internal.zookeeper.ReentrantDistributedLockTest (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testMultiThreads() throws InterruptedException {
+  ZKClientService zkClient=createZKClient();
+  try {
+    final ReentrantDistributedLock lock=new ReentrantDistributedLock(zkClient,"multiThreads");
+    final CountDownLatch acquired=new CountDownLatch(1);
+    Thread t=new Thread(){
+      @Override public void run(){
+        lock.lock();
+        try {
+          acquired.countDown();
+        }
+  finally {
+          lock.unlock();
+        }
+      }
+    }
+;
+    lock.lock();
+    try {
+      t.start();
+      Assert.assertFalse(acquired.await(1,TimeUnit.SECONDS));
+    }
+  finally {
+      lock.unlock();
+    }
+    Assert.assertTrue(acquired.await(5,TimeUnit.SECONDS));
+    t.join();
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testTryLockMultiClients() throws InterruptedException {
+  ZKClientService zkClient1=createZKClient();
+  ZKClientService zkClient2=createZKClient();
+  try {
+    final ReentrantDistributedLock lock1=new ReentrantDistributedLock(zkClient1,"/multiTrylock");
+    final ReentrantDistributedLock lock2=new ReentrantDistributedLock(zkClient2,"/multiTrylock");
+    final CountDownLatch lockAcquired=new CountDownLatch(1);
+    final CountDownLatch lockFailed=new CountDownLatch(2);
+    Thread t=new Thread(){
+      @Override public void run(){
+        try {
+          if (!lock2.tryLock()) {
+            lockFailed.countDown();
+          }
+          if (!lock2.tryLock(1,TimeUnit.SECONDS)) {
+            lockFailed.countDown();
+          }
+          if (lock2.tryLock(5000,TimeUnit.SECONDS)) {
+            if (lock2.tryLock(1,TimeUnit.SECONDS)) {
+              if (lock2.tryLock()) {
+                lockAcquired.countDown();
+                lock2.unlock();
+              }
+              lock2.unlock();
+            }
+            lock2.unlock();
+          }
+        }
+ catch (        InterruptedException e) {
+          LOG.error(e.getMessage(),e);
+        }
+      }
+    }
+;
+    lock1.lock();
+    try {
+      t.start();
+      Assert.assertTrue(lockFailed.await(5000,TimeUnit.SECONDS));
+    }
+  finally {
+      lock1.unlock();
+    }
+    Assert.assertTrue(lockAcquired.await(10000,TimeUnit.SECONDS));
+    t.join();
+    Assert.assertTrue(lock1.tryLock());
+    lock1.unlock();
+  }
+  finally {
+    zkClient1.stopAndWait();
+    zkClient2.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testReentrantMultiClients() throws InterruptedException {
+  ZKClientService zkClient1=createZKClient();
+  ZKClientService zkClient2=createZKClient();
+  try {
+    ReentrantDistributedLock lock1=new ReentrantDistributedLock(zkClient1,"multiClients");
+    final ReentrantDistributedLock lock2=new ReentrantDistributedLock(zkClient2,"multiClients");
+    final CountDownLatch lockAcquired=new CountDownLatch(1);
+    Thread t=new Thread(){
+      @Override public void run(){
+        lock2.lock();
+        try {
+          lockAcquired.countDown();
+        }
+  finally {
+          lock2.unlock();
+        }
+      }
+    }
+;
+    lock1.lock();
+    try {
+      t.start();
+      Assert.assertFalse(lockAcquired.await(1,TimeUnit.SECONDS));
+      lock1.lock();
+      lock1.unlock();
+      Assert.assertFalse(lockAcquired.await(1,TimeUnit.SECONDS));
+    }
+  finally {
+      lock1.unlock();
+    }
+    Assert.assertTrue(lockAcquired.await(5,TimeUnit.SECONDS));
+    t.join();
+  }
+  finally {
+    zkClient1.stopAndWait();
+    zkClient2.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testLockInterrupt() throws InterruptedException {
+  ZKClientService zkClient=createZKClient();
+  try {
+    final ReentrantDistributedLock lock=new ReentrantDistributedLock(zkClient,"/interrupt");
+    lock.lock();
+    try {
+      final CountDownLatch lockAcquired=new CountDownLatch(1);
+      final CountDownLatch lockInterrupted=new CountDownLatch(1);
+      Thread t=new Thread(){
+        @Override public void run(){
+          try {
+            lock.lockInterruptibly();
+            try {
+              lockAcquired.countDown();
+            }
+  finally {
+              lock.unlock();
+            }
+          }
+ catch (          InterruptedException e) {
+            lockInterrupted.countDown();
+          }
+        }
+      }
+;
+      t.start();
+      t.interrupt();
+      Assert.assertFalse(lockAcquired.await(2,TimeUnit.SECONDS));
+      Assert.assertTrue(lockInterrupted.await(2,TimeUnit.SECONDS));
+    }
+  finally {
+      lock.unlock();
+    }
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void finish(){
+  zkServer.stopAndWait();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testReentrant(){
+  ZKClientService zkClient=createZKClient();
+  try {
+    ReentrantDistributedLock lock=new ReentrantDistributedLock(zkClient,"reentrant");
+    lock.lock();
+    try {
+      try {
+        lock.lock();
+      }
+  finally {
+        lock.unlock();
+      }
+    }
+  finally {
+      lock.unlock();
+    }
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=60000) public void testLockSessionExpire() throws Exception {
+  ZKClientService zkClient1=createZKClient();
+  final ZKClientService zkClient2=createZKClient();
+  try {
+    Lock lock1=new ReentrantDistributedLock(zkClient1,"/lockexpire");
+    lock1.lock();
+    try {
+      final CountDownLatch started=new CountDownLatch(1);
+      final CountDownLatch failure=new CountDownLatch(1);
+      Thread t=new Thread(){
+        @Override public void run(){
+          try {
+            started.countDown();
+            Lock lock2=new ReentrantDistributedLock(zkClient2,"/lockexpire");
+            lock2.lock();
+            try {
+            }
+  finally {
+              lock2.unlock();
+            }
+          }
+ catch (          Exception ex) {
+            failure.countDown();
+          }
+        }
+      }
+;
+      t.start();
+      Assert.assertTrue(started.await(5,TimeUnit.SECONDS));
+      while (zkClient1.getChildren("/lockexpire").get().getChildren().size() != 2) {
+        TimeUnit.SECONDS.sleep(1);
+      }
+      KillZKSession.kill(zkClient2.getZooKeeperSupplier().get(),zkClient2.getConnectString(),10000);
+      Assert.assertTrue(failure.await(10,TimeUnit.SECONDS));
+    }
+  finally {
+      lock1.unlock();
+    }
+  }
+  finally {
+    zkClient1.stopAndWait();
+    zkClient2.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testTryLock() throws InterruptedException {
+  ZKClientService zkClient=createZKClient();
+  try {
+    final ReentrantDistributedLock lock=new ReentrantDistributedLock(zkClient,"/trylock");
+    final CountDownLatch lockAcquired=new CountDownLatch(1);
+    final CountDownLatch lockFailed=new CountDownLatch(2);
+    Thread t=new Thread(){
+      @Override public void run(){
+        try {
+          if (!lock.tryLock()) {
+            lockFailed.countDown();
+          }
+          if (!lock.tryLock(1,TimeUnit.SECONDS)) {
+            lockFailed.countDown();
+          }
+          if (lock.tryLock(5,TimeUnit.SECONDS)) {
+            if (lock.tryLock(1,TimeUnit.SECONDS)) {
+              if (lock.tryLock()) {
+                lockAcquired.countDown();
+                lock.unlock();
+              }
+              lock.unlock();
+            }
+            lock.unlock();
+          }
+        }
+ catch (        InterruptedException e) {
+          LOG.error(e.getMessage(),e);
+        }
+      }
+    }
+;
+    lock.lock();
+    try {
+      t.start();
+      Assert.assertTrue(lockFailed.await(5,TimeUnit.SECONDS));
+    }
+  finally {
+      lock.unlock();
+    }
+    Assert.assertTrue(lockAcquired.await(2,TimeUnit.SECONDS));
+    t.join();
+    Assert.assertTrue(lock.tryLock());
+    lock.unlock();
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=60000) public void testLockRace() throws Exception {
+  ZKClientService zkClient1=createZKClient();
+  ZKClientService zkClient2=createZKClient();
+  try {
+    final Lock[] locks=new Lock[]{new ReentrantDistributedLock(zkClient1,"/lockrace"),new ReentrantDistributedLock(zkClient2,"/lockrace")};
+    final CyclicBarrier barrier=new CyclicBarrier(2);
+    final CountDownLatch lockLatch=new CountDownLatch(2);
+    for (int i=0; i < 2; i++) {
+      final int threadId=i;
+      Thread t=new Thread(){
+        @Override public void run(){
+          try {
+            barrier.await();
+            for (int i=0; i < 100; i++) {
+              Lock lock=locks[threadId];
+              lock.lock();
+              try {
+                Uninterruptibles.sleepUninterruptibly(1,TimeUnit.MILLISECONDS);
+              }
+  finally {
+                lock.unlock();
+              }
+            }
+            lockLatch.countDown();
+          }
+ catch (          Exception e) {
+            LOG.error("Exception",e);
+          }
+        }
+      }
+;
+      t.start();
+    }
+    Assert.assertTrue(lockLatch.await(30,TimeUnit.SECONDS));
+  }
+  finally {
+    zkClient1.stopAndWait();
+    zkClient2.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=200000) public void testLockInterruptMultiClients() throws InterruptedException {
+  ZKClientService zkClient1=createZKClient();
+  ZKClientService zkClient2=createZKClient();
+  try {
+    final ReentrantDistributedLock lock1=new ReentrantDistributedLock(zkClient1,"/multiInterrupt");
+    final ReentrantDistributedLock lock2=new ReentrantDistributedLock(zkClient2,"/multiInterrupt");
+    lock1.lock();
+    try {
+      final CountDownLatch lockAcquired=new CountDownLatch(1);
+      final CountDownLatch lockInterrupted=new CountDownLatch(1);
+      Thread t=new Thread(){
+        @Override public void run(){
+          try {
+            lock2.lockInterruptibly();
+            try {
+              lockAcquired.countDown();
+            }
+  finally {
+              lock2.unlock();
+            }
+          }
+ catch (          InterruptedException e) {
+            lockInterrupted.countDown();
+          }
+        }
+      }
+;
+      t.start();
+      TimeUnit.SECONDS.sleep(2);
+      t.interrupt();
+      Assert.assertFalse(lockAcquired.await(2,TimeUnit.SECONDS));
+      Assert.assertTrue(lockInterrupted.await(2,TimeUnit.SECONDS));
+    }
+  finally {
+      lock1.unlock();
+    }
+    lock2.lock();
+    lock2.unlock();
+  }
+  finally {
+    zkClient1.stopAndWait();
+    zkClient2.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

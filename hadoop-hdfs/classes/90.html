@@ -1,0 +1,278 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestEditLogRace (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests saving fs image while transactions are ongoing.
+ */
+@Test public void testSaveNamespace() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FileSystem fileSys=null;
+  AtomicReference<Throwable> caughtErr=new AtomicReference<Throwable>();
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    editLog.setBufferCapacity(2048);
+    editLog.close();
+    editLog.open();
+    startTransactionWorkers(namesystem,caughtErr);
+    for (int i=0; i < NUM_SAVE_IMAGE && caughtErr.get() == null; i++) {
+      try {
+        Thread.sleep(20);
+      }
+ catch (      InterruptedException e) {
+      }
+      LOG.info("Save " + i + ": entering safe mode");
+      namesystem.enterSafeMode(false);
+      verifyEditLogs(namesystem,fsimage);
+      LOG.info("Save " + i + ": saving namespace");
+      namesystem.saveNamespace();
+      LOG.info("Save " + i + ": leaving safemode");
+      verifyEditLogs(namesystem,fsimage);
+      namesystem.leaveSafeMode(false);
+      LOG.info("Save " + i + ": complete");
+    }
+  }
+  finally {
+    stopTransactionWorkers();
+    if (caughtErr.get() != null) {
+      throw new RuntimeException(caughtErr.get());
+    }
+    if (fileSys != null)     fileSys.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests rolling edit logs while transactions are ongoing.
+ */
+@Test public void testEditLogRolling() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FileSystem fileSys=null;
+  AtomicReference<Throwable> caughtErr=new AtomicReference<Throwable>();
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    editLog.setBufferCapacity(2048);
+    editLog.close();
+    editLog.open();
+    startTransactionWorkers(namesystem,caughtErr);
+    for (int i=0; i < NUM_ROLLS && caughtErr.get() == null; i++) {
+      try {
+        Thread.sleep(20);
+      }
+ catch (      InterruptedException e) {
+      }
+      LOG.info("Starting roll " + i + ".");
+      editLog.rollEditLog();
+      LOG.info("Roll complete " + i + ".");
+      verifyEditLogs(namesystem,fsimage);
+      LOG.info("Starting purge " + i + ".");
+      editLog.purgeEditLog();
+      LOG.info("Complete purge " + i + ".");
+    }
+  }
+  finally {
+    stopTransactionWorkers();
+    if (caughtErr.get() != null) {
+      throw new RuntimeException(caughtErr.get());
+    }
+    if (fileSys != null)     fileSys.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Most of the FSNamesystem methods have a synchronized section where they
+ * update the name system itself and write to the edit log, and then
+ * unsynchronized, they call logSync. This test verifies that, if an
+ * operation has written to the edit log but not yet synced it,
+ * we wait for that sync before entering safe mode.
+ */
+@Test public void testSaveRightBeforeSync() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.ACTIVE);
+  DFSTestUtil.formatNameNode(conf);
+  final FSNamesystem namesystem=new FSNamesystem(conf);
+  try {
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=spy(fsimage.getEditLog());
+    fsimage.editLog=editLog;
+    final AtomicReference<Throwable> deferredException=new AtomicReference<Throwable>();
+    final CountDownLatch waitToEnterSync=new CountDownLatch(1);
+    final Thread doAnEditThread=new Thread(){
+      public void run(){
+        try {
+          LOG.info("Starting mkdirs");
+          namesystem.mkdirs("/test",new PermissionStatus("test","test",new FsPermission((short)00755)),true);
+          LOG.info("mkdirs complete");
+        }
+ catch (        Throwable ioe) {
+          deferredException.set(ioe);
+          waitToEnterSync.countDown();
+        }
+      }
+    }
+;
+    Answer<Void> blockingSync=new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        LOG.info("logSync called");
+        if (Thread.currentThread() == doAnEditThread) {
+          LOG.info("edit thread: Telling main thread we made it just before logSync...");
+          waitToEnterSync.countDown();
+          LOG.info("edit thread: sleeping for " + BLOCK_TIME + "secs");
+          Thread.sleep(BLOCK_TIME * 1000);
+          LOG.info("Going through to logSync. This will allow the main thread to continue.");
+        }
+        invocation.callRealMethod();
+        LOG.info("logSync complete");
+        return null;
+      }
+    }
+;
+    doAnswer(blockingSync).when(editLog).logSync();
+    doAnEditThread.start();
+    LOG.info("Main thread: waiting to just before logSync...");
+    waitToEnterSync.await();
+    assertNull(deferredException.get());
+    LOG.info("Main thread: detected that logSync about to be called.");
+    LOG.info("Trying to enter safe mode.");
+    LOG.info("This should block for " + BLOCK_TIME + "sec, since we have pending edits");
+    long st=System.currentTimeMillis();
+    namesystem.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    long et=System.currentTimeMillis();
+    LOG.info("Entered safe mode");
+    assertTrue(et - st > (BLOCK_TIME - 1) * 1000);
+    namesystem.saveNamespace();
+    LOG.info("Joining on edit thread...");
+    doAnEditThread.join();
+    assertNull(deferredException.get());
+    verifyEditLogs(namesystem,fsimage);
+  }
+  finally {
+    LOG.info("Closing namesystem");
+    if (namesystem != null)     namesystem.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * The logSync() method in FSEditLog is unsynchronized whiel syncing
+ * so that other threads can concurrently enqueue edits while the prior
+ * sync is ongoing. This test checks that the log is saved correctly
+ * if the saveImage occurs while the syncing thread is in the unsynchronized middle section.
+ * This replicates the following manual test proposed by Konstantin:
+ * I start the name-node in debugger.
+ * I do -mkdir and stop the debugger in logSync() just before it does flush.
+ * Then I enter safe mode with another client
+ * I start saveNamepsace and stop the debugger in
+ * FSImage.saveFSImage() -> FSEditLog.createEditLogFile()
+ * -> EditLogFileOutputStream.create() ->
+ * after truncating the file but before writing LAYOUT_VERSION into it.
+ * Then I let logSync() run.
+ * Then I terminate the name-node.
+ * After that the name-node wont start, since the edits file is broken.
+ */
+@Test public void testSaveImageWhileSyncInProgress() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.ACTIVE);
+  DFSTestUtil.formatNameNode(conf);
+  final FSNamesystem namesystem=new FSNamesystem(conf);
+  try {
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    ArrayList<EditLogOutputStream> streams=editLog.getEditStreams();
+    EditLogOutputStream spyElos=spy(streams.get(0));
+    streams.set(0,spyElos);
+    final AtomicReference<Throwable> deferredException=new AtomicReference<Throwable>();
+    final CountDownLatch waitToEnterFlush=new CountDownLatch(1);
+    final Thread doAnEditThread=new Thread(){
+      public void run(){
+        try {
+          LOG.info("Starting mkdirs");
+          namesystem.mkdirs("/test",new PermissionStatus("test","test",new FsPermission((short)00755)),true);
+          LOG.info("mkdirs complete");
+        }
+ catch (        Throwable ioe) {
+          deferredException.set(ioe);
+          waitToEnterFlush.countDown();
+        }
+      }
+    }
+;
+    Answer<Void> blockingFlush=new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        LOG.info("Flush called");
+        if (Thread.currentThread() == doAnEditThread) {
+          LOG.info("edit thread: Telling main thread we made it to flush section...");
+          waitToEnterFlush.countDown();
+          LOG.info("edit thread: sleeping for " + BLOCK_TIME + "secs");
+          Thread.sleep(BLOCK_TIME * 1000);
+          LOG.info("Going through to flush. This will allow the main thread to continue.");
+        }
+        invocation.callRealMethod();
+        LOG.info("Flush complete");
+        return null;
+      }
+    }
+;
+    doAnswer(blockingFlush).when(spyElos).flush();
+    doAnEditThread.start();
+    LOG.info("Main thread: waiting to enter flush...");
+    waitToEnterFlush.await();
+    assertNull(deferredException.get());
+    LOG.info("Main thread: detected that logSync is in unsynchronized section.");
+    LOG.info("Trying to enter safe mode.");
+    LOG.info("This should block for " + BLOCK_TIME + "sec, since flush will sleep that long");
+    long st=System.currentTimeMillis();
+    namesystem.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    long et=System.currentTimeMillis();
+    LOG.info("Entered safe mode");
+    assertTrue(et - st > (BLOCK_TIME - 1) * 1000);
+    namesystem.saveNamespace();
+    LOG.info("Joining on edit thread...");
+    doAnEditThread.join();
+    assertNull(deferredException.get());
+    verifyEditLogs(namesystem,fsimage);
+  }
+  finally {
+    LOG.info("Closing namesystem");
+    if (namesystem != null)     namesystem.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

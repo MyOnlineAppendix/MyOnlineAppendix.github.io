@@ -1,0 +1,107 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.ha.TestStandbyIsHot (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-18 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testStandbyIsHot() throws Exception {
+  Configuration conf=new Configuration();
+  HAUtil.setAllowStandbyReads(conf,true);
+  conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY,1);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).nnTopology(MiniDFSNNTopology.simpleHATopology()).numDataNodes(3).build();
+  try {
+    cluster.waitActive();
+    cluster.transitionToActive(0);
+    NameNode nn1=cluster.getNameNode(0);
+    NameNode nn2=cluster.getNameNode(1);
+    FileSystem fs=HATestUtil.configureFailoverFs(cluster,conf);
+    Thread.sleep(1000);
+    System.err.println("==================================");
+    DFSTestUtil.writeFile(fs,TEST_FILE_PATH,TEST_FILE_DATA);
+    nn1.getRpcServer().rollEditLog();
+    System.err.println("==================================");
+    LOG.info("Waiting for block locations to appear on standby node");
+    waitForBlockLocations(cluster,nn2,TEST_FILE,3);
+    cluster.triggerHeartbeats();
+    cluster.triggerBlockReports();
+    LOG.info("Changing replication to 1");
+    fs.setReplication(TEST_FILE_PATH,(short)1);
+    BlockManagerTestUtil.computeAllPendingWork(nn1.getNamesystem().getBlockManager());
+    waitForBlockLocations(cluster,nn1,TEST_FILE,1);
+    nn1.getRpcServer().rollEditLog();
+    LOG.info("Waiting for lowered replication to show up on standby");
+    waitForBlockLocations(cluster,nn2,TEST_FILE,1);
+    LOG.info("Changing replication to 3");
+    fs.setReplication(TEST_FILE_PATH,(short)3);
+    BlockManagerTestUtil.computeAllPendingWork(nn1.getNamesystem().getBlockManager());
+    nn1.getRpcServer().rollEditLog();
+    LOG.info("Waiting for higher replication to show up on standby");
+    waitForBlockLocations(cluster,nn2,TEST_FILE,3);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Regression test for HDFS-2795:
+ * - Start an HA cluster with a DN.
+ * - Write several blocks to the FS with replication 1.
+ * - Shutdown the DN
+ * - Wait for the NNs to declare the DN dead. All blocks will be under-replicated.
+ * - Restart the DN.
+ * In the bug, the standby node would only very slowly notice the blocks returning
+ * to the cluster.
+ */
+@Test(timeout=60000) public void testDatanodeRestarts() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,1024);
+  HAUtil.setAllowStandbyReads(conf,true);
+  conf.setLong(DFSConfigKeys.DFS_NAMENODE_ACCESSTIME_PRECISION_KEY,0);
+  conf.setInt(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY,1);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).nnTopology(MiniDFSNNTopology.simpleHATopology()).numDataNodes(1).build();
+  try {
+    NameNode nn0=cluster.getNameNode(0);
+    NameNode nn1=cluster.getNameNode(1);
+    cluster.transitionToActive(0);
+    DFSTestUtil.createFile(cluster.getFileSystem(0),TEST_FILE_PATH,5 * 1024,(short)1,1L);
+    HATestUtil.waitForStandbyToCatchUp(nn0,nn1);
+    DataNode dn=cluster.getDataNodes().get(0);
+    String dnName=dn.getDatanodeId().getXferAddr();
+    DataNodeProperties dnProps=cluster.stopDataNode(0);
+    BlockManagerTestUtil.noticeDeadDatanode(nn0,dnName);
+    BlockManagerTestUtil.noticeDeadDatanode(nn1,dnName);
+    BlockManagerTestUtil.updateState(nn0.getNamesystem().getBlockManager());
+    BlockManagerTestUtil.updateState(nn1.getNamesystem().getBlockManager());
+    assertEquals(5,nn0.getNamesystem().getUnderReplicatedBlocks());
+    assertEquals(0,nn1.getNamesystem().getUnderReplicatedBlocks());
+    LocatedBlocks locs=nn1.getRpcServer().getBlockLocations(TEST_FILE,0,1);
+    assertEquals("Standby should have registered that the block has no replicas",0,locs.get(0).getLocations().length);
+    cluster.restartDataNode(dnProps);
+    cluster.waitActive(0);
+    cluster.waitActive(1);
+    BlockManagerTestUtil.updateState(nn0.getNamesystem().getBlockManager());
+    BlockManagerTestUtil.updateState(nn1.getNamesystem().getBlockManager());
+    assertEquals(0,nn0.getNamesystem().getUnderReplicatedBlocks());
+    assertEquals(0,nn1.getNamesystem().getUnderReplicatedBlocks());
+    locs=nn1.getRpcServer().getBlockLocations(TEST_FILE,0,1);
+    assertEquals("Standby should have registered that the block has replicas again",1,locs.get(0).getLocations().length);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,591 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.fs.TestEnhancedByteBufferAccess (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testShortZeroCopyReads() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  FSDataInputStream fsIn=null;
+  final int TEST_FILE_LENGTH=12345;
+  FileSystem fs=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,7567L);
+    try {
+      DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    }
+ catch (    InterruptedException e) {
+      Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+    }
+catch (    TimeoutException e) {
+      Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+    }
+    fsIn=fs.open(TEST_PATH);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+    fsIn.close();
+    fsIn=fs.open(TEST_PATH);
+    HdfsDataInputStream dfsIn=(HdfsDataInputStream)fsIn;
+    ByteBuffer result=dfsIn.read(null,8192,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(4096,result.remaining());
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalBytesRead());
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalZeroCopyBytesRead());
+    Assert.assertArrayEquals(Arrays.copyOfRange(original,0,4096),byteBufferToArray(result));
+    dfsIn.releaseBuffer(result);
+    result=dfsIn.read(null,4097,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(4096,result.remaining());
+    Assert.assertArrayEquals(Arrays.copyOfRange(original,4096,8192),byteBufferToArray(result));
+    dfsIn.releaseBuffer(result);
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClientMmapDisable() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  conf.setBoolean(DFS_CLIENT_MMAP_ENABLED,false);
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  final int TEST_FILE_LENGTH=16385;
+  final int RANDOM_SEED=23453;
+  final String CONTEXT="testClientMmapDisable";
+  FSDataInputStream fsIn=null;
+  DistributedFileSystem fs=null;
+  conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT,CONTEXT);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+    DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    fsIn=fs.open(TEST_PATH);
+    try {
+      fsIn.read(null,1,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+      Assert.fail("expected zero-copy read to fail when client mmaps " + "were disabled.");
+    }
+ catch (    UnsupportedOperationException e) {
+    }
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+  fsIn=null;
+  fs=null;
+  cluster=null;
+  try {
+    conf.setBoolean(DFS_CLIENT_MMAP_ENABLED,true);
+    conf.setInt(DFS_CLIENT_MMAP_CACHE_SIZE,0);
+    conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT,CONTEXT + ".1");
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+    DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    fsIn=fs.open(TEST_PATH);
+    ByteBuffer buf=fsIn.read(null,1,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    fsIn.releaseBuffer(buf);
+    IOUtils.skipFully(fsIn,TEST_FILE_LENGTH - 1);
+    buf=fsIn.read(null,1,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(null,buf);
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test HDFS fallback reads.  HDFS streams support the ByteBufferReadable
+ * interface.
+ */
+@Test public void testHdfsFallbackReads() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  final int TEST_FILE_LENGTH=16385;
+  final int RANDOM_SEED=23453;
+  FSDataInputStream fsIn=null;
+  DistributedFileSystem fs=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+    try {
+      DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    }
+ catch (    InterruptedException e) {
+      Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+    }
+catch (    TimeoutException e) {
+      Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+    }
+    fsIn=fs.open(TEST_PATH);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+    fsIn.close();
+    fsIn=fs.open(TEST_PATH);
+    testFallbackImpl(fsIn,original);
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-2 type-7 type-10 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZeroCopyMmapCache() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  final int TEST_FILE_LENGTH=16385;
+  final int RANDOM_SEED=23453;
+  final String CONTEXT="testZeroCopyMmapCacheContext";
+  FSDataInputStream fsIn=null;
+  ByteBuffer results[]={null,null,null,null};
+  DistributedFileSystem fs=null;
+  conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT,CONTEXT);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+  cluster.waitActive();
+  fs=cluster.getFileSystem();
+  DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+  try {
+    DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+  }
+ catch (  InterruptedException e) {
+    Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+  }
+catch (  TimeoutException e) {
+    Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+  }
+  fsIn=fs.open(TEST_PATH);
+  byte original[]=new byte[TEST_FILE_LENGTH];
+  IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+  fsIn.close();
+  fsIn=fs.open(TEST_PATH);
+  final ShortCircuitCache cache=ClientContext.get(CONTEXT,new DFSClient.Conf(conf)).getShortCircuitCache();
+  cache.accept(new CountingVisitor(0,5,5,0));
+  results[0]=fsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+  fsIn.seek(0);
+  results[1]=fsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+  final ExtendedBlock firstBlock=DFSTestUtil.getFirstBlock(fs,TEST_PATH);
+  cache.accept(new CacheVisitor(){
+    @Override public void visit(    int numOutstandingMmaps,    Map<ExtendedBlockId,ShortCircuitReplica> replicas,    Map<ExtendedBlockId,InvalidToken> failedLoads,    Map<Long,ShortCircuitReplica> evictable,    Map<Long,ShortCircuitReplica> evictableMmapped){
+      ShortCircuitReplica replica=replicas.get(new ExtendedBlockId(firstBlock.getBlockId(),firstBlock.getBlockPoolId()));
+      Assert.assertNotNull(replica);
+      Assert.assertTrue(replica.hasMmap());
+      Assert.assertNull(replica.getEvictableTimeNs());
+    }
+  }
+);
+  results[2]=fsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+  results[3]=fsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+  cache.accept(new CountingVisitor(3,5,2,0));
+  for (  ByteBuffer buffer : results) {
+    if (buffer != null) {
+      fsIn.releaseBuffer(buffer);
+    }
+  }
+  fsIn.close();
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    public Boolean get(){
+      final MutableBoolean finished=new MutableBoolean(false);
+      cache.accept(new CacheVisitor(){
+        @Override public void visit(        int numOutstandingMmaps,        Map<ExtendedBlockId,ShortCircuitReplica> replicas,        Map<ExtendedBlockId,InvalidToken> failedLoads,        Map<Long,ShortCircuitReplica> evictable,        Map<Long,ShortCircuitReplica> evictableMmapped){
+          finished.setValue(evictableMmapped.isEmpty());
+        }
+      }
+);
+      return finished.booleanValue();
+    }
+  }
+,10,60000);
+  cache.accept(new CountingVisitor(0,-1,-1,-1));
+  fs.close();
+  cluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test fallback reads on a stream which does not support the
+ * ByteBufferReadable * interface.
+ */
+@Test public void testIndirectFallbackReads() throws Exception {
+  final File TEST_DIR=new File(System.getProperty("test.build.data","build/test/data"));
+  final String TEST_PATH=TEST_DIR + File.separator + "indirectFallbackTestFile";
+  final int TEST_FILE_LENGTH=16385;
+  final int RANDOM_SEED=23453;
+  FileOutputStream fos=null;
+  FileInputStream fis=null;
+  try {
+    fos=new FileOutputStream(TEST_PATH);
+    Random random=new Random(RANDOM_SEED);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    random.nextBytes(original);
+    fos.write(original);
+    fos.close();
+    fos=null;
+    fis=new FileInputStream(TEST_PATH);
+    testFallbackImpl(fis,original);
+  }
+  finally {
+    IOUtils.cleanup(LOG,fos,fis);
+    new File(TEST_PATH).delete();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that we can zero-copy read cached data even without disabling
+ * checksums.
+ */
+@Test(timeout=120000) public void testZeroCopyReadOfCachedData() throws Exception {
+  BlockReaderTestUtil.enableShortCircuitShmTracing();
+  BlockReaderTestUtil.enableBlockReaderFactoryTracing();
+  BlockReaderTestUtil.enableHdfsCachingTracing();
+  final int TEST_FILE_LENGTH=16385;
+  final Path TEST_PATH=new Path("/a");
+  final int RANDOM_SEED=23453;
+  HdfsConfiguration conf=initZeroCopyTest();
+  conf.setBoolean(DFSConfigKeys.DFS_CLIENT_READ_SHORTCIRCUIT_SKIP_CHECKSUM_KEY,false);
+  final String CONTEXT="testZeroCopyReadOfCachedData";
+  conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT,CONTEXT);
+  conf.setLong(DFS_DATANODE_MAX_LOCKED_MEMORY_KEY,DFSTestUtil.roundUpToMultiple(TEST_FILE_LENGTH,4096));
+  MiniDFSCluster cluster=null;
+  ByteBuffer result=null, result2=null;
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+  cluster.waitActive();
+  FsDatasetSpi<?> fsd=cluster.getDataNodes().get(0).getFSDataset();
+  DistributedFileSystem fs=cluster.getFileSystem();
+  DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+  DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+  byte original[]=DFSTestUtil.calculateFileContentsFromSeed(RANDOM_SEED,TEST_FILE_LENGTH);
+  FSDataInputStream fsIn=fs.open(TEST_PATH);
+  try {
+    result=fsIn.read(null,TEST_FILE_LENGTH / 2,EnumSet.noneOf(ReadOption.class));
+    Assert.fail("expected UnsupportedOperationException");
+  }
+ catch (  UnsupportedOperationException e) {
+  }
+  fs.addCachePool(new CachePoolInfo("pool1"));
+  long directiveId=fs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(TEST_PATH).setReplication((short)1).setPool("pool1").build());
+  int numBlocks=(int)Math.ceil((double)TEST_FILE_LENGTH / BLOCK_SIZE);
+  DFSTestUtil.verifyExpectedCacheUsage(DFSTestUtil.roundUpToMultiple(TEST_FILE_LENGTH,BLOCK_SIZE),numBlocks,cluster.getDataNodes().get(0).getFSDataset());
+  try {
+    result=fsIn.read(null,TEST_FILE_LENGTH,EnumSet.noneOf(ReadOption.class));
+  }
+ catch (  UnsupportedOperationException e) {
+    Assert.fail("expected to be able to read cached file via zero-copy");
+  }
+  Assert.assertArrayEquals(Arrays.copyOfRange(original,0,BLOCK_SIZE),byteBufferToArray(result));
+  FSDataInputStream fsIn2=fs.open(TEST_PATH);
+  try {
+    result2=fsIn2.read(null,TEST_FILE_LENGTH,EnumSet.noneOf(ReadOption.class));
+  }
+ catch (  UnsupportedOperationException e) {
+    Assert.fail("expected to be able to read cached file via zero-copy");
+  }
+  Assert.assertArrayEquals(Arrays.copyOfRange(original,0,BLOCK_SIZE),byteBufferToArray(result2));
+  fsIn2.releaseBuffer(result2);
+  fsIn2.close();
+  final ExtendedBlock firstBlock=DFSTestUtil.getFirstBlock(fs,TEST_PATH);
+  final ShortCircuitCache cache=ClientContext.get(CONTEXT,new DFSClient.Conf(conf)).getShortCircuitCache();
+  waitForReplicaAnchorStatus(cache,firstBlock,true,true,1);
+  fs.removeCacheDirective(directiveId);
+  waitForReplicaAnchorStatus(cache,firstBlock,false,true,1);
+  fsIn.releaseBuffer(result);
+  waitForReplicaAnchorStatus(cache,firstBlock,false,false,1);
+  DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+  fsIn.close();
+  fs.close();
+  cluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZeroCopyReads() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  FSDataInputStream fsIn=null;
+  final int TEST_FILE_LENGTH=12345;
+  FileSystem fs=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,7567L);
+    try {
+      DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    }
+ catch (    InterruptedException e) {
+      Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+    }
+catch (    TimeoutException e) {
+      Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+    }
+    fsIn=fs.open(TEST_PATH);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+    fsIn.close();
+    fsIn=fs.open(TEST_PATH);
+    ByteBuffer result=fsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(4096,result.remaining());
+    HdfsDataInputStream dfsIn=(HdfsDataInputStream)fsIn;
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalBytesRead());
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalZeroCopyBytesRead());
+    Assert.assertArrayEquals(Arrays.copyOfRange(original,0,4096),byteBufferToArray(result));
+    fsIn.releaseBuffer(result);
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-15 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test2GBMmapLimit() throws Exception {
+  Assume.assumeTrue(BlockReaderTestUtil.shouldTestLargeFiles());
+  HdfsConfiguration conf=initZeroCopyTest();
+  final long TEST_FILE_LENGTH=2469605888L;
+  conf.set(DFSConfigKeys.DFS_CHECKSUM_TYPE_KEY,"NULL");
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,TEST_FILE_LENGTH);
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  final String CONTEXT="test2GBMmapLimit";
+  conf.set(DFSConfigKeys.DFS_CLIENT_CONTEXT,CONTEXT);
+  FSDataInputStream fsIn=null, fsIn2=null;
+  ByteBuffer buf1=null, buf2=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    DistributedFileSystem fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,0xB);
+    DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    fsIn=fs.open(TEST_PATH);
+    buf1=fsIn.read(null,1,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(1,buf1.remaining());
+    fsIn.releaseBuffer(buf1);
+    buf1=null;
+    fsIn.seek(2147483640L);
+    buf1=fsIn.read(null,1024,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(7,buf1.remaining());
+    Assert.assertEquals(Integer.MAX_VALUE,buf1.limit());
+    fsIn.releaseBuffer(buf1);
+    buf1=null;
+    Assert.assertEquals(2147483647L,fsIn.getPos());
+    try {
+      buf1=fsIn.read(null,1024,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+      Assert.fail("expected UnsupportedOperationException");
+    }
+ catch (    UnsupportedOperationException e) {
+    }
+    fsIn.close();
+    fsIn=null;
+    final Path TEST_PATH2=new Path("/b");
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,268435456L);
+    DFSTestUtil.createFile(fs,TEST_PATH2,1024 * 1024,TEST_FILE_LENGTH,268435456L,(short)1,0xA);
+    fsIn2=fs.open(TEST_PATH2);
+    fsIn2.seek(2147483640L);
+    buf2=fsIn2.read(null,1024,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(8,buf2.remaining());
+    Assert.assertEquals(2147483648L,fsIn2.getPos());
+    fsIn2.releaseBuffer(buf2);
+    buf2=null;
+    buf2=fsIn2.read(null,1024,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(1024,buf2.remaining());
+    Assert.assertEquals(2147484672L,fsIn2.getPos());
+    fsIn2.releaseBuffer(buf2);
+    buf2=null;
+  }
+  finally {
+    if (buf1 != null) {
+      fsIn.releaseBuffer(buf1);
+    }
+    if (buf2 != null) {
+      fsIn2.releaseBuffer(buf2);
+    }
+    IOUtils.cleanup(null,fsIn,fsIn2);
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test the {@link ByteBufferUtil#fallbackRead} function directly.
+ */
+@Test public void testFallbackRead() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  final int TEST_FILE_LENGTH=16385;
+  final int RANDOM_SEED=23453;
+  FSDataInputStream fsIn=null;
+  DistributedFileSystem fs=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,RANDOM_SEED);
+    try {
+      DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    }
+ catch (    InterruptedException e) {
+      Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+    }
+catch (    TimeoutException e) {
+      Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+    }
+    fsIn=fs.open(TEST_PATH);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+    fsIn.close();
+    fsIn=fs.open(TEST_PATH);
+    testFallbackImpl(fsIn,original);
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void teardown(){
+  NativeIO.POSIX.setCacheManipulator(prevCacheManipulator);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZeroCopyReadsNoFallback() throws Exception {
+  HdfsConfiguration conf=initZeroCopyTest();
+  MiniDFSCluster cluster=null;
+  final Path TEST_PATH=new Path("/a");
+  FSDataInputStream fsIn=null;
+  final int TEST_FILE_LENGTH=12345;
+  FileSystem fs=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,TEST_PATH,TEST_FILE_LENGTH,(short)1,7567L);
+    try {
+      DFSTestUtil.waitReplication(fs,TEST_PATH,(short)1);
+    }
+ catch (    InterruptedException e) {
+      Assert.fail("unexpected InterruptedException during " + "waitReplication: " + e);
+    }
+catch (    TimeoutException e) {
+      Assert.fail("unexpected TimeoutException during " + "waitReplication: " + e);
+    }
+    fsIn=fs.open(TEST_PATH);
+    byte original[]=new byte[TEST_FILE_LENGTH];
+    IOUtils.readFully(fsIn,original,0,TEST_FILE_LENGTH);
+    fsIn.close();
+    fsIn=fs.open(TEST_PATH);
+    HdfsDataInputStream dfsIn=(HdfsDataInputStream)fsIn;
+    ByteBuffer result;
+    try {
+      result=dfsIn.read(null,4097,EnumSet.noneOf(ReadOption.class));
+      Assert.fail("expected UnsupportedOperationException");
+    }
+ catch (    UnsupportedOperationException e) {
+    }
+    result=dfsIn.read(null,4096,EnumSet.of(ReadOption.SKIP_CHECKSUMS));
+    Assert.assertEquals(4096,result.remaining());
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalBytesRead());
+    Assert.assertEquals(4096,dfsIn.getReadStatistics().getTotalZeroCopyBytesRead());
+    Assert.assertArrayEquals(Arrays.copyOfRange(original,0,4096),byteBufferToArray(result));
+  }
+  finally {
+    if (fsIn != null)     fsIn.close();
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

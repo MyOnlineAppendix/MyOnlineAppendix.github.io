@@ -1,0 +1,79 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.server.quorum.WatchLeakTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  System.setProperty("zookeeper.admin.enableServer","false");
+}
+
+</code></pre>
+
+<pre class="type-10 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Check that if session has expired then no watch can be set
+ */
+@Test public void testWatchesLeak() throws Exception {
+  NIOServerCnxnFactory serverCnxnFactory=mock(NIOServerCnxnFactory.class);
+  final SelectionKey sk=new FakeSK();
+  MockSelectorThread selectorThread=mock(MockSelectorThread.class);
+  when(selectorThread.addInterestOpsUpdateRequest(any(SelectionKey.class))).thenAnswer(new Answer<Boolean>(){
+    @Override public Boolean answer(    InvocationOnMock invocation) throws Throwable {
+      SelectionKey sk=(SelectionKey)invocation.getArguments()[0];
+      NIOServerCnxn nioSrvCnx=(NIOServerCnxn)sk.attachment();
+      sk.interestOps(nioSrvCnx.getInterestOps());
+      return true;
+    }
+  }
+);
+  ZKDatabase database=new ZKDatabase(null);
+  database.setlastProcessedZxid(2L);
+  QuorumPeer quorumPeer=mock(QuorumPeer.class);
+  FileTxnSnapLog logfactory=mock(FileTxnSnapLog.class);
+  when(logfactory.getDataDir()).thenReturn(new File(""));
+  when(logfactory.getSnapDir()).thenReturn(new File(""));
+  FollowerZooKeeperServer fzks=null;
+  try {
+    fzks=new FollowerZooKeeperServer(logfactory,quorumPeer,database);
+    fzks.startup();
+    fzks.setServerCnxnFactory(serverCnxnFactory);
+    quorumPeer.follower=new MyFollower(quorumPeer,fzks);
+    LOG.info("Follower created");
+    final SocketChannel socketChannel=createClientSocketChannel();
+    final MockNIOServerCnxn nioCnxn=new MockNIOServerCnxn(fzks,socketChannel,sk,serverCnxnFactory,selectorThread);
+    sk.attach(nioCnxn);
+    nioCnxn.doIO(sk);
+    LOG.info("Client connection sent");
+    QuorumPacket qp=createValidateSessionPacketResponse(!sessionTimedout);
+    quorumPeer.follower.processPacket(qp);
+    LOG.info("Session validation sent");
+    nioCnxn.doIO(sk);
+    Thread.sleep(1000L);
+    LOG.info("Watches processed");
+    int watchCount=database.getDataTree().getWatchCount();
+    if (sessionTimedout) {
+      LOG.info("session is not valid, watches = {}",watchCount);
+      assertEquals("Session is not valid so there should be no watches",0,watchCount);
+    }
+ else {
+      LOG.info("session is valid, watches = {}",watchCount);
+      assertEquals("Session is valid so the watch should be there",1,watchCount);
+    }
+  }
+  finally {
+    if (fzks != null) {
+      fzks.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

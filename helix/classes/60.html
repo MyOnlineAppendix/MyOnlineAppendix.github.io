@@ -1,0 +1,145 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestDisableCustomCodeRunner (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-14 type-1 type-8 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,PARTITION_NUM,N,2,"MasterSlave",true);
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  Map<String,HelixCustomCodeRunner> customCodeRunners=new HashMap<String,HelixCustomCodeRunner>();
+  Map<String,DummyCallback> callbacks=new HashMap<String,DummyCallback>();
+  for (int i=0; i < N; i++) {
+    String instanceName="localhost_" + (12918 + i);
+    participants.put(instanceName,new MockParticipant(_zkaddr,clusterName,instanceName));
+    customCodeRunners.put(instanceName,new HelixCustomCodeRunner(participants.get(instanceName),_zkaddr));
+    callbacks.put(instanceName,new DummyCallback());
+    customCodeRunners.get(instanceName).invoke(callbacks.get(instanceName)).on(ChangeType.LIVE_INSTANCE).usingLeaderStandbyModel("TestParticLeader").start();
+    participants.get(instanceName).syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  BaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  final HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,baseAccessor);
+  PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  final String customCodeRunnerResource=customCodeRunners.get("localhost_12918").getResourceName();
+  ExternalView extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+  Map<String,String> instanceStates=extView.getStateMap(customCodeRunnerResource + "_0");
+  String leader=null;
+  for (  String instance : instanceStates.keySet()) {
+    String state=instanceStates.get(instance);
+    if ("LEADER".equals(state)) {
+      leader=instance;
+      break;
+    }
+  }
+  Assert.assertNotNull(leader);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isInitTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isInitTypeInvoked());
+    }
+    callback.reset();
+  }
+  HelixAdmin admin=new ZKHelixAdmin(_zkclient);
+  admin.enableResource(clusterName,customCodeRunnerResource,false);
+  result=TestHelper.verify(new TestHelper.Verifier(){
+    @Override public boolean verify() throws Exception {
+      PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+      ExternalView extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+      if (extView == null) {
+        return false;
+      }
+      Set<String> partitionSet=extView.getPartitionSet();
+      if (partitionSet == null || partitionSet.size() != PARTITION_NUM) {
+        return false;
+      }
+      for (      String partition : partitionSet) {
+        Map<String,String> instanceStates=extView.getStateMap(partition);
+        for (        String state : instanceStates.values()) {
+          if (!"OFFLINE".equals(state)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+  }
+,10 * 1000);
+  Assert.assertTrue(result);
+  LiveInstance fakeInstance=new LiveInstance("fakeInstance");
+  fakeInstance.setSessionId("fakeSessionId");
+  fakeInstance.setHelixVersion("0.6");
+  accessor.setProperty(keyBuilder.liveInstance("fakeInstance"),fakeInstance);
+  Thread.sleep(1000);
+  for (  Map.Entry<String,DummyCallback> e : callbacks.entrySet()) {
+    String instance=e.getKey();
+    DummyCallback callback=e.getValue();
+    Assert.assertFalse(callback.isInitTypeInvoked());
+    Assert.assertFalse(callback.isCallbackTypeInvoked());
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isFinalizeTypeInvoked());
+    }
+  }
+  accessor.removeProperty(keyBuilder.liveInstance("fakeInstance"));
+  admin.enableResource(clusterName,customCodeRunnerResource,true);
+  result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+  instanceStates=extView.getStateMap(customCodeRunnerResource + "_0");
+  leader=null;
+  for (  String instance : instanceStates.keySet()) {
+    String state=instanceStates.get(instance);
+    if ("LEADER".equals(state)) {
+      leader=instance;
+      break;
+    }
+  }
+  Assert.assertNotNull(leader);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isInitTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isInitTypeInvoked());
+    }
+    callback.reset();
+  }
+  accessor.setProperty(keyBuilder.liveInstance("fakeInstance"),fakeInstance);
+  Thread.sleep(1000);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isCallbackTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isCallbackTypeInvoked());
+    }
+  }
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

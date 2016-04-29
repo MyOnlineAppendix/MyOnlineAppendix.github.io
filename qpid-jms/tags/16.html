@@ -1,0 +1,601 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.qpid.jms.integration.BytesMessageIntegrationTest </h4><pre class="type-4 type-5 type-7 type-9 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that a message received from the test peer with a Data section and content type of{@link AmqpMessageSupport#OCTET_STREAM_CONTENT_TYPE} is returned as a BytesMessage, verify it
+ * gives the expected data values when read, and when reset and left mid-stream before being
+ * resent that it results in the expected AMQP data body section and properties content type
+ * being received by the test peer.
+ * @throws Exception if an error occurs during the test.
+ */
+@Test(timeout=20000) public void testReceiveBytesMessageAndResendAfterResetAndPartialRead() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    PropertiesDescribedType properties=new PropertiesDescribedType();
+    Symbol contentType=Symbol.valueOf(AmqpMessageSupport.OCTET_STREAM_CONTENT_TYPE);
+    properties.setContentType(contentType);
+    MessageAnnotationsDescribedType msgAnnotations=new MessageAnnotationsDescribedType();
+    msgAnnotations.setSymbolKeyedAnnotation(AmqpMessageSupport.JMS_MSG_TYPE,AmqpMessageSupport.JMS_BYTES_MESSAGE);
+    boolean myBool=true;
+    byte myByte=4;
+    byte[] myBytes="myBytes".getBytes();
+    char myChar='d';
+    double myDouble=1234567890123456789.1234;
+    float myFloat=1.1F;
+    int myInt=Integer.MAX_VALUE;
+    long myLong=Long.MAX_VALUE;
+    short myShort=25;
+    String myUTF="myString";
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    DataOutputStream dos=new DataOutputStream(baos);
+    dos.writeBoolean(myBool);
+    dos.writeByte(myByte);
+    dos.write(myBytes);
+    dos.writeChar(myChar);
+    dos.writeDouble(myDouble);
+    dos.writeFloat(myFloat);
+    dos.writeInt(myInt);
+    dos.writeLong(myLong);
+    dos.writeShort(myShort);
+    dos.writeUTF(myUTF);
+    byte[] bytesPayload=baos.toByteArray();
+    Binary binaryPayload=new Binary(bytesPayload);
+    DescribedType dataSectionContent=new DataDescribedType(binaryPayload);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,msgAnnotations,properties,null,dataSectionContent);
+    testPeer.expectDispositionThatIsAcceptedAndSettled();
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    Message receivedMessage=messageConsumer.receive(3000);
+    testPeer.waitForAllHandlersToComplete(3000);
+    assertNotNull("Message was not received",receivedMessage);
+    assertTrue("Message was not a BytesMessage",receivedMessage instanceof BytesMessage);
+    BytesMessage receivedBytesMessage=(BytesMessage)receivedMessage;
+    assertEquals("Unexpected boolean value",myBool,receivedBytesMessage.readBoolean());
+    assertEquals("Unexpected byte value",myByte,receivedBytesMessage.readByte());
+    byte[] readBytes=new byte[myBytes.length];
+    assertEquals("Did not read the expected number of bytes",myBytes.length,receivedBytesMessage.readBytes(readBytes));
+    assertTrue("Read bytes were not as expected: " + Arrays.toString(readBytes),Arrays.equals(myBytes,readBytes));
+    assertEquals("Unexpected char value",myChar,receivedBytesMessage.readChar());
+    assertEquals("Unexpected double value",myDouble,receivedBytesMessage.readDouble(),0.0);
+    assertEquals("Unexpected float value",myFloat,receivedBytesMessage.readFloat(),0.0);
+    assertEquals("Unexpected int value",myInt,receivedBytesMessage.readInt());
+    assertEquals("Unexpected long value",myLong,receivedBytesMessage.readLong());
+    assertEquals("Unexpected short value",myShort,receivedBytesMessage.readShort());
+    assertEquals("Unexpected UTF value",myUTF,receivedBytesMessage.readUTF());
+    receivedBytesMessage.reset();
+    assertEquals("Unexpected boolean value after reset",myBool,receivedBytesMessage.readBoolean());
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    MessageHeaderSectionMatcher headersMatcher=new MessageHeaderSectionMatcher(true);
+    MessageAnnotationsSectionMatcher msgAnnotationsMatcher=new MessageAnnotationsSectionMatcher(true);
+    MessagePropertiesSectionMatcher propsMatcher=new MessagePropertiesSectionMatcher(true);
+    propsMatcher.withContentType(equalTo(contentType));
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(headersMatcher);
+    messageMatcher.setMessageAnnotationsMatcher(msgAnnotationsMatcher);
+    messageMatcher.setPropertiesMatcher(propsMatcher);
+    messageMatcher.setMessageContentMatcher(new EncodedDataMatcher(binaryPayload));
+    testPeer.expectTransfer(messageMatcher);
+    producer.send(receivedBytesMessage);
+    testPeer.waitForAllHandlersToComplete(3000);
+  }
+ }
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-7 type-9 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that a message received from the test peer with an AmqpValue section containing
+ * Binary and no content type is returned as a BytesMessage, verify it gives the
+ * expected data values when read, and when sent to the test peer it results in an
+ * AMQP message containing a data body section and content type of{@link AmqpMessageSupport#OCTET_STREAM_CONTENT_TYPE}
+ * @throws Exception if an error occurs during the test.
+ */
+@Test(timeout=20000) public void testReceiveBytesMessageWithAmqpValueAndResendResultsInData() throws Exception {
+  try (TestAmqpPeer testPeer=new TestAmqpPeer()){
+    Connection connection=testFixture.establishConnecton(testPeer);
+    connection.start();
+    testPeer.expectBegin();
+    Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+    Queue queue=session.createQueue("myQueue");
+    boolean myBool=true;
+    byte myByte=4;
+    byte[] myBytes="myBytes".getBytes();
+    char myChar='d';
+    double myDouble=1234567890123456789.1234;
+    float myFloat=1.1F;
+    int myInt=Integer.MAX_VALUE;
+    long myLong=Long.MAX_VALUE;
+    short myShort=25;
+    String myUTF="myString";
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    DataOutputStream dos=new DataOutputStream(baos);
+    dos.writeBoolean(myBool);
+    dos.writeByte(myByte);
+    dos.write(myBytes);
+    dos.writeChar(myChar);
+    dos.writeDouble(myDouble);
+    dos.writeFloat(myFloat);
+    dos.writeInt(myInt);
+    dos.writeLong(myLong);
+    dos.writeShort(myShort);
+    dos.writeUTF(myUTF);
+    byte[] bytesPayload=baos.toByteArray();
+    Binary binaryPayload=new Binary(bytesPayload);
+    DescribedType amqpValueSectionContent=new AmqpValueDescribedType(binaryPayload);
+    testPeer.expectReceiverAttach();
+    testPeer.expectLinkFlowRespondWithTransfer(null,null,null,null,amqpValueSectionContent);
+    testPeer.expectDispositionThatIsAcceptedAndSettled();
+    MessageConsumer messageConsumer=session.createConsumer(queue);
+    Message receivedMessage=messageConsumer.receive(3000);
+    testPeer.waitForAllHandlersToComplete(3000);
+    assertNotNull("Message was not received",receivedMessage);
+    assertTrue("Message was not a BytesMessage",receivedMessage instanceof BytesMessage);
+    BytesMessage receivedBytesMessage=(BytesMessage)receivedMessage;
+    assertEquals("Unexpected boolean value",myBool,receivedBytesMessage.readBoolean());
+    assertEquals("Unexpected byte value",myByte,receivedBytesMessage.readByte());
+    byte[] readBytes=new byte[myBytes.length];
+    assertEquals("Did not read the expected number of bytes",myBytes.length,receivedBytesMessage.readBytes(readBytes));
+    assertTrue("Read bytes were not as expected: " + Arrays.toString(readBytes),Arrays.equals(myBytes,readBytes));
+    assertEquals("Unexpected char value",myChar,receivedBytesMessage.readChar());
+    assertEquals("Unexpected double value",myDouble,receivedBytesMessage.readDouble(),0.0);
+    assertEquals("Unexpected float value",myFloat,receivedBytesMessage.readFloat(),0.0);
+    assertEquals("Unexpected int value",myInt,receivedBytesMessage.readInt());
+    assertEquals("Unexpected long value",myLong,receivedBytesMessage.readLong());
+    assertEquals("Unexpected short value",myShort,receivedBytesMessage.readShort());
+    assertEquals("Unexpected UTF value",myUTF,receivedBytesMessage.readUTF());
+    receivedBytesMessage.reset();
+    assertEquals("Unexpected boolean value after reset",myBool,receivedBytesMessage.readBoolean());
+    testPeer.expectSenderAttach();
+    MessageProducer producer=session.createProducer(queue);
+    MessageHeaderSectionMatcher headersMatcher=new MessageHeaderSectionMatcher(true);
+    MessageAnnotationsSectionMatcher msgAnnotationsMatcher=new MessageAnnotationsSectionMatcher(true);
+    msgAnnotationsMatcher.withEntry(Symbol.valueOf(AmqpMessageSupport.JMS_MSG_TYPE),equalTo(AmqpMessageSupport.JMS_BYTES_MESSAGE));
+    MessagePropertiesSectionMatcher propsMatcher=new MessagePropertiesSectionMatcher(true);
+    propsMatcher.withContentType(equalTo(Symbol.valueOf(AmqpMessageSupport.OCTET_STREAM_CONTENT_TYPE)));
+    TransferPayloadCompositeMatcher messageMatcher=new TransferPayloadCompositeMatcher();
+    messageMatcher.setHeadersMatcher(headersMatcher);
+    messageMatcher.setMessageAnnotationsMatcher(msgAnnotationsMatcher);
+    messageMatcher.setPropertiesMatcher(propsMatcher);
+    messageMatcher.setMessageContentMatcher(new EncodedDataMatcher(binaryPayload));
+    testPeer.expectTransfer(messageMatcher);
+    producer.send(receivedBytesMessage);
+    testPeer.waitForAllHandlersToComplete(3000);
+  }
+ }
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.qpid.jms.message.JmsBytesMessageTest </h4><pre class="type-6 type-5 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Test that calling {@link BytesMessage#reset()} causes a write-only
+ * message to become read-only
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testResetOnReceivedBytesMessageResetsMarker() throws Exception {
+  byte[] content="myBytesData".getBytes();
+  JmsTestBytesMessageFacade facade=new JmsTestBytesMessageFacade(content);
+  JmsBytesMessage bytesMessage=new JmsBytesMessage(facade);
+  bytesMessage.onDispatch();
+  byte[] partialBytes=new byte[3];
+  bytesMessage.readBytes(partialBytes);
+  byte[] partialOriginalBytes=Arrays.copyOf(content,3);
+  assertTrue(Arrays.equals(partialOriginalBytes,partialBytes));
+  bytesMessage.reset();
+  byte[] resetBytes=new byte[content.length];
+  bytesMessage.readBytes(resetBytes);
+  assertTrue(Arrays.equals(content,resetBytes));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-5 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReadBytesbyteArray() throws JMSException {
+  JmsBytesMessage msg=factory.createBytesMessage();
+  byte[] data=new byte[50];
+  for (int i=0; i < data.length; i++) {
+    data[i]=(byte)i;
+  }
+  msg.writeBytes(data);
+  msg.reset();
+  byte[] test=new byte[data.length];
+  msg.readBytes(test);
+  for (int i=0; i < test.length; i++) {
+    assertTrue(test[i] == i);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Test that calling {@link BytesMessage#reset()} on a new message which has been populated
+ * causes the marker to be reset and makes the message read-only
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testResetOnNewlyPopulatedBytesMessageResetsMarkerAndMakesReadable() throws Exception {
+  byte[] content="myBytesData".getBytes();
+  JmsTestBytesMessageFacade facade=new JmsTestBytesMessageFacade(content);
+  JmsBytesMessage bytesMessage=new JmsBytesMessage(facade);
+  assertFalse("Message should be writable",bytesMessage.isReadOnlyBody());
+  bytesMessage.writeBytes(content);
+  bytesMessage.reset();
+  assertTrue("Message should not be writable",bytesMessage.isReadOnlyBody());
+  byte[] resetBytes=new byte[content.length];
+  bytesMessage.readBytes(resetBytes);
+  assertTrue(Arrays.equals(content,resetBytes));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-7 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadBytesUsingReceivedMessageWithBodyReturnsBytes() throws Exception {
+  byte[] content="myBytesData".getBytes();
+  JmsTestBytesMessageFacade facade=new JmsTestBytesMessageFacade(content);
+  JmsBytesMessage bytesMessage=new JmsBytesMessage(facade);
+  bytesMessage.onDispatch();
+  byte[] receivedBytes=new byte[content.length];
+  bytesMessage.readBytes(receivedBytes);
+  assertTrue(Arrays.equals(content,receivedBytes));
+  assertEquals("Expected input stream to be at end but data was returned",END_OF_STREAM,bytesMessage.readBytes(new byte[1]));
+  assertEquals("Message reports unexpected length",content.length,bytesMessage.getBodyLength());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.qpid.jms.message.JmsMapMessageTest </h4><pre class="type-6 type-4 type-5 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Verify that setting bytes takes a copy of the array. Set bytes, then modify them, then
+ * retrieve the map entry and verify the two differ.
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testSetBytesTakesSnapshot() throws Exception {
+  JmsMapMessage mapMessage=factory.createMapMessage();
+  String name="myName";
+  byte[] orig="myBytes".getBytes();
+  byte[] copy=Arrays.copyOf(orig,orig.length);
+  mapMessage.setBytes(name,orig);
+  orig[0]=(byte)0;
+  byte[] retrieved=mapMessage.getBytes(name);
+  assertFalse(Arrays.equals(orig,retrieved));
+  assertTrue(Arrays.equals(copy,retrieved));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.qpid.jms.message.JmsStreamMessageTest </h4><pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReadBytesFullWithPreciselySizedDestinationArray() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] bytes=new byte[]{(byte)11,(byte)44,(byte)99};
+  streamMessage.writeBytes(bytes);
+  streamMessage.reset();
+  byte[] retrievedByteArray=new byte[bytes.length];
+  int readBytesLength=streamMessage.readBytes(retrievedByteArray);
+  assertEquals("Number of bytes read did not match original array length",bytes.length,readBytesLength);
+  assertArrayEquals("Expected array to equal retrieved bytes",bytes,retrievedByteArray);
+  assertEquals("Expected completion return value",-1,streamMessage.readBytes(retrievedByteArray));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReadBytesFullWithUndersizedDestinationArrayUsingMultipleReads() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] bytes=new byte[]{(byte)3,(byte)78,(byte)253,(byte)26,(byte)8};
+  assertEquals("bytes should be odd length",1,bytes.length % 2);
+  int undersizedLength=2;
+  int remaining=1;
+  streamMessage.writeBytes(bytes);
+  streamMessage.reset();
+  byte[] undersizedDestination=new byte[undersizedLength];
+  byte[] fullRetrievedBytes=new byte[bytes.length];
+  assertEquals("Number of bytes read did not match destination array length",undersizedLength,streamMessage.readBytes(undersizedDestination));
+  int read=undersizedLength;
+  System.arraycopy(undersizedDestination,0,fullRetrievedBytes,0,undersizedLength);
+  assertEquals("Number of bytes read did not match destination array length",undersizedLength,streamMessage.readBytes(undersizedDestination));
+  System.arraycopy(undersizedDestination,0,fullRetrievedBytes,read,undersizedLength);
+  read+=undersizedLength;
+  assertEquals("Number of bytes read did not match expectation",remaining,streamMessage.readBytes(undersizedDestination));
+  System.arraycopy(undersizedDestination,0,fullRetrievedBytes,read,remaining);
+  read+=remaining;
+  assertArrayEquals("Expected array to equal retrieved bytes",bytes,fullRetrievedBytes);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Verify the stream position is not incremented during illegal type conversion failure.
+ * This covers every read method except readObject (which doesn't do type conversion) and
+ * readBytes(), which is tested by{@link #testIllegalTypeConvesionFailureDoesNotIncrementPosition2}Write bytes, then deliberately try to retrieve them as illegal types, then check they can
+ * be successfully read.
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testIllegalTypeConvesionFailureDoesNotIncrementPosition1() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] bytes=new byte[]{(byte)0,(byte)255,(byte)78};
+  streamMessage.writeBytes(bytes);
+  streamMessage.reset();
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Boolean.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Byte.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Short.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Character.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Integer.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Long.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Float.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,Double.class);
+  assertGetStreamEntryThrowsMessageFormatException(streamMessage,String.class);
+  byte[] retrievedByteArray=new byte[bytes.length];
+  int readBytesLength=streamMessage.readBytes(retrievedByteArray);
+  assertEquals("Number of bytes read did not match original array length",bytes.length,readBytesLength);
+  assertArrayEquals("Expected array to equal retrieved bytes",bytes,retrievedByteArray);
+  assertEquals("Expected completion return value",-1,streamMessage.readBytes(retrievedByteArray));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReadBytesFullWithOversizedDestinationArray() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] bytes=new byte[]{(byte)4,(byte)115,(byte)255};
+  streamMessage.writeBytes(bytes);
+  streamMessage.reset();
+  byte[] oversizedDestination=new byte[bytes.length + 1];
+  int readBytesLength=streamMessage.readBytes(oversizedDestination);
+  assertEquals("Number of bytes read did not match original array length",bytes.length,readBytesLength);
+  assertArrayEquals("Expected array subset to equal retrieved bytes",bytes,Arrays.copyOfRange(oversizedDestination,0,readBytesLength));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Write bytes, then retrieve them as all of the legal type combinations
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testWriteBytesReadLegal() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] value=new byte[]{(byte)0,(byte)255,(byte)78};
+  streamMessage.writeBytes(value);
+  streamMessage.reset();
+  byte[] dest=new byte[value.length];
+  int readBytesLength=streamMessage.readBytes(dest);
+  assertEquals("Number of bytes read did not match expectation",value.length,readBytesLength);
+  assertArrayEquals("value not as expected",value,dest);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReadBytesWithZeroLengthDestination() throws Exception {
+  JmsStreamMessage streamMessage=factory.createStreamMessage();
+  byte[] bytes=new byte[]{(byte)11,(byte)44,(byte)99};
+  streamMessage.writeBytes(bytes);
+  streamMessage.reset();
+  byte[] zeroDestination=new byte[0];
+  byte[] fullRetrievedBytes=new byte[bytes.length];
+  assertEquals("Expected no bytes to be read",0,streamMessage.readBytes(zeroDestination));
+  assertEquals("Expected all bytes to be read",bytes.length,streamMessage.readBytes(fullRetrievedBytes));
+  assertArrayEquals("Expected arrays to be equal",bytes,fullRetrievedBytes);
+  assertEquals("Expected completion signal",-1,streamMessage.readBytes(zeroDestination));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.qpid.jms.provider.amqp.message.AmqpJmsBytesMessageFacadeTest </h4><pre class="type-6 type-4 type-5 type-7 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInputStreamUsingReceivedMessageWithAmqpValueSectionContainingBinary() throws Exception {
+  byte[] bytes="myBytes".getBytes();
+  Message message=Message.Factory.create();
+  message.setBody(new AmqpValue(new Binary(bytes)));
+  AmqpJmsBytesMessageFacade amqpBytesMessageFacade=createReceivedBytesMessageFacade(createMockAmqpConsumer(),message);
+  InputStream bytesStream=amqpBytesMessageFacade.getInputStream();
+  byte[] receivedBytes=new byte[bytes.length];
+  bytesStream.read(receivedBytes);
+  assertTrue(Arrays.equals(bytes,receivedBytes));
+  assertEquals("Expected input stream to be at end but data was returned",END_OF_STREAM,bytesStream.read(new byte[1]));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-4 type-5 type-7 type-9 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInputStreamUsingReceivedMessageWithDataSection() throws Exception {
+  byte[] bytes="myBytes".getBytes();
+  Message message=Message.Factory.create();
+  message.setBody(new Data(new Binary(bytes)));
+  AmqpJmsBytesMessageFacade amqpBytesMessageFacade=createReceivedBytesMessageFacade(createMockAmqpConsumer(),message);
+  InputStream bytesStream=amqpBytesMessageFacade.getInputStream();
+  assertNotNull(bytesStream);
+  byte[] receivedBytes=new byte[bytes.length];
+  bytesStream.read(receivedBytes);
+  assertTrue(Arrays.equals(bytes,receivedBytes));
+  assertEquals("Expected input stream to be at end but data was returned",END_OF_STREAM,bytesStream.read(new byte[1]));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-4 type-5 type-7 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that setting bytes on a received message results in the expected content in the body section
+ * of the underlying message and returned by a new InputStream requested from the message.
+ * @throws Exception if an error occurs during the test.
+ */
+@Test public void testSetGetBodyOnReceivedMessage() throws Exception {
+  byte[] orig="myOrigBytes".getBytes();
+  byte[] replacement="myReplacementBytes".getBytes();
+  Message message=Message.Factory.create();
+  message.setBody(new Data(new Binary(orig)));
+  AmqpJmsBytesMessageFacade amqpBytesMessageFacade=createReceivedBytesMessageFacade(createMockAmqpConsumer(),message);
+  Message protonMessage=amqpBytesMessageFacade.getAmqpMessage();
+  OutputStream os=amqpBytesMessageFacade.getOutputStream();
+  os.write(replacement);
+  amqpBytesMessageFacade.reset();
+  Data body=(Data)protonMessage.getBody();
+  assertEquals("Underlying message data section did not contain the expected bytes",new Binary(replacement),body.getValue());
+  assertEquals("expected body length to match replacement bytes",replacement.length,amqpBytesMessageFacade.getBodyLength());
+  byte[] receivedBytes=new byte[replacement.length];
+  InputStream bytesStream=amqpBytesMessageFacade.getInputStream();
+  bytesStream.read(receivedBytes);
+  assertTrue("Retrieved bytes from input steam did not match expected bytes",Arrays.equals(replacement,receivedBytes));
+  assertEquals("Expected input stream to be at end but data was returned",END_OF_STREAM,bytesStream.read(new byte[1]));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.qpid.jms.transports.TransportSupportTest </h4><pre class="type-6 type-4 type-5 type-7 type-9 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCreateSslEngineFromJksStoreWithExplicitDisabledProtocols() throws Exception {
+  TransportSslOptions options=createJksSslOptions();
+  SSLEngine directEngine=createSSLEngineDirectly(options);
+  String[] protocols=directEngine.getEnabledProtocols();
+  assertTrue("There were no initial protocols to choose from!",protocols.length > 0);
+  String[] disabledProtocol=new String[]{protocols[protocols.length - 1]};
+  String[] trimmedProtocols=Arrays.copyOf(protocols,protocols.length - 1);
+  options.setDisabledProtocols(disabledProtocol);
+  SSLContext context=TransportSupport.createSslContext(options);
+  SSLEngine engine=TransportSupport.createSslEngine(context,options);
+  assertNotNull(engine);
+  assertArrayEquals("Enabled protocols not as expected",trimmedProtocols,engine.getEnabledProtocols());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-4 type-5 type-7 type-9 type-16 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCreateSslEngineFromJksStoreWithExplicitDisabledCiphers() throws Exception {
+  TransportSslOptions options=createJksSslOptions();
+  SSLEngine directEngine=createSSLEngineDirectly(options);
+  String[] ciphers=directEngine.getEnabledCipherSuites();
+  assertTrue("There were no initial ciphers to choose from!",ciphers.length > 0);
+  String[] disabledCipher=new String[]{ciphers[ciphers.length - 1]};
+  String[] trimmedCiphers=Arrays.copyOf(ciphers,ciphers.length - 1);
+  options.setDisabledCipherSuites(disabledCipher);
+  SSLContext context=TransportSupport.createSslContext(options);
+  SSLEngine engine=TransportSupport.createSslEngine(context,options);
+  assertNotNull(engine);
+  assertArrayEquals("Enabled ciphers not as expected",trimmedCiphers,engine.getEnabledCipherSuites());
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

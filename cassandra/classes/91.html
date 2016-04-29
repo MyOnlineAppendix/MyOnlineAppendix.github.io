@@ -1,0 +1,135 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.CleanupTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testCleanupWithNewToken() throws ExecutionException, InterruptedException, UnknownHostException {
+  StorageService.instance.getTokenMetadata().clearUnsafe();
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF_STANDARD1);
+  fillCF(cfs,"val",LOOPS);
+  assertEquals(LOOPS,Util.getAll(Util.cmd(cfs).build()).size());
+  TokenMetadata tmd=StorageService.instance.getTokenMetadata();
+  byte[] tk1=new byte[1], tk2=new byte[1];
+  tk1[0]=2;
+  tk2[0]=1;
+  tmd.updateNormalToken(new BytesToken(tk1),InetAddress.getByName("127.0.0.1"));
+  tmd.updateNormalToken(new BytesToken(tk2),InetAddress.getByName("127.0.0.2"));
+  CompactionManager.instance.performCleanup(cfs);
+  assertEquals(0,Util.getAll(Util.cmd(cfs).build()).size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNeedsCleanup() throws Exception {
+  StorageService.instance.getTokenMetadata().clearUnsafe();
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF_STANDARD1);
+  fillCF(cfs,"val",LOOPS);
+  SSTableReader ssTable=cfs.getLiveSSTables().iterator().next();
+  final Token ssTableMin=ssTable.first.getToken();
+  final Token ssTableMax=ssTable.last.getToken();
+  final Token min=token((byte)0);
+  final Token before1=token((byte)2);
+  final Token before2=token((byte)5);
+  final Token before3=token((byte)10);
+  final Token before4=token((byte)47);
+  final Token insideSsTable1=token((byte)50);
+  final Token insideSsTable2=token((byte)55);
+  final Token max=token((byte)127,(byte)127,(byte)127,(byte)127);
+  assert (min.compareTo(ssTableMin) < 0);
+  assert (before1.compareTo(ssTableMin) < 0);
+  assert (before2.compareTo(ssTableMin) < 0);
+  assert (before3.compareTo(ssTableMin) < 0);
+  assert (before4.compareTo(ssTableMin) < 0);
+  assert (ssTableMin.compareTo(insideSsTable1) < 0);
+  assert (insideSsTable1.compareTo(ssTableMax) < 0);
+  assert (ssTableMin.compareTo(insideSsTable2) < 0);
+  assert (insideSsTable2.compareTo(ssTableMax) < 0);
+  assert (ssTableMax.compareTo(max) < 0);
+  List<Map.Entry<Boolean,List<Range<Token>>>> testCases=new LinkedList<Map.Entry<Boolean,List<Range<Token>>>>(){
+{
+      add(entry(false,Arrays.asList(range(min,max))));
+      add(entry(true,Arrays.asList(range(min,insideSsTable1))));
+      add(entry(true,Arrays.asList(range(insideSsTable1,max))));
+      add(entry(true,Arrays.asList(range(min,ssTableMin))));
+      add(entry(true,Arrays.asList(range(ssTableMax,max))));
+      add(entry(true,Arrays.asList(range(min,insideSsTable1),range(insideSsTable2,max))));
+      add(entry(true,Arrays.asList(range(ssTableMin,ssTableMax))));
+      add(entry(false,Arrays.asList(range(before4,max))));
+      add(entry(false,Arrays.asList(range(min,before1),range(before2,before3),range(before4,max))));
+    }
+  }
+;
+  for (  Map.Entry<Boolean,List<Range<Token>>> testCase : testCases) {
+    assertEquals(testCase.getKey(),CompactionManager.needsCleanup(ssTable,testCase.getValue()));
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testuserDefinedCleanupWithNewToken() throws ExecutionException, InterruptedException, UnknownHostException {
+  StorageService.instance.getTokenMetadata().clearUnsafe();
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF_STANDARD1);
+  fillCF(cfs,"val",LOOPS);
+  assertEquals(LOOPS,Util.getAll(Util.cmd(cfs).build()).size());
+  TokenMetadata tmd=StorageService.instance.getTokenMetadata();
+  byte[] tk1=new byte[1], tk2=new byte[1];
+  tk1[0]=2;
+  tk2[0]=1;
+  tmd.updateNormalToken(new BytesToken(tk1),InetAddress.getByName("127.0.0.1"));
+  tmd.updateNormalToken(new BytesToken(tk2),InetAddress.getByName("127.0.0.2"));
+  for (  SSTableReader r : cfs.getLiveSSTables())   CompactionManager.instance.forceUserDefinedCleanup(r.getFilename());
+  assertEquals(0,Util.getAll(Util.cmd(cfs).build()).size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testCleanupWithIndexes() throws IOException, ExecutionException, InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF_INDEXED1);
+  fillCF(cfs,"birthdate",LOOPS);
+  assertEquals(LOOPS,Util.getAll(Util.cmd(cfs).build()).size());
+  ColumnDefinition cdef=cfs.metadata.getColumnDefinition(COLUMN);
+  String indexName="birthdate_key_index";
+  long start=System.nanoTime();
+  while (!cfs.getBuiltIndexes().contains(indexName) && System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10))   Thread.sleep(10);
+  RowFilter cf=RowFilter.create();
+  cf.add(cdef,Operator.EQ,VALUE);
+  assertEquals(LOOPS,Util.getAll(Util.cmd(cfs).filterOn("birthdate",Operator.EQ,VALUE).build()).size());
+  TokenMetadata tmd=StorageService.instance.getTokenMetadata();
+  byte[] tk1=new byte[1], tk2=new byte[1];
+  tk1[0]=2;
+  tk2[0]=1;
+  tmd.updateNormalToken(new BytesToken(tk1),InetAddress.getByName("127.0.0.1"));
+  tmd.updateNormalToken(new BytesToken(tk2),InetAddress.getByName("127.0.0.2"));
+  CompactionManager.instance.performCleanup(cfs);
+  assertEquals(0,Util.getAll(Util.cmd(cfs).build()).size());
+  assert cfs.getLiveSSTables().isEmpty();
+  assertEquals(0,Util.getAll(Util.cmd(cfs).filterOn("birthdate",Operator.EQ,VALUE).build()).size());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

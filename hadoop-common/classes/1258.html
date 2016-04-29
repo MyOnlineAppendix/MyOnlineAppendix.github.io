@@ -1,0 +1,125 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.TestAMAuthorization (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-11 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAuthorizedAccess() throws Exception {
+  MyContainerManager containerManager=new MyContainerManager();
+  rm=new MockRMWithAMS(conf,containerManager);
+  rm.start();
+  MockNM nm1=rm.registerNode("localhost:1234",5120);
+  Map<ApplicationAccessType,String> acls=new HashMap<ApplicationAccessType,String>(2);
+  acls.put(ApplicationAccessType.VIEW_APP,"*");
+  RMApp app=rm.submitApp(1024,"appname","appuser",acls);
+  nm1.nodeHeartbeat(true);
+  int waitCount=0;
+  while (containerManager.containerTokens == null && waitCount++ < 20) {
+    LOG.info("Waiting for AM Launch to happen..");
+    Thread.sleep(1000);
+  }
+  Assert.assertNotNull(containerManager.containerTokens);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  ApplicationAttemptId applicationAttemptId=attempt.getAppAttemptId();
+  waitForLaunchedState(attempt);
+  final Configuration conf=rm.getConfig();
+  final YarnRPC rpc=YarnRPC.create(conf);
+  UserGroupInformation currentUser=UserGroupInformation.createRemoteUser(applicationAttemptId.toString());
+  Credentials credentials=containerManager.getContainerCredentials();
+  final InetSocketAddress rmBindAddress=rm.getApplicationMasterService().getBindAddress();
+  Token<? extends TokenIdentifier> amRMToken=MockRMWithAMS.setupAndReturnAMRMToken(rmBindAddress,credentials.getAllTokens());
+  currentUser.addToken(amRMToken);
+  ApplicationMasterProtocol client=currentUser.doAs(new PrivilegedAction<ApplicationMasterProtocol>(){
+    @Override public ApplicationMasterProtocol run(){
+      return (ApplicationMasterProtocol)rpc.getProxy(ApplicationMasterProtocol.class,rm.getApplicationMasterService().getBindAddress(),conf);
+    }
+  }
+);
+  RegisterApplicationMasterRequest request=Records.newRecord(RegisterApplicationMasterRequest.class);
+  RegisterApplicationMasterResponse response=client.registerApplicationMaster(request);
+  Assert.assertNotNull(response.getClientToAMTokenMasterKey());
+  if (UserGroupInformation.isSecurityEnabled()) {
+    Assert.assertTrue(response.getClientToAMTokenMasterKey().array().length > 0);
+  }
+  Assert.assertEquals("Register response has bad ACLs","*",response.getApplicationACLs().get(ApplicationAccessType.VIEW_APP));
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown(){
+  if (rm != null) {
+    rm.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-10 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUnauthorizedAccess() throws Exception {
+  MyContainerManager containerManager=new MyContainerManager();
+  rm=new MockRMWithAMS(conf,containerManager);
+  rm.start();
+  MockNM nm1=rm.registerNode("localhost:1234",5120);
+  RMApp app=rm.submitApp(1024);
+  nm1.nodeHeartbeat(true);
+  int waitCount=0;
+  while (containerManager.containerTokens == null && waitCount++ < 40) {
+    LOG.info("Waiting for AM Launch to happen..");
+    Thread.sleep(1000);
+  }
+  Assert.assertNotNull(containerManager.containerTokens);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  ApplicationAttemptId applicationAttemptId=attempt.getAppAttemptId();
+  waitForLaunchedState(attempt);
+  final Configuration conf=rm.getConfig();
+  final YarnRPC rpc=YarnRPC.create(conf);
+  final InetSocketAddress serviceAddr=conf.getSocketAddr(YarnConfiguration.RM_SCHEDULER_ADDRESS,YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT);
+  UserGroupInformation currentUser=UserGroupInformation.createRemoteUser(applicationAttemptId.toString());
+  ApplicationMasterProtocol client=currentUser.doAs(new PrivilegedAction<ApplicationMasterProtocol>(){
+    @Override public ApplicationMasterProtocol run(){
+      return (ApplicationMasterProtocol)rpc.getProxy(ApplicationMasterProtocol.class,serviceAddr,conf);
+    }
+  }
+);
+  RegisterApplicationMasterRequest request=Records.newRecord(RegisterApplicationMasterRequest.class);
+  try {
+    client.registerApplicationMaster(request);
+    Assert.fail("Should fail with authorization error");
+  }
+ catch (  Exception e) {
+    if (isCause(AccessControlException.class,e)) {
+      String expectedMessage="";
+      if (UserGroupInformation.isSecurityEnabled()) {
+        expectedMessage="Client cannot authenticate via:[TOKEN]";
+      }
+ else {
+        expectedMessage="SIMPLE authentication is not enabled.  Available:[TOKEN]";
+      }
+      Assert.assertTrue(e.getCause().getMessage().contains(expectedMessage));
+    }
+ else {
+      throw e;
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

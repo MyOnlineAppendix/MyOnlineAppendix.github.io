@@ -1,0 +1,84 @@
+<h3 style="margin:0px">Class: org.apache.ambari.funtest.server.tests.DeleteServiceTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-2 type-5 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Set up a test cluster with a service, a host and a few components.
+ * Attempt to delete the service. Verify the state of the DB.
+ * @throws Exception
+ */
+@Test public void testDeleteService() throws Exception {
+  String clusterName="c1";
+  String serviceName="HDFS";
+  ConnectionParams params=new ConnectionParams();
+  params.setServerName("localhost");
+  params.setServerApiPort(serverPort);
+  params.setServerAgentPort(serverAgentPort);
+  params.setUserName("admin");
+  params.setPassword("admin");
+  ClusterUtils clusterUtils=injector.getInstance(ClusterUtils.class);
+  clusterUtils.createSampleCluster(params);
+  JsonElement jsonResponse=RestApiUtils.executeRequest(new GetServiceWebRequest(params,clusterName,serviceName));
+  assertTrue(!jsonResponse.isJsonNull());
+  JsonObject jsonServiceInfoObj=jsonResponse.getAsJsonObject().get("ServiceInfo").getAsJsonObject();
+  String cluster_name=jsonServiceInfoObj.get("cluster_name").getAsString();
+  assertEquals(cluster_name,clusterName);
+  String service_name=jsonServiceInfoObj.get("service_name").getAsString();
+  assertEquals(service_name,serviceName);
+  jsonResponse=RestApiUtils.executeRequest(new StopServiceWebRequest(params,clusterName,serviceName));
+  ClusterServiceDAO clusterServiceDAO=injector.getInstance(ClusterServiceDAO.class);
+  List<ClusterServiceEntity> clusterServiceEntities=clusterServiceDAO.findAll();
+  assertEquals(clusterServiceEntities.size(),1);
+  assertEquals(clusterServiceEntities.get(0).getServiceName(),serviceName);
+  ClusterServiceEntity clusterServiceEntity=clusterServiceEntities.get(0);
+  long clusterId=clusterServiceEntity.getClusterId();
+  ServiceDesiredStateDAO serviceDesiredStateDAO=injector.getInstance(ServiceDesiredStateDAO.class);
+  List<ServiceDesiredStateEntity> serviceDesiredStateEntities=serviceDesiredStateDAO.findAll();
+  assertEquals(serviceDesiredStateEntities.size(),1);
+  ServiceDesiredStateEntity serviceDesiredStateEntity=serviceDesiredStateEntities.get(0);
+  assertEquals(serviceDesiredStateEntity.getServiceName(),serviceName);
+  assertEquals(serviceDesiredStateEntity.getDesiredState(),State.INSTALLED);
+  ServiceComponentDesiredStateDAO serviceComponentDesiredStateDAO=injector.getInstance(ServiceComponentDesiredStateDAO.class);
+  List<ServiceComponentDesiredStateEntity> serviceComponentDesiredStateEntities=serviceComponentDesiredStateDAO.findAll();
+  assertEquals(serviceComponentDesiredStateEntities.size(),3);
+  for (  ServiceComponentDesiredStateEntity serviceComponentDesiredStateEntity : serviceComponentDesiredStateEntities) {
+    assertEquals(serviceComponentDesiredStateEntity.getDesiredState(),State.INSTALLED);
+  }
+  HostComponentStateDAO hostComponentStateDAO=injector.getInstance(HostComponentStateDAO.class);
+  List<HostComponentStateEntity> hostComponentStateEntities=hostComponentStateDAO.findAll();
+  assertEquals(hostComponentStateEntities.size(),3);
+  HostComponentDesiredStateDAO hostComponentDesiredStateDAO=injector.getInstance(HostComponentDesiredStateDAO.class);
+  List<HostComponentDesiredStateEntity> hostComponentDesiredStateEntities=hostComponentDesiredStateDAO.findAll();
+  assertEquals(hostComponentDesiredStateEntities.size(),3);
+  jsonResponse=RestApiUtils.executeRequest(new DeleteServiceWebRequest(params,clusterName,serviceName));
+  WebResponse webResponse=new GetServiceWebRequest(params,clusterName,serviceName).getResponse();
+  assertEquals(webResponse.getStatusCode(),HttpStatus.SC_NOT_FOUND);
+  clusterServiceEntity=clusterServiceDAO.findByClusterAndServiceNames(clusterName,serviceName);
+  assertTrue(clusterServiceEntity == null);
+  ServiceDesiredStateEntityPK serviceDesiredStateEntityPK=injector.getInstance(ServiceDesiredStateEntityPK.class);
+  serviceDesiredStateEntityPK.setClusterId(clusterId);
+  serviceDesiredStateEntityPK.setServiceName(serviceName);
+  serviceDesiredStateEntity=serviceDesiredStateDAO.findByPK(serviceDesiredStateEntityPK);
+  assertTrue(serviceDesiredStateEntity == null);
+  ServiceComponentDesiredStateEntityPK serviceComponentDesiredStateEntityPK=injector.getInstance(ServiceComponentDesiredStateEntityPK.class);
+  ServiceComponentDesiredStateEntity serviceComponentDesiredStateEntity=serviceComponentDesiredStateDAO.findByPK(serviceComponentDesiredStateEntityPK);
+  assertTrue(serviceComponentDesiredStateEntity == null);
+  hostComponentStateEntities=hostComponentStateDAO.findByService(serviceName);
+  assertEquals(hostComponentStateEntities.size(),0);
+  hostComponentDesiredStateEntities=hostComponentDesiredStateDAO.findAll();
+  assertEquals(hostComponentDesiredStateEntities.size(),0);
+  jsonResponse=RestApiUtils.executeRequest(new DeleteClusterWebRequest(params,clusterName));
+  LOG.info(jsonResponse);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

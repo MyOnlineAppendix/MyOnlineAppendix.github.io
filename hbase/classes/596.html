@@ -1,0 +1,143 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.replication.regionserver.TestRegionReplicaReplicationEndpointNoMaster (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Is an empty test case"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >EmptyTester&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=240000) public void testReplayCallable() throws Exception {
+  openRegion(HTU,rs0,hriSecondary);
+  ClusterConnection connection=(ClusterConnection)ConnectionFactory.createConnection(HTU.getConfiguration());
+  HTU.loadNumericRows(table,f,0,1000);
+  Assert.assertEquals(1000,entries.size());
+  replicateUsingCallable(connection,entries);
+  Region region=rs0.getFromOnlineRegions(hriSecondary.getEncodedName());
+  HTU.verifyNumericRows(region,f,0,1000);
+  HTU.deleteNumericRows(table,f,0,1000);
+  closeRegion(HTU,rs0,hriSecondary);
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=240000) public void testReplayCallableWithRegionMove() throws Exception {
+  openRegion(HTU,rs0,hriSecondary);
+  ClusterConnection connection=(ClusterConnection)ConnectionFactory.createConnection(HTU.getConfiguration());
+  HTU.loadNumericRows(table,f,0,1000);
+  Assert.assertEquals(1000,entries.size());
+  replicateUsingCallable(connection,entries);
+  Region region=rs0.getFromOnlineRegions(hriSecondary.getEncodedName());
+  HTU.verifyNumericRows(region,f,0,1000);
+  HTU.loadNumericRows(table,f,1000,2000);
+  closeRegion(HTU,rs0,hriSecondary);
+  openRegion(HTU,rs1,hriSecondary);
+  replicateUsingCallable(connection,entries);
+  region=rs1.getFromOnlineRegions(hriSecondary.getEncodedName());
+  HTU.verifyNumericRows(region,f,1000,2000);
+  HTU.deleteNumericRows(table,f,0,2000);
+  closeRegion(HTU,rs1,hriSecondary);
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void afterClass() throws Exception {
+  table.close();
+  HTU.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=240000) public void testReplayedEditsAreSkipped() throws Exception {
+  openRegion(HTU,rs0,hriSecondary);
+  ClusterConnection connection=(ClusterConnection)ConnectionFactory.createConnection(HTU.getConfiguration());
+  RegionReplicaReplicationEndpoint replicator=new RegionReplicaReplicationEndpoint();
+  ReplicationEndpoint.Context context=mock(ReplicationEndpoint.Context.class);
+  when(context.getConfiguration()).thenReturn(HTU.getConfiguration());
+  when(context.getMetrics()).thenReturn(mock(MetricsSource.class));
+  ReplicationPeer mockPeer=mock(ReplicationPeer.class);
+  when(mockPeer.getTableCFs()).thenReturn(null);
+  when(context.getReplicationPeer()).thenReturn(mockPeer);
+  replicator.init(context);
+  replicator.start();
+  WALEntryFilter filter=replicator.getWALEntryfilter();
+  HTU.loadNumericRows(table,f,0,1000);
+  Assert.assertEquals(1000,entries.size());
+  for (  Entry e : entries) {
+    Cell _c=e.getEdit().getCells().get(0);
+    if (Integer.parseInt(Bytes.toString(_c.getValueArray(),_c.getValueOffset(),_c.getValueLength())) % 2 == 0) {
+      e.getKey().setOrigLogSeqNum(1);
+    }
+  }
+  long skipped=0, replayed=0;
+  for (  Entry e : entries) {
+    if (filter.filter(e) == null) {
+      skipped++;
+    }
+ else {
+      replayed++;
+    }
+  }
+  assertEquals(500,skipped);
+  assertEquals(500,replayed);
+  HTU.deleteNumericRows(table,f,0,1000);
+  closeRegion(HTU,rs0,hriSecondary);
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-3 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is an empty test case">EmptyTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+- Is an empty test case
+"></span><br>
+@After public void after() throws Exception {
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws Exception {
+  entries.clear();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=240000) public void testRegionReplicaReplicationEndpointReplicate() throws Exception {
+  openRegion(HTU,rs0,hriSecondary);
+  ClusterConnection connection=(ClusterConnection)ConnectionFactory.createConnection(HTU.getConfiguration());
+  RegionReplicaReplicationEndpoint replicator=new RegionReplicaReplicationEndpoint();
+  ReplicationEndpoint.Context context=mock(ReplicationEndpoint.Context.class);
+  when(context.getConfiguration()).thenReturn(HTU.getConfiguration());
+  when(context.getMetrics()).thenReturn(mock(MetricsSource.class));
+  replicator.init(context);
+  replicator.start();
+  HTU.loadNumericRows(table,f,0,1000);
+  Assert.assertEquals(1000,entries.size());
+  final String fakeWalGroupId="fakeWALGroup";
+  replicator.replicate(new ReplicateContext().setEntries(Lists.newArrayList(entries)).setWalGroupId(fakeWalGroupId));
+  Region region=rs0.getFromOnlineRegions(hriSecondary.getEncodedName());
+  HTU.verifyNumericRows(region,f,0,1000);
+  HTU.deleteNumericRows(table,f,0,1000);
+  closeRegion(HTU,rs0,hriSecondary);
+  connection.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,326 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.server.PurgeTxnTest (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests purge when logs are rolling or a new snapshot is created, then
+ * these newer files should alse be excluded in the current cycle.
+ * For frequent snapshotting, configured SnapCount to 30. There are three
+ * threads which will create 1000 znodes each and simultaneously do purge
+ * call
+ */
+@Test public void testPurgeWhenLogRollingInProgress() throws Exception {
+  tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(30);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  final ZooKeeper zk=new ZooKeeper(HOSTPORT,CONNECTION_TIMEOUT,this);
+  final CountDownLatch doPurge=new CountDownLatch(1);
+  final CountDownLatch purgeFinished=new CountDownLatch(1);
+  final AtomicBoolean opFailed=new AtomicBoolean(false);
+  new Thread(){
+    public void run(){
+      try {
+        doPurge.await(OP_TIMEOUT_IN_MILLIS / 2,TimeUnit.MILLISECONDS);
+        PurgeTxnLog.purge(tmpDir,tmpDir,3);
+      }
+ catch (      IOException ioe) {
+        LOG.error("Exception when purge",ioe);
+        opFailed.set(true);
+      }
+catch (      InterruptedException ie) {
+        LOG.error("Exception when purge",ie);
+        opFailed.set(true);
+      }
+ finally {
+        purgeFinished.countDown();
+      }
+    }
+  }
+.start();
+  final int thCount=3;
+  List<String> znodes=manyClientOps(zk,doPurge,thCount,"/invalidsnap");
+  Assert.assertTrue("Purging is not finished!",purgeFinished.await(OP_TIMEOUT_IN_MILLIS,TimeUnit.MILLISECONDS));
+  Assert.assertFalse("Purging failed!",opFailed.get());
+  for (  String znode : znodes) {
+    try {
+      zk.getData(znode,false,null);
+    }
+ catch (    Exception ke) {
+      LOG.error("Unexpected exception when visiting znode!",ke);
+      Assert.fail("Unexpected exception when visiting znode!");
+    }
+  }
+  zk.close();
+  f.shutdown();
+  zks.shutdown();
+  zks.getTxnLogFactory().close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests finding n recent snapshots from set of snapshots and data logs
+ */
+@Test public void testFindNRecentSnapshots() throws Exception {
+  int nRecentSnap=4;
+  int nRecentCount=30;
+  int offset=0;
+  tmpDir=ClientBase.createTmpDir();
+  File version2=new File(tmpDir.toString(),"version-2");
+  Assert.assertTrue("Failed to create version_2 dir:" + version2.toString(),version2.mkdir());
+  List<File> expectedNRecentSnapFiles=new ArrayList<File>();
+  int counter=offset + (2 * nRecentCount);
+  for (int i=0; i < nRecentCount; i++) {
+    File logFile=new File(version2 + "/log." + Long.toHexString(--counter));
+    Assert.assertTrue("Failed to create log File:" + logFile.toString(),logFile.createNewFile());
+    File snapFile=new File(version2 + "/snapshot." + Long.toHexString(--counter));
+    Assert.assertTrue("Failed to create snap File:" + snapFile.toString(),snapFile.createNewFile());
+    if (i < nRecentSnap) {
+      expectedNRecentSnapFiles.add(snapFile);
+    }
+  }
+  FileTxnSnapLog txnLog=new FileTxnSnapLog(tmpDir,tmpDir);
+  List<File> nRecentSnapFiles=txnLog.findNRecentSnapshots(nRecentSnap);
+  txnLog.close();
+  Assert.assertEquals("exactly 4 snapshots ",4,nRecentSnapFiles.size());
+  expectedNRecentSnapFiles.removeAll(nRecentSnapFiles);
+  Assert.assertEquals("Didn't get the recent snap files",0,expectedNRecentSnapFiles.size());
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests purge where the data directory contains snap files equals to the
+ * number of files to be retained
+ */
+@Test public void testSnapFilesEqualsToRetain() throws Exception {
+  int nRecentCount=3;
+  AtomicInteger offset=new AtomicInteger(0);
+  tmpDir=ClientBase.createTmpDir();
+  File version2=new File(tmpDir.toString(),"version-2");
+  Assert.assertTrue("Failed to create version_2 dir:" + version2.toString(),version2.mkdir());
+  List<File> snaps=new ArrayList<File>();
+  List<File> logs=new ArrayList<File>();
+  createDataDirFiles(offset,nRecentCount,version2,snaps,logs);
+  FileTxnSnapLog txnLog=new FileTxnSnapLog(tmpDir,tmpDir);
+  PurgeTxnLog.retainNRecentSnapshots(txnLog,snaps);
+  txnLog.close();
+  verifyFilesAfterPurge(snaps,true);
+  verifyFilesAfterPurge(logs,true);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * PurgeTxnLog is called with dataLogDir snapDir -n count This test case
+ * verify these values are parsed properly and functionality works fine
+ */
+@Test public void testPurgeTxnLogWithDataDir() throws Exception {
+  tmpDir=ClientBase.createTmpDir();
+  File dataDir=new File(tmpDir,"dataDir");
+  File dataLogDir=new File(tmpDir,"dataLogDir");
+  File dataDirVersion2=new File(dataDir,"version-2");
+  dataDirVersion2.mkdirs();
+  File dataLogDirVersion2=new File(dataLogDir,"version-2");
+  dataLogDirVersion2.mkdirs();
+  int totalFiles=20;
+  for (int i=0; i < totalFiles; i++) {
+    File logFile=new File(dataLogDirVersion2,"log." + Long.toHexString(i));
+    logFile.createNewFile();
+    File snapFile=new File(dataDirVersion2,"snapshot." + Long.toHexString(i));
+    snapFile.createNewFile();
+  }
+  int numberOfFilesToKeep=10;
+  String[] args=new String[]{dataLogDir.getAbsolutePath(),dataDir.getAbsolutePath(),"-n",Integer.toString(numberOfFilesToKeep)};
+  PurgeTxnLog.main(args);
+  assertEquals(numberOfFilesToKeep,dataDirVersion2.listFiles().length);
+  assertEquals(numberOfFilesToKeep,dataLogDirVersion2.listFiles().length);
+  ClientBase.recursiveDelete(tmpDir);
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests purge where the data directory contains old snapshots and data
+ * logs, newest snapshots and data logs, (newest + n) snapshots and data
+ * logs
+ */
+@Test public void testSnapFilesGreaterThanToRetain() throws Exception {
+  int nRecentCount=4;
+  int fileAboveRecentCount=4;
+  int fileToPurgeCount=2;
+  AtomicInteger offset=new AtomicInteger(0);
+  tmpDir=ClientBase.createTmpDir();
+  File version2=new File(tmpDir.toString(),"version-2");
+  Assert.assertTrue("Failed to create version_2 dir:" + version2.toString(),version2.mkdir());
+  List<File> snapsToPurge=new ArrayList<File>();
+  List<File> logsToPurge=new ArrayList<File>();
+  List<File> snaps=new ArrayList<File>();
+  List<File> logs=new ArrayList<File>();
+  List<File> snapsAboveRecentFiles=new ArrayList<File>();
+  List<File> logsAboveRecentFiles=new ArrayList<File>();
+  createDataDirFiles(offset,fileToPurgeCount,version2,snapsToPurge,logsToPurge);
+  createDataDirFiles(offset,nRecentCount,version2,snaps,logs);
+  createDataDirFiles(offset,fileAboveRecentCount,version2,snapsAboveRecentFiles,logsAboveRecentFiles);
+  FileTxnSnapLog txnLog=new FileTxnSnapLog(tmpDir,tmpDir);
+  PurgeTxnLog.retainNRecentSnapshots(txnLog,snaps);
+  txnLog.close();
+  verifyFilesAfterPurge(snapsToPurge,false);
+  verifyFilesAfterPurge(logsToPurge,false);
+  verifyFilesAfterPurge(snaps,true);
+  verifyFilesAfterPurge(logs,true);
+  verifyFilesAfterPurge(snapsAboveRecentFiles,true);
+  verifyFilesAfterPurge(logsAboveRecentFiles,true);
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests purge where the data directory contains old snapshots and data
+ * logs, newest snapshots and data logs
+ */
+@Test public void testSnapFilesLessThanToRetain() throws Exception {
+  int nRecentCount=4;
+  int fileToPurgeCount=2;
+  AtomicInteger offset=new AtomicInteger(0);
+  tmpDir=ClientBase.createTmpDir();
+  File version2=new File(tmpDir.toString(),"version-2");
+  Assert.assertTrue("Failed to create version_2 dir:" + version2.toString(),version2.mkdir());
+  List<File> snapsToPurge=new ArrayList<File>();
+  List<File> logsToPurge=new ArrayList<File>();
+  List<File> snaps=new ArrayList<File>();
+  List<File> logs=new ArrayList<File>();
+  createDataDirFiles(offset,fileToPurgeCount,version2,snapsToPurge,logsToPurge);
+  createDataDirFiles(offset,nRecentCount,version2,snaps,logs);
+  FileTxnSnapLog txnLog=new FileTxnSnapLog(tmpDir,tmpDir);
+  PurgeTxnLog.retainNRecentSnapshots(txnLog,snaps);
+  txnLog.close();
+  verifyFilesAfterPurge(snapsToPurge,false);
+  verifyFilesAfterPurge(logsToPurge,false);
+  verifyFilesAfterPurge(snaps,true);
+  verifyFilesAfterPurge(logs,true);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * PurgeTxnLog is called with dataLogDir -n count This test case verify
+ * these values are parsed properly and functionality works fine
+ */
+@Test public void testPurgeTxnLogWithoutDataDir() throws Exception {
+  tmpDir=ClientBase.createTmpDir();
+  File dataDir=new File(tmpDir,"dataDir");
+  File dataLogDir=new File(tmpDir,"dataLogDir");
+  File dataDirVersion2=new File(dataDir,"version-2");
+  dataDirVersion2.mkdirs();
+  File dataLogDirVersion2=new File(dataLogDir,"version-2");
+  dataLogDirVersion2.mkdirs();
+  int totalFiles=20;
+  for (int i=0; i < totalFiles; i++) {
+    File logFile=new File(dataLogDirVersion2,"log." + Long.toHexString(i));
+    logFile.createNewFile();
+    File snapFile=new File(dataLogDirVersion2,"snapshot." + Long.toHexString(i));
+    snapFile.createNewFile();
+  }
+  int numberOfFilesToKeep=10;
+  String[] args=new String[]{dataLogDir.getAbsolutePath(),"-n",Integer.toString(numberOfFilesToKeep)};
+  PurgeTxnLog.main(args);
+  assertEquals(numberOfFilesToKeep + numberOfFilesToKeep,dataLogDirVersion2.listFiles().length);
+  ClientBase.recursiveDelete(tmpDir);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * test the purge
+ * @throws Exception an exception might be thrown here
+ */
+@Test public void testPurge() throws Exception {
+  tmpDir=ClientBase.createTmpDir();
+  ClientBase.setupTestEnv();
+  ZooKeeperServer zks=new ZooKeeperServer(tmpDir,tmpDir,3000);
+  SyncRequestProcessor.setSnapCount(100);
+  final int PORT=Integer.parseInt(HOSTPORT.split(":")[1]);
+  ServerCnxnFactory f=ServerCnxnFactory.createFactory(PORT,-1);
+  f.startup(zks);
+  Assert.assertTrue("waiting for server being up ",ClientBase.waitForServerUp(HOSTPORT,CONNECTION_TIMEOUT));
+  ZooKeeper zk=new ZooKeeper(HOSTPORT,CONNECTION_TIMEOUT,this);
+  try {
+    for (int i=0; i < 2000; i++) {
+      zk.create("/invalidsnap-" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    }
+  }
+  finally {
+    zk.close();
+  }
+  f.shutdown();
+  zks.getTxnLogFactory().close();
+  Assert.assertTrue("waiting for server to shutdown",ClientBase.waitForServerDown(HOSTPORT,CONNECTION_TIMEOUT));
+  PurgeTxnLog.purge(tmpDir,tmpDir,3);
+  FileTxnSnapLog snaplog=new FileTxnSnapLog(tmpDir,tmpDir);
+  List<File> listLogs=snaplog.findNRecentSnapshots(4);
+  int numSnaps=0;
+  for (  File ff : listLogs) {
+    if (ff.getName().startsWith("snapshot")) {
+      numSnaps++;
+    }
+  }
+  Assert.assertTrue("exactly 3 snapshots ",(numSnaps == 3));
+  snaplog.close();
+  zks.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown(){
+  if (null != tmpDir) {
+    ClientBase.recursiveDelete(tmpDir);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

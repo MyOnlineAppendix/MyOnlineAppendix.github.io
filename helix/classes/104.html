@@ -1,0 +1,104 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestSharedConnection (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Ensure that only one controller with a shared connection thinks it's leader
+ */
+@Test public void testSharedControllerConnection() throws Exception {
+  final int NUM_PARTICIPANTS=2;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=2;
+  final int NUM_CONTROLLERS=2;
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"OnlineOffline",RebalanceMode.CUSTOMIZED,true);
+  HelixConnection connection=new ZkHelixConnection(_zkaddr);
+  connection.connect();
+  HelixController[] controllers=new HelixController[NUM_CONTROLLERS];
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    controllers[i]=connection.createController(ClusterId.from(clusterName),ControllerId.from("controller_" + i));
+    controllers[i].start();
+  }
+  Thread.sleep(1000);
+  int leaderCount=0;
+  for (  HelixController controller : controllers) {
+    HelixManager adaptor=new ZKHelixManager(controller);
+    boolean result=ZkHelixLeaderElection.tryUpdateController(adaptor);
+    if (result) {
+      leaderCount++;
+    }
+  }
+  Assert.assertEquals(leaderCount,1);
+  for (  HelixController controller : controllers) {
+    controller.stop();
+  }
+  HelixAdmin admin=connection.createClusterManagementTool();
+  admin.dropCluster(clusterName);
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Ensure that the external view is able to update properly when participants share a connection.
+ */
+@Test public void testSharedParticipantConnection() throws Exception {
+  final int NUM_PARTICIPANTS=2;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=2;
+  final String RESOURCE_NAME="TestDB0";
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"OnlineOffline",RebalanceMode.CUSTOMIZED,true);
+  HelixConnection connection=new ZkHelixConnection(_zkaddr);
+  connection.connect();
+  HelixParticipant[] participants=new HelixParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    participants[i]=connection.createParticipant(ClusterId.from(clusterName),ParticipantId.from("localhost_" + (12918 + i)));
+    participants[i].getStateMachineEngine().registerStateModelFactory(StateModelDefId.from("OnlineOffline"),new TestHelixConnection.MockStateModelFactory());
+    participants[i].start();
+  }
+  HelixController controller=connection.createController(ClusterId.from(clusterName),ControllerId.from("controller"));
+  controller.start();
+  Thread.sleep(500);
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  HelixAdmin admin=connection.createClusterManagementTool();
+  IdealState idealState=admin.getResourceIdealState(clusterName,RESOURCE_NAME);
+  Map<ParticipantId,State> participantStateMap=idealState.getParticipantStateMap(PartitionId.from(RESOURCE_NAME + "_0"));
+  participantStateMap.remove(ParticipantId.from("localhost_12918"));
+  idealState.setParticipantStateMap(PartitionId.from(RESOURCE_NAME + "_0"),participantStateMap);
+  admin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  Thread.sleep(1000);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  participantStateMap=idealState.getParticipantStateMap(PartitionId.from(RESOURCE_NAME + "_1"));
+  participantStateMap.remove(ParticipantId.from("localhost_12919"));
+  idealState.setParticipantStateMap(PartitionId.from(RESOURCE_NAME + "_1"),participantStateMap);
+  admin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  Thread.sleep(1000);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  controller.stop();
+  for (  HelixParticipant participant : participants) {
+    participant.stop();
+  }
+  admin.dropCluster(clusterName);
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

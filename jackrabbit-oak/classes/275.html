@@ -1,0 +1,240 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.document.VersionGCDeletionTest (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void gcWithPathsHavingNewLine() throws Exception {
+  int noOfDocsToDelete=200;
+  DocumentStore ts=new MemoryDocumentStore();
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(new MemoryDocumentStore()).setAsyncDelay(0).getNodeStore();
+  clock.waitUntil(Revision.getCurrentTimestamp());
+  NodeBuilder b1=store.getRoot().builder();
+  NodeBuilder xb=b1.child("x");
+  for (int i=0; i < noOfDocsToDelete - 1; i++) {
+    xb.child("a" + i).child("b" + i);
+  }
+  xb.child("a-1").child("b\r");
+  store.merge(b1,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  long maxAge=1;
+  long delta=TimeUnit.MINUTES.toMillis(10);
+  NodeBuilder b2=store.getRoot().builder();
+  b2.child("x").remove();
+  store.merge(b2,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  store.runBackgroundOperations();
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(maxAge * 2) + delta);
+  VersionGarbageCollector gc=store.getVersionGarbageCollector();
+  gc.setOverflowToDiskThreshold(100);
+  VersionGCStats stats=gc.gc(maxAge * 2,HOURS);
+  assertEquals(noOfDocsToDelete * 2 + 1,stats.deletedDocGCCount);
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void queryWhileDocsAreRemoved() throws Exception {
+  clock.waitUntil(Revision.getCurrentTimestamp());
+  final Thread currentThread=Thread.currentThread();
+  final Semaphore queries=new Semaphore(0);
+  final CountDownLatch ready=new CountDownLatch(1);
+  MemoryDocumentStore ms=new MemoryDocumentStore(){
+    @Override public <T extends Document>T find(    Collection<T> collection,    String key){
+      if (Thread.currentThread() != currentThread) {
+        ready.countDown();
+        queries.acquireUninterruptibly();
+      }
+      return super.find(collection,key);
+    }
+  }
+;
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(ms).setAsyncDelay(0).getNodeStore();
+  NodeBuilder builder=store.getRoot().builder();
+  NodeBuilder node=builder.child("node");
+  for (int i=0; i < 200; i++) {
+    node.child("c-" + i);
+  }
+  merge(store,builder);
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(1));
+  builder=store.getRoot().builder();
+  node=builder.child("node");
+  for (int i=0; i < 90; i++) {
+    node.getChildNode("c-" + i).remove();
+  }
+  merge(store,builder);
+  store.runBackgroundOperations();
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(1));
+  List<String> expected=Lists.newArrayList();
+  NodeState n=store.getRoot().getChildNode("node");
+  for (  ChildNodeEntry entry : n.getChildNodeEntries()) {
+    expected.add(entry.getName());
+  }
+  assertEquals(110,expected.size());
+  store.invalidateNodeChildrenCache();
+  Future<List<String>> f=newSingleThreadExecutor().submit(new Callable<List<String>>(){
+    @Override public List<String> call() throws Exception {
+      List<String> names=Lists.newArrayList();
+      NodeState n=store.getRoot().getChildNode("node");
+      for (      ChildNodeEntry entry : n.getChildNodeEntries()) {
+        names.add(entry.getName());
+      }
+      return names;
+    }
+  }
+);
+  ready.await();
+  VersionGarbageCollector gc=store.getVersionGarbageCollector();
+  VersionGCStats stats=gc.gc(30,MINUTES);
+  assertEquals(90,stats.deletedDocGCCount);
+  queries.release(200);
+  List<String> names=f.get();
+  assertEquals(expected,names);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void deleteParentLast() throws Exception {
+  TestDocumentStore ts=new TestDocumentStore();
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(ts).setAsyncDelay(0).getNodeStore();
+  clock.waitUntil(Revision.getCurrentTimestamp());
+  NodeBuilder b1=store.getRoot().builder();
+  b1.child("x").child("y");
+  store.merge(b1,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  long maxAge=1;
+  long delta=TimeUnit.MINUTES.toMillis(10);
+  NodeBuilder b2=store.getRoot().builder();
+  b2.child("x").remove();
+  store.merge(b2,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  store.runBackgroundOperations();
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(maxAge * 2) + delta);
+  VersionGarbageCollector gc=store.getVersionGarbageCollector();
+  try {
+    ts.throwException=true;
+    gc.gc(maxAge * 2,HOURS);
+    fail("Exception should be thrown");
+  }
+ catch (  AssertionError ignore) {
+  }
+  ts.throwException=false;
+  gc.gc(maxAge * 2,HOURS);
+  assertNull(ts.find(Collection.NODES,"2:/x/y"));
+  assertNull(ts.find(Collection.NODES,"1:/x"));
+}
+
+</code></pre>
+
+<pre class="type-13 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void deleteLargeNumber() throws Exception {
+  int noOfDocsToDelete=10000;
+  DocumentStore ts=new MemoryDocumentStore();
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(new MemoryDocumentStore()).setAsyncDelay(0).getNodeStore();
+  clock.waitUntil(Revision.getCurrentTimestamp());
+  NodeBuilder b1=store.getRoot().builder();
+  NodeBuilder xb=b1.child("x");
+  for (int i=0; i < noOfDocsToDelete; i++) {
+    xb.child("a" + i).child("b" + i);
+  }
+  store.merge(b1,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  long maxAge=1;
+  long delta=TimeUnit.MINUTES.toMillis(10);
+  NodeBuilder b2=store.getRoot().builder();
+  b2.child("x").remove();
+  store.merge(b2,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  store.runBackgroundOperations();
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(maxAge * 2) + delta);
+  VersionGarbageCollector gc=store.getVersionGarbageCollector();
+  gc.setOverflowToDiskThreshold(100);
+  VersionGCStats stats=gc.gc(maxAge * 2,HOURS);
+  assertEquals(noOfDocsToDelete * 2 + 1,stats.deletedDocGCCount);
+  assertNull(ts.find(Collection.NODES,"1:/x"));
+  for (int i=0; i < noOfDocsToDelete; i++) {
+    assertNull(ts.find(Collection.NODES,"2:/a" + i + "/b"+ i));
+    assertNull(ts.find(Collection.NODES,"1:/a" + i));
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws InterruptedException {
+  clock=new Clock.Virtual();
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void gcForPreviousDocs() throws Exception {
+  DocumentStore ts=new MemoryDocumentStore();
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(ts).setAsyncDelay(0).getNodeStore();
+  clock.waitUntil(Revision.getCurrentTimestamp());
+  NodeBuilder b1;
+  NodeBuilder xb;
+  boolean create=true;
+  for (int i=0; create || i < NodeDocument.NUM_REVS_THRESHOLD; i++) {
+    b1=store.getRoot().builder();
+    xb=b1.child("x").child("split");
+    if (!create) {
+      xb.remove();
+    }
+    store.merge(b1,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    create=!create;
+  }
+  store.runBackgroundOperations();
+  NodeDocument doc=ts.find(Collection.NODES,"2:/x/split");
+  int splitDocCount=Iterators.size(doc.getAllPreviousDocs());
+  long maxAge=1;
+  long delta=TimeUnit.MINUTES.toMillis(10);
+  NodeBuilder b2=store.getRoot().builder();
+  b2.child("x").remove();
+  store.merge(b2,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  store.runBackgroundOperations();
+  clock.waitUntil(clock.getTime() + HOURS.toMillis(maxAge * 2) + delta);
+  VersionGarbageCollector gc=store.getVersionGarbageCollector();
+  VersionGCStats stats=gc.gc(maxAge * 2,HOURS);
+  assertEquals(2,stats.deletedDocGCCount);
+  assertEquals(splitDocCount,stats.splitDocGCCount);
+  assertNull(ts.find(Collection.NODES,"1:/x"));
+  assertNull(ts.find(Collection.NODES,"2:/x/split"));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  if (store != null) {
+    store.dispose();
+  }
+  Revision.resetClockToDefault();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,141 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestMultiClusterController (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+"></span><br>
+@Test public void testAddAndStop() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterNamePrefix=className + "_" + methodName;
+  final int n=5;
+  final int clusterNb=10;
+  System.out.println("START " + clusterNamePrefix + " at "+ new Date(System.currentTimeMillis()));
+  for (int i=0; i < clusterNb; i++) {
+    String clusterName=clusterNamePrefix + "0_" + i;
+    String participantName="localhost" + i;
+    String resourceName="TestDB" + i;
+    TestHelper.setupCluster(clusterName,_zkaddr,12918,participantName,resourceName,1,8,n,3,"MasterSlave",true);
+  }
+  final String controllerClusterName="CONTROLLER_" + clusterNamePrefix;
+  TestHelper.setupCluster("CONTROLLER_" + clusterNamePrefix,_zkaddr,0,"controller",clusterNamePrefix,1,clusterNb,n,3,"LeaderStandby",true);
+  MockMultiClusterController[] controllers=new MockMultiClusterController[n + n];
+  for (int i=0; i < n; i++) {
+    controllers[i]=new MockMultiClusterController(_zkaddr,controllerClusterName,"controller_" + i);
+    controllers[i].syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName),30000);
+  Assert.assertTrue(result,"Controller cluster NOT in ideal state");
+  MockParticipant[] participants=new MockParticipant[n];
+  final String firstClusterName=clusterNamePrefix + "0_0";
+  for (int i=0; i < n; i++) {
+    String instanceName="localhost0_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,firstClusterName,instanceName);
+    participants[i].syncStart();
+  }
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,firstClusterName));
+  Assert.assertTrue(result,"first cluster NOT in ideal state");
+  for (int i=0; i < n; i++) {
+    String controller="controller_" + (n + i);
+    _setupTool.addInstanceToCluster(controllerClusterName,controller);
+  }
+  _setupTool.rebalanceStorageCluster(controllerClusterName,clusterNamePrefix + "0",6);
+  for (int i=n; i < 2 * n; i++) {
+    controllers[i]=new MockMultiClusterController(_zkaddr,controllerClusterName,"controller_" + i);
+    controllers[i].syncStart();
+  }
+  result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName));
+  Assert.assertTrue(result,"Controller cluster NOT in ideal state");
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,firstClusterName));
+  Assert.assertTrue(result,"first cluster NOT in ideal state");
+  ZKHelixDataAccessor accessor=new ZKHelixDataAccessor(controllerClusterName,_baseAccessor);
+  Builder keyBuilder=accessor.keyBuilder();
+  for (int i=0; i < n; i++) {
+    LiveInstance leader=accessor.getProperty(keyBuilder.controllerLeader());
+    String leaderName=leader.getId();
+    int j=Integer.parseInt(leaderName.substring(leaderName.lastIndexOf('_') + 1));
+    controllers[j].syncStop();
+    result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName));
+    Assert.assertTrue(result,"Controller cluster NOT in ideal state");
+    result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,firstClusterName));
+    Assert.assertTrue(result,"first cluster NOT in ideal state");
+  }
+  System.out.println("Cleaning up...");
+  for (int i=0; i < 5; i++) {
+    result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName));
+    controllers[i].syncStop();
+  }
+  for (int i=0; i < 5; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("END " + clusterNamePrefix + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testBasic() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterNamePrefix=className + "_" + methodName;
+  final int n=5;
+  final int clusterNb=10;
+  System.out.println("START " + clusterNamePrefix + " at "+ new Date(System.currentTimeMillis()));
+  for (int i=0; i < clusterNb; i++) {
+    String clusterName=clusterNamePrefix + "0_" + i;
+    String participantName="localhost" + i;
+    String resourceName="TestDB" + i;
+    TestHelper.setupCluster(clusterName,_zkaddr,12918,participantName,resourceName,1,8,n,3,"MasterSlave",true);
+  }
+  final String controllerClusterName="CONTROLLER_" + clusterNamePrefix;
+  TestHelper.setupCluster("CONTROLLER_" + clusterNamePrefix,_zkaddr,0,"controller",clusterNamePrefix,1,clusterNb,n,3,"LeaderStandby",true);
+  MockMultiClusterController[] controllers=new MockMultiClusterController[n];
+  for (int i=0; i < n; i++) {
+    controllers[i]=new MockMultiClusterController(_zkaddr,controllerClusterName,"controller_" + i);
+    controllers[i].syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName),30000);
+  Assert.assertTrue(result,"Controller cluster NOT in ideal state");
+  MockParticipant[] participants=new MockParticipant[n];
+  final String firstClusterName=clusterNamePrefix + "0_0";
+  for (int i=0; i < n; i++) {
+    String instanceName="localhost0_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,firstClusterName,instanceName);
+    participants[i].syncStart();
+  }
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,firstClusterName));
+  Assert.assertTrue(result,"first cluster NOT in ideal state");
+  ZKHelixDataAccessor accessor=new ZKHelixDataAccessor(controllerClusterName,_baseAccessor);
+  Builder keyBuilder=accessor.keyBuilder();
+  LiveInstance leader=accessor.getProperty(keyBuilder.controllerLeader());
+  String leaderName=leader.getId();
+  int j=Integer.parseInt(leaderName.substring(leaderName.lastIndexOf('_') + 1));
+  controllers[j].syncStop();
+  MockParticipant[] participants2=new MockParticipant[n];
+  final String secondClusterName=clusterNamePrefix + "0_1";
+  for (int i=0; i < n; i++) {
+    String instanceName="localhost1_" + (12918 + i);
+    participants2[i]=new MockParticipant(_zkaddr,secondClusterName,instanceName);
+    participants2[i].syncStart();
+  }
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,secondClusterName));
+  Assert.assertTrue(result,"second cluster NOT in ideal state");
+  System.out.println("Cleaning up...");
+  for (int i=0; i < 5; i++) {
+    result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,controllerClusterName));
+    controllers[i].syncStop();
+  }
+  for (int i=0; i < 5; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("END " + clusterNamePrefix + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

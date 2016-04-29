@@ -1,0 +1,250 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.client.TestFencing (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test that fencing doesn't work with a bad password
+ */
+@Test(timeout=60000) public void testFencingBadPassword() throws Exception {
+  LedgerHandle writelh=null;
+  writelh=bkc.createLedger(digestType,"password1".getBytes());
+  String tmp="BookKeeper is cool!";
+  for (int i=0; i < 10; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  try {
+    bkc.openLedger(writelh.getId(),digestType,"badPassword".getBytes());
+    fail("Should not have been able to open with a bad password");
+  }
+ catch (  BKException.BKUnauthorizedAccessException uue) {
+  }
+  writelh.addEntry(tmp.getBytes());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * create a ledger and write entries.
+ * kill a bookie in the ensemble. Recover.
+ * Fence the ledger. Kill another bookie. Recover.
+ */
+@Test(timeout=60000) public void testFencingInteractionWithBookieRecovery() throws Exception {
+  System.setProperty("digestType",digestType.toString());
+  System.setProperty("passwd","testPasswd");
+  BookKeeperAdmin admin=new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());
+  LedgerHandle writelh=bkc.createLedger(digestType,"testPasswd".getBytes());
+  String tmp="Foobar";
+  final int numEntries=10;
+  for (int i=0; i < numEntries; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  BookieSocketAddress bookieToKill=writelh.getLedgerMetadata().getEnsemble(numEntries).get(0);
+  killBookie(bookieToKill);
+  for (int i=0; i < numEntries; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  admin.recoverBookieData(bookieToKill,null);
+  for (int i=0; i < numEntries; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  LedgerHandle readlh=bkc.openLedger(writelh.getId(),digestType,"testPasswd".getBytes());
+  try {
+    writelh.addEntry(tmp.getBytes());
+    LOG.error("Should have thrown an exception");
+    fail("Should have thrown an exception when trying to write");
+  }
+ catch (  BKException.BKLedgerFencedException e) {
+  }
+  readlh.close();
+  writelh.close();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=60000) public void testFencingAndRestartBookies() throws Exception {
+  LedgerHandle writelh=null;
+  writelh=bkc.createLedger(digestType,"password".getBytes());
+  String tmp="BookKeeper is cool!";
+  for (int i=0; i < 10; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  LedgerHandle readlh=bkc.openLedger(writelh.getId(),digestType,"password".getBytes());
+  restartBookies();
+  try {
+    writelh.addEntry(tmp.getBytes());
+    LOG.error("Should have thrown an exception");
+    fail("Should have thrown an exception when trying to write");
+  }
+ catch (  BKException.BKLedgerFencedException e) {
+  }
+  readlh.close();
+}
+
+</code></pre>
+
+<pre class="type-2 type-8 type-3 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that opening a ledger in norecovery mode
+ * doesn't fence off a ledger
+ */
+@Test(timeout=60000) public void testNoRecoveryOpen() throws Exception {
+  LedgerHandle writelh=null;
+  writelh=bkc.createLedger(digestType,"".getBytes());
+  String tmp="BookKeeper is cool!";
+  final int numEntries=10;
+  for (int i=0; i < numEntries; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  LedgerHandle readlh=bkc.openLedgerNoRecovery(writelh.getId(),digestType,"".getBytes());
+  writelh.addEntry(tmp.getBytes());
+  long numReadable=readlh.getLastAddConfirmed();
+  LOG.error("numRead " + numReadable);
+  readlh.readEntries(1,numReadable);
+  try {
+    readlh.readEntries(numReadable + 1,numReadable + 1);
+    fail("Shouldn't have been able to read this far");
+  }
+ catch (  BKException.BKReadException e) {
+  }
+  writelh.addEntry(tmp.getBytes());
+  long numReadable2=readlh.getLastAddConfirmed();
+  assertEquals("Number of readable entries hasn't changed",numReadable2,numReadable);
+  readlh.close();
+  writelh.addEntry(tmp.getBytes());
+  writelh.close();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * create a ledger and write entries.
+ * Fence the ledger. Kill a bookie. Recover.
+ * Ensure that recover doesn't reallow adding
+ */
+@Test(timeout=60000) public void testFencingInteractionWithBookieRecovery2() throws Exception {
+  System.setProperty("digestType",digestType.toString());
+  System.setProperty("passwd","testPasswd");
+  BookKeeperAdmin admin=new BookKeeperAdmin(zkUtil.getZooKeeperConnectString());
+  LedgerHandle writelh=bkc.createLedger(digestType,"testPasswd".getBytes());
+  String tmp="Foobar";
+  final int numEntries=10;
+  for (int i=0; i < numEntries; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  LedgerHandle readlh=bkc.openLedger(writelh.getId(),digestType,"testPasswd".getBytes());
+  BookieSocketAddress bookieToKill=writelh.getLedgerMetadata().getEnsemble(numEntries).get(0);
+  killBookie(bookieToKill);
+  admin.recoverBookieData(bookieToKill,null);
+  try {
+    writelh.addEntry(tmp.getBytes());
+    LOG.error("Should have thrown an exception");
+    fail("Should have thrown an exception when trying to write");
+  }
+ catch (  BKException.BKLedgerFencedException e) {
+  }
+  readlh.close();
+  writelh.close();
+}
+
+</code></pre>
+
+<pre class="type-2 type-8 type-3 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Basic fencing test. Create ledger, write to it,
+ * open ledger, write again (should fail).
+ */
+@Test(timeout=60000) public void testBasicFencing() throws Exception {
+  LedgerHandle writelh=null;
+  writelh=bkc.createLedger(digestType,"password".getBytes());
+  String tmp="BookKeeper is cool!";
+  for (int i=0; i < 10; i++) {
+    writelh.addEntry(tmp.getBytes());
+  }
+  LedgerHandle readlh=bkc.openLedger(writelh.getId(),digestType,"password".getBytes());
+  try {
+    writelh.addEntry(tmp.getBytes());
+    LOG.error("Should have thrown an exception");
+    fail("Should have thrown an exception when trying to write");
+  }
+ catch (  BKException.BKLedgerFencedException e) {
+  }
+  assertTrue("Has not recovered correctly: " + readlh.getLastAddConfirmed() + " original "+ writelh.getLastAddConfirmed(),readlh.getLastAddConfirmed() == writelh.getLastAddConfirmed());
+}
+
+</code></pre>
+
+<pre class="type-2 type-11 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Try to open a ledger many times in parallel.
+ * All opens should result in a ledger with an equals number of
+ * entries.
+ */
+@Test(timeout=60000) public void testManyOpenParallel() throws Exception {
+  final LedgerHandle writelh=bkc.createLedger(digestType,"".getBytes());
+  final int numRecovery=10;
+  final String tmp="BookKeeper is cool!";
+  final CountDownLatch latch=new CountDownLatch(numRecovery);
+  Thread writethread=new Thread(){
+    public void run(){
+      try {
+        while (true) {
+          writelh.addEntry(tmp.getBytes());
+          latch.countDown();
+        }
+      }
+ catch (      Exception e) {
+        LOG.info("Exception adding entry",e);
+      }
+    }
+  }
+;
+  writethread.start();
+  CyclicBarrier barrier=new CyclicBarrier(numRecovery + 1);
+  LedgerOpenThread threads[]=new LedgerOpenThread[numRecovery];
+  for (int i=0; i < numRecovery; i++) {
+    threads[i]=new LedgerOpenThread(digestType,writelh.getId(),barrier);
+    threads[i].start();
+  }
+  latch.await();
+  barrier.await();
+  writethread.join();
+  long lastConfirmed=writelh.getLastAddConfirmed();
+  for (int i=0; i < numRecovery; i++) {
+    threads[i].join();
+    assertTrue("Added confirmed is incorrect",lastConfirmed <= threads[i].getLastConfirmedEntry());
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

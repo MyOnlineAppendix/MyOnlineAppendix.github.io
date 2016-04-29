@@ -1,0 +1,882 @@
+<h3 style="margin:0px">Class: org.apache.flume.sink.hdfs.TestHDFSEventSink (25 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(11)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Ensure that when a write throws an IOException we are
+ * able to continue to progress in the next process() call.
+ * This relies on Transactional rollback semantics for durability and
+ * the behavior of the BucketWriter class of close()ing upon IOException.
+ */
+@Test public void testCloseReopen() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final int numBatches=4;
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  String newPath=testPath + "/singleBucket";
+  int i=1, j=1;
+  HDFSTestWriterFactory badWriterFactory=new HDFSTestWriterFactory();
+  sink=new HDFSEventSink(badWriterFactory);
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.fileType",HDFSTestWriterFactory.TestSequenceFileType);
+  Configurables.configure(sink,context);
+  MemoryChannel channel=new MemoryChannel();
+  Configurables.configure(channel,new Context());
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < numBatches; i++) {
+    channel.getTransaction().begin();
+    try {
+      for (j=1; j <= batchSize; j++) {
+        Event event=new SimpleEvent();
+        eventDate.clear();
+        eventDate.set(2011,i,i,i,0);
+        event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+        event.getHeaders().put("hostname","Host" + i);
+        String body="Test." + i + "."+ j;
+        event.setBody(body.getBytes());
+        bodies.add(body);
+        event.getHeaders().put("fault-until-reopen","");
+        channel.put(event);
+      }
+      channel.getTransaction().commit();
+    }
+  finally {
+      channel.getTransaction().close();
+    }
+    LOG.info("execute sink to process the events: " + sink.process());
+  }
+  LOG.info("clear any events pending due to errors: " + sink.process());
+  sink.stop();
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAppend() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final long rollCount=3;
+  final long batchSize=2;
+  final String fileName="FlumeData";
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(testPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",testPath + "/%Y-%m-%d/%H");
+  context.put("hdfs.timeZone","UTC");
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (int i=1; i < 4; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (int j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      channel.put(event);
+    }
+    txn.commit();
+    txn.close();
+    sink.process();
+  }
+  sink.stop();
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLifecycle() throws InterruptedException, LifecycleException {
+  LOG.debug("Starting...");
+  Context context=new Context();
+  context.put("hdfs.path",testPath);
+  Configurables.configure(sink,context);
+  sink.setChannel(new MemoryChannel());
+  sink.start();
+  sink.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAvroAppend() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final long rollCount=3;
+  final long batchSize=2;
+  final String fileName="FlumeData";
+  String newPath=testPath + "/singleTextBucket";
+  int totalEvents=0;
+  int i=1, j=1;
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.writeFormat","Text");
+  context.put("hdfs.fileType","DataStream");
+  context.put("serializer","AVRO_EVENT");
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < 4; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      channel.put(event);
+      totalEvents++;
+    }
+    txn.commit();
+    txn.close();
+    sink.process();
+  }
+  sink.stop();
+  FileStatus[] dirStat=fs.listStatus(dirPath);
+  Path fList[]=FileUtil.stat2Paths(dirStat);
+  long expectedFiles=totalEvents / rollCount;
+  if (totalEvents % rollCount > 0)   expectedFiles++;
+  Assert.assertEquals("num files wrong, found: " + Lists.newArrayList(fList),expectedFiles,fList.length);
+  verifyOutputAvroFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  LOG.debug("Starting...");
+  testPath="file:///tmp/flume-test." + Calendar.getInstance().getTimeInMillis() + "."+ Thread.currentThread().getId();
+  sink=new HDFSEventSink();
+  sink.setName("HDFSEventSink-" + UUID.randomUUID().toString());
+  dirCleanup();
+}
+
+</code></pre>
+
+<pre class="type-12 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSlowAppendFailure() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  final int numBatches=2;
+  String newPath=testPath + "/singleBucket";
+  int i=1, j=1;
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  HDFSTestWriterFactory badWriterFactory=new HDFSTestWriterFactory();
+  sink=new HDFSEventSink(badWriterFactory);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.fileType",HDFSTestWriterFactory.TestSequenceFileType);
+  context.put("hdfs.callTimeout",Long.toString(1000));
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  for (i=0; i < numBatches; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      event.getHeaders().put("slow","1500");
+      event.setBody(("Test." + i + "."+ j).getBytes());
+      channel.put(event);
+    }
+    txn.commit();
+    txn.close();
+    Status satus=sink.process();
+    Assert.assertEquals(satus,Status.BACKOFF);
+  }
+  sink.stop();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSlowAppendWithoutTimeout() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  slowAppendTestHelper(0);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBadConfigurationForRetryIntervalZero() throws Exception {
+  Context context=getContextForRetryTests();
+  context.put("hdfs.retryInterval","0");
+  Configurables.configure(sink,context);
+  Assert.assertEquals(1,sink.getTryCount());
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRetryRename() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  testRetryRename(true);
+  testRetryRename(false);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSlowAppendWithLongTimeout() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  slowAppendTestHelper(3000);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBadConfigurationForRetryCountNegative() throws Exception {
+  Context context=getContextForRetryTests();
+  context.put("hdfs.closeTries","-4");
+  Configurables.configure(sink,context);
+  Assert.assertEquals(Integer.MAX_VALUE,sink.getTryCount());
+}
+
+</code></pre>
+
+<pre class="type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testEmptyChannelResultsInStatusBackoff() throws InterruptedException, LifecycleException, EventDeliveryException {
+  LOG.debug("Starting...");
+  Context context=new Context();
+  Channel channel=new MemoryChannel();
+  context.put("hdfs.path",testPath);
+  context.put("keep-alive","0");
+  Configurables.configure(sink,context);
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Assert.assertEquals(Status.BACKOFF,sink.process());
+  sink.stop();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTextBatchAppend() throws Exception {
+  doTestTextBatchAppend(false);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testBadSimpleAppend() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  final int numBatches=4;
+  String newPath=testPath + "/singleBucket";
+  int totalEvents=0;
+  int i=1, j=1;
+  HDFSTestWriterFactory badWriterFactory=new HDFSTestWriterFactory();
+  sink=new HDFSEventSink(badWriterFactory);
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.fileType",HDFSTestWriterFactory.TestSequenceFileType);
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < numBatches; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      if ((totalEvents % 30) == 1) {
+        event.getHeaders().put("fault-once","");
+      }
+      channel.put(event);
+      totalEvents++;
+    }
+    txn.commit();
+    txn.close();
+    LOG.info("Process events: " + sink.process());
+  }
+  LOG.info("Process events to end of transaction max: " + sink.process());
+  LOG.info("Process events to injected fault: " + sink.process());
+  LOG.info("Process events remaining events: " + sink.process());
+  sink.stop();
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-11 type-10 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testKerbFileAccess() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting testKerbFileAccess() ...");
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  String newPath=testPath + "/singleBucket";
+  String kerbConfPrincipal="user1/localhost@EXAMPLE.COM";
+  String kerbKeytab="/usr/lib/flume/nonexistkeytabfile";
+  Configuration conf=new Configuration();
+  conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,"kerberos");
+  UserGroupInformation.setConfiguration(conf);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.kerberosPrincipal",kerbConfPrincipal);
+  context.put("hdfs.kerberosKeytab",kerbKeytab);
+  try {
+    Configurables.configure(sink,context);
+    Assert.fail("no exception thrown");
+  }
+ catch (  IllegalArgumentException expected) {
+    Assert.assertTrue(expected.getMessage().contains("Keytab is not a readable file"));
+  }
+ finally {
+    conf.set(CommonConfigurationKeys.HADOOP_SECURITY_AUTHENTICATION,"simple");
+    UserGroupInformation.setConfiguration(conf);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTextBatchAppendRawFS() throws Exception {
+  doTestTextBatchAppend(true);
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCloseOnIdle() throws IOException, EventDeliveryException, InterruptedException {
+  String hdfsPath=testPath + "/idleClose";
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(hdfsPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",hdfsPath);
+  context.put("hdfs.rollCount","0");
+  context.put("hdfs.rollSize","0");
+  context.put("hdfs.rollInterval","0");
+  context.put("hdfs.batchSize","2");
+  context.put("hdfs.idleTimeout","1");
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Transaction txn=channel.getTransaction();
+  txn.begin();
+  for (int i=0; i < 10; i++) {
+    Event event=new SimpleEvent();
+    event.setBody(("test event " + i).getBytes());
+    channel.put(event);
+  }
+  txn.commit();
+  txn.close();
+  sink.process();
+  sink.process();
+  Thread.sleep(1001);
+  sink.process();
+  sink.process();
+  Thread.sleep(500);
+  sink.process();
+  sink.process();
+  sink.stop();
+  FileStatus[] dirStat=fs.listStatus(dirPath);
+  Path[] fList=FileUtil.stat2Paths(dirStat);
+  Assert.assertEquals("Incorrect content of the directory " + StringUtils.join(fList,","),2,fList.length);
+  Assert.assertTrue(!fList[0].getName().endsWith(".tmp") && !fList[1].getName().endsWith(".tmp"));
+  fs.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTextAppend() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final long rollCount=3;
+  final long batchSize=2;
+  final String fileName="FlumeData";
+  String newPath=testPath + "/singleTextBucket";
+  int totalEvents=0;
+  int i=1, j=1;
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.writeFormat","Text");
+  context.put("hdfs.fileType","DataStream");
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < 4; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      channel.put(event);
+      totalEvents++;
+    }
+    txn.commit();
+    txn.close();
+    sink.process();
+  }
+  sink.stop();
+  FileStatus[] dirStat=fs.listStatus(dirPath);
+  Path fList[]=FileUtil.stat2Paths(dirStat);
+  long expectedFiles=totalEvents / rollCount;
+  if (totalEvents % rollCount > 0)   expectedFiles++;
+  Assert.assertEquals("num files wrong, found: " + Lists.newArrayList(fList),expectedFiles,fList.length);
+  verifyOutputTextFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSimpleAppend() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  final int numBatches=4;
+  String newPath=testPath + "/singleBucket";
+  int totalEvents=0;
+  int i=1, j=1;
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < numBatches; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      channel.put(event);
+      totalEvents++;
+    }
+    txn.commit();
+    txn.close();
+    sink.process();
+  }
+  sink.stop();
+  FileStatus[] dirStat=fs.listStatus(dirPath);
+  Path fList[]=FileUtil.stat2Paths(dirStat);
+  long expectedFiles=totalEvents / rollCount;
+  if (totalEvents % rollCount > 0)   expectedFiles++;
+  Assert.assertEquals("num files wrong, found: " + Lists.newArrayList(fList),expectedFiles,fList.length);
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown(){
+  if (System.getenv("hdfs_keepFiles") == null)   dirCleanup();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBadConfigurationForRetryCountZero() throws Exception {
+  Context context=getContextForRetryTests();
+  context.put("hdfs.closeTries","0");
+  Configurables.configure(sink,context);
+  Assert.assertEquals(Integer.MAX_VALUE,sink.getTryCount());
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that the old bucket writer is closed at the end of rollInterval and
+ * a new one is used for the next set of events.
+ */
+@Test public void testCloseReopenOnRollTime() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final int numBatches=4;
+  final String fileName="FlumeData";
+  final long batchSize=2;
+  String newPath=testPath + "/singleBucket";
+  int i=1, j=1;
+  HDFSTestWriterFactory badWriterFactory=new HDFSTestWriterFactory();
+  sink=new HDFSEventSink(badWriterFactory);
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(0));
+  context.put("hdfs.rollSize",String.valueOf(0));
+  context.put("hdfs.rollInterval",String.valueOf(2));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.fileType",HDFSTestWriterFactory.TestSequenceFileType);
+  Configurables.configure(sink,context);
+  MemoryChannel channel=new MemoryChannel();
+  Configurables.configure(channel,new Context());
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < numBatches; i++) {
+    channel.getTransaction().begin();
+    try {
+      for (j=1; j <= batchSize; j++) {
+        Event event=new SimpleEvent();
+        eventDate.clear();
+        eventDate.set(2011,i,i,i,0);
+        event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+        event.getHeaders().put("hostname","Host" + i);
+        String body="Test." + i + "."+ j;
+        event.setBody(body.getBytes());
+        bodies.add(body);
+        event.getHeaders().put("count-check","");
+        channel.put(event);
+      }
+      channel.getTransaction().commit();
+    }
+  finally {
+      channel.getTransaction().close();
+    }
+    LOG.info("execute sink to process the events: " + sink.process());
+    if (i == 1) {
+      Thread.sleep(2001);
+    }
+  }
+  LOG.info("clear any events pending due to errors: " + sink.process());
+  sink.stop();
+  Assert.assertTrue(badWriterFactory.openCount.get() >= 2);
+  LOG.info("Total number of bucket writers opened: {}",badWriterFactory.openCount.get());
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBadConfigurationForRetryIntervalNegative() throws Exception {
+  Context context=getContextForRetryTests();
+  context.put("hdfs.retryInterval","-1");
+  Configurables.configure(sink,context);
+  Assert.assertEquals(1,sink.getTryCount());
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSimpleAppendLocalTime() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  final long currentTime=System.currentTimeMillis();
+  Clock clk=new Clock(){
+    @Override public long currentTimeMillis(){
+      return currentTime;
+    }
+  }
+;
+  LOG.debug("Starting...");
+  final String fileName="FlumeData";
+  final long rollCount=5;
+  final long batchSize=2;
+  final int numBatches=4;
+  String newPath=testPath + "/singleBucket/%s";
+  String expectedPath=testPath + "/singleBucket/" + String.valueOf(currentTime / 1000);
+  int totalEvents=0;
+  int i=1, j=1;
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(expectedPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(rollCount));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.useLocalTimeStamp",String.valueOf(true));
+  Configurables.configure(sink,context);
+  Channel channel=new MemoryChannel();
+  Configurables.configure(channel,context);
+  sink.setChannel(channel);
+  sink.setBucketClock(clk);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  for (i=1; i < numBatches; i++) {
+    Transaction txn=channel.getTransaction();
+    txn.begin();
+    for (j=1; j <= batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      channel.put(event);
+      totalEvents++;
+    }
+    txn.commit();
+    txn.close();
+    sink.process();
+  }
+  sink.stop();
+  FileStatus[] dirStat=fs.listStatus(dirPath);
+  Path fList[]=FileUtil.stat2Paths(dirStat);
+  long expectedFiles=totalEvents / rollCount;
+  if (totalEvents % rollCount > 0)   expectedFiles++;
+  Assert.assertEquals("num files wrong, found: " + Lists.newArrayList(fList),expectedFiles,fList.length);
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+  sink.setBucketClock(new SystemClock());
+}
+
+</code></pre>
+
+<pre class="type-10 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test that a close due to roll interval removes the bucketwriter from
+ * sfWriters map.
+ */
+@Test public void testCloseRemovesFromSFWriters() throws InterruptedException, LifecycleException, EventDeliveryException, IOException {
+  LOG.debug("Starting...");
+  final String fileName="FlumeData";
+  final long batchSize=2;
+  String newPath=testPath + "/singleBucket";
+  int i=1, j=1;
+  HDFSTestWriterFactory badWriterFactory=new HDFSTestWriterFactory();
+  sink=new HDFSEventSink(badWriterFactory);
+  Configuration conf=new Configuration();
+  FileSystem fs=FileSystem.get(conf);
+  Path dirPath=new Path(newPath);
+  fs.delete(dirPath,true);
+  fs.mkdirs(dirPath);
+  Context context=new Context();
+  context.put("hdfs.path",newPath);
+  context.put("hdfs.filePrefix",fileName);
+  context.put("hdfs.rollCount",String.valueOf(0));
+  context.put("hdfs.rollSize",String.valueOf(0));
+  context.put("hdfs.rollInterval",String.valueOf(1));
+  context.put("hdfs.batchSize",String.valueOf(batchSize));
+  context.put("hdfs.fileType",HDFSTestWriterFactory.TestSequenceFileType);
+  String expectedLookupPath=newPath + "/FlumeData";
+  Configurables.configure(sink,context);
+  MemoryChannel channel=new MemoryChannel();
+  Configurables.configure(channel,new Context());
+  sink.setChannel(channel);
+  sink.start();
+  Calendar eventDate=Calendar.getInstance();
+  List<String> bodies=Lists.newArrayList();
+  channel.getTransaction().begin();
+  try {
+    for (j=1; j <= 2 * batchSize; j++) {
+      Event event=new SimpleEvent();
+      eventDate.clear();
+      eventDate.set(2011,i,i,i,0);
+      event.getHeaders().put("timestamp",String.valueOf(eventDate.getTimeInMillis()));
+      event.getHeaders().put("hostname","Host" + i);
+      String body="Test." + i + "."+ j;
+      event.setBody(body.getBytes());
+      bodies.add(body);
+      event.getHeaders().put("count-check","");
+      channel.put(event);
+    }
+    channel.getTransaction().commit();
+  }
+  finally {
+    channel.getTransaction().close();
+  }
+  LOG.info("execute sink to process the events: " + sink.process());
+  Assert.assertTrue(sink.getSfWriters().containsKey(expectedLookupPath));
+  Thread.sleep(2001);
+  Assert.assertFalse(sink.getSfWriters().containsKey(expectedLookupPath));
+  LOG.info("execute sink to process the events: " + sink.process());
+  Assert.assertTrue(sink.getSfWriters().containsKey(expectedLookupPath));
+  sink.stop();
+  LOG.info("Total number of bucket writers opened: {}",badWriterFactory.openCount.get());
+  verifyOutputSequenceFiles(fs,conf,dirPath.toUri().getPath(),fileName,bodies);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

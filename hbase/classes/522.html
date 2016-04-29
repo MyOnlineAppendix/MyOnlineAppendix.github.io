@@ -1,0 +1,244 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestReversibleScanners (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testReversibleStoreScanner() throws IOException {
+  FileSystem fs=TEST_UTIL.getTestFileSystem();
+  Path hfilePath=new Path(new Path(TEST_UTIL.getDataTestDir("testReversibleStoreScanner"),"regionname"),"familyname");
+  CacheConfig cacheConf=new CacheConfig(TEST_UTIL.getConfiguration());
+  HFileContextBuilder hcBuilder=new HFileContextBuilder();
+  hcBuilder.withBlockSize(2 * 1024);
+  HFileContext hFileContext=hcBuilder.build();
+  StoreFile.Writer writer1=new StoreFile.WriterBuilder(TEST_UTIL.getConfiguration(),cacheConf,fs).withOutputDir(hfilePath).withFileContext(hFileContext).build();
+  StoreFile.Writer writer2=new StoreFile.WriterBuilder(TEST_UTIL.getConfiguration(),cacheConf,fs).withOutputDir(hfilePath).withFileContext(hFileContext).build();
+  MemStore memstore=new DefaultMemStore();
+  writeMemstoreAndStoreFiles(memstore,new StoreFile.Writer[]{writer1,writer2});
+  StoreFile sf1=new StoreFile(fs,writer1.getPath(),TEST_UTIL.getConfiguration(),cacheConf,BloomType.NONE);
+  StoreFile sf2=new StoreFile(fs,writer2.getPath(),TEST_UTIL.getConfiguration(),cacheConf,BloomType.NONE);
+  ScanType scanType=ScanType.USER_SCAN;
+  ScanInfo scanInfo=new ScanInfo(TEST_UTIL.getConfiguration(),FAMILYNAME,0,Integer.MAX_VALUE,Long.MAX_VALUE,KeepDeletedCells.FALSE,0,CellComparator.COMPARATOR);
+  Scan scan=new Scan();
+  scan.setReversed(true);
+  StoreScanner storeScanner=getReversibleStoreScanner(memstore,sf1,sf2,scan,scanType,scanInfo,MAXMVCC);
+  verifyCountAndOrder(storeScanner,QUALSIZE * ROWSIZE,ROWSIZE,false);
+  int startRowNum=ROWSIZE / 2;
+  byte[] startRow=ROWS[startRowNum];
+  scan.setStartRow(startRow);
+  storeScanner=getReversibleStoreScanner(memstore,sf1,sf2,scan,scanType,scanInfo,MAXMVCC);
+  verifyCountAndOrder(storeScanner,QUALSIZE * (startRowNum + 1),startRowNum + 1,false);
+  assertTrue(QUALSIZE > 2);
+  scan.addColumn(FAMILYNAME,QUALS[0]);
+  scan.addColumn(FAMILYNAME,QUALS[2]);
+  storeScanner=getReversibleStoreScanner(memstore,sf1,sf2,scan,scanType,scanInfo,MAXMVCC);
+  verifyCountAndOrder(storeScanner,2 * (startRowNum + 1),startRowNum + 1,false);
+  for (int readPoint=0; readPoint < MAXMVCC; readPoint++) {
+    LOG.info("Setting read point to " + readPoint);
+    storeScanner=getReversibleStoreScanner(memstore,sf1,sf2,scan,scanType,scanInfo,readPoint);
+    int expectedRowCount=0;
+    int expectedKVCount=0;
+    for (int i=startRowNum; i >= 0; i--) {
+      int kvCount=0;
+      if (makeMVCC(i,0) <= readPoint) {
+        kvCount++;
+      }
+      if (makeMVCC(i,2) <= readPoint) {
+        kvCount++;
+      }
+      if (kvCount > 0) {
+        expectedRowCount++;
+        expectedKVCount+=kvCount;
+      }
+    }
+    verifyCountAndOrder(storeScanner,expectedKVCount,expectedRowCount,false);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testReversibleStoreFileScanner() throws IOException {
+  FileSystem fs=TEST_UTIL.getTestFileSystem();
+  Path hfilePath=new Path(new Path(TEST_UTIL.getDataTestDir("testReversibleStoreFileScanner"),"regionname"),"familyname");
+  CacheConfig cacheConf=new CacheConfig(TEST_UTIL.getConfiguration());
+  for (  DataBlockEncoding encoding : DataBlockEncoding.values()) {
+    HFileContextBuilder hcBuilder=new HFileContextBuilder();
+    hcBuilder.withBlockSize(2 * 1024);
+    hcBuilder.withDataBlockEncoding(encoding);
+    HFileContext hFileContext=hcBuilder.build();
+    StoreFile.Writer writer=new StoreFile.WriterBuilder(TEST_UTIL.getConfiguration(),cacheConf,fs).withOutputDir(hfilePath).withFileContext(hFileContext).build();
+    writeStoreFile(writer);
+    StoreFile sf=new StoreFile(fs,writer.getPath(),TEST_UTIL.getConfiguration(),cacheConf,BloomType.NONE);
+    List<StoreFileScanner> scanners=StoreFileScanner.getScannersForStoreFiles(Collections.singletonList(sf),false,true,false,false,Long.MAX_VALUE);
+    StoreFileScanner scanner=scanners.get(0);
+    seekTestOfReversibleKeyValueScanner(scanner);
+    for (int readPoint=0; readPoint < MAXMVCC; readPoint++) {
+      LOG.info("Setting read point to " + readPoint);
+      scanners=StoreFileScanner.getScannersForStoreFiles(Collections.singletonList(sf),false,true,false,false,readPoint);
+      seekTestOfReversibleKeyValueScannerWithMVCC(scanners.get(0),readPoint);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testReversibleRegionScanner() throws IOException {
+  byte[] FAMILYNAME2=Bytes.toBytes("testCf2");
+  HTableDescriptor htd=new HTableDescriptor(TableName.valueOf("testtable")).addFamily(new HColumnDescriptor(FAMILYNAME)).addFamily(new HColumnDescriptor(FAMILYNAME2));
+  Region region=TEST_UTIL.createLocalHRegion(htd,null,null);
+  loadDataToRegion(region,FAMILYNAME2);
+  Scan scan=new Scan();
+  InternalScanner scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,ROWSIZE * QUALSIZE * 2,ROWSIZE,true);
+  scan.setReversed(true);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,ROWSIZE * QUALSIZE * 2,ROWSIZE,false);
+  scan=new Scan();
+  scan.setReversed(true);
+  scan.addFamily(FAMILYNAME);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,ROWSIZE * QUALSIZE,ROWSIZE,false);
+  byte[][] specifiedQualifiers={QUALS[1],QUALS[2]};
+  for (  byte[] specifiedQualifier : specifiedQualifiers)   scan.addColumn(FAMILYNAME,specifiedQualifier);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,ROWSIZE * 2,ROWSIZE,false);
+  for (  byte[] specifiedQualifier : specifiedQualifiers)   scan.addColumn(FAMILYNAME2,specifiedQualifier);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,ROWSIZE * 2 * 2,ROWSIZE,false);
+  int startRowNum=ROWSIZE * 3 / 4;
+  scan.setStartRow(ROWS[startRowNum]);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,(startRowNum + 1) * 2 * 2,(startRowNum + 1),false);
+  int stopRowNum=ROWSIZE / 4;
+  scan.setStartRow(HConstants.EMPTY_BYTE_ARRAY);
+  scan.setStopRow(ROWS[stopRowNum]);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,(ROWSIZE - stopRowNum - 1) * 2 * 2,(ROWSIZE - stopRowNum - 1),false);
+  scan.setStartRow(ROWS[startRowNum]);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,(startRowNum - stopRowNum) * 2 * 2,(startRowNum - stopRowNum),false);
+  int valueNum=startRowNum % VALUESIZE;
+  Filter filter=new SingleColumnValueFilter(FAMILYNAME,specifiedQualifiers[0],CompareOp.EQUAL,VALUES[valueNum]);
+  scan.setFilter(filter);
+  scanner=region.getScanner(scan);
+  int unfilteredRowNum=(startRowNum - stopRowNum) / VALUESIZE + (stopRowNum / VALUESIZE == valueNum ? 0 : 1);
+  verifyCountAndOrder(scanner,unfilteredRowNum * 2 * 2,unfilteredRowNum,false);
+  int pageSize=10;
+  filter=new PageFilter(pageSize);
+  scan.setFilter(filter);
+  scanner=region.getScanner(scan);
+  int expectedRowNum=pageSize;
+  verifyCountAndOrder(scanner,expectedRowNum * 2 * 2,expectedRowNum,false);
+  SingleColumnValueFilter scvFilter1=new SingleColumnValueFilter(FAMILYNAME,specifiedQualifiers[0],CompareOp.EQUAL,VALUES[0]);
+  SingleColumnValueFilter scvFilter2=new SingleColumnValueFilter(FAMILYNAME,specifiedQualifiers[0],CompareOp.EQUAL,VALUES[1]);
+  expectedRowNum=0;
+  for (int i=startRowNum; i > stopRowNum; i--) {
+    if (i % VALUESIZE == 0 || i % VALUESIZE == 1) {
+      expectedRowNum++;
+    }
+  }
+  filter=new FilterList(Operator.MUST_PASS_ONE,scvFilter1,scvFilter2);
+  scan.setFilter(filter);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,expectedRowNum * 2 * 2,expectedRowNum,false);
+  filter=new FilterList(Operator.MUST_PASS_ALL,scvFilter1,scvFilter2);
+  expectedRowNum=0;
+  scan.setFilter(filter);
+  scanner=region.getScanner(scan);
+  verifyCountAndOrder(scanner,expectedRowNum * 2 * 2,expectedRowNum,false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testReversibleMemstoreScanner() throws IOException {
+  MemStore memstore=new DefaultMemStore();
+  writeMemstore(memstore);
+  List<KeyValueScanner> scanners=memstore.getScanners(Long.MAX_VALUE);
+  seekTestOfReversibleKeyValueScanner(scanners.get(0));
+  for (int readPoint=0; readPoint < MAXMVCC; readPoint++) {
+    LOG.info("Setting read point to " + readPoint);
+    scanners=memstore.getScanners(readPoint);
+    seekTestOfReversibleKeyValueScannerWithMVCC(scanners.get(0),readPoint);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-10 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testReversibleKeyValueHeap() throws IOException {
+  FileSystem fs=TEST_UTIL.getTestFileSystem();
+  Path hfilePath=new Path(new Path(TEST_UTIL.getDataTestDir("testReversibleKeyValueHeap"),"regionname"),"familyname");
+  CacheConfig cacheConf=new CacheConfig(TEST_UTIL.getConfiguration());
+  HFileContextBuilder hcBuilder=new HFileContextBuilder();
+  hcBuilder.withBlockSize(2 * 1024);
+  HFileContext hFileContext=hcBuilder.build();
+  StoreFile.Writer writer1=new StoreFile.WriterBuilder(TEST_UTIL.getConfiguration(),cacheConf,fs).withOutputDir(hfilePath).withFileContext(hFileContext).build();
+  StoreFile.Writer writer2=new StoreFile.WriterBuilder(TEST_UTIL.getConfiguration(),cacheConf,fs).withOutputDir(hfilePath).withFileContext(hFileContext).build();
+  MemStore memstore=new DefaultMemStore();
+  writeMemstoreAndStoreFiles(memstore,new StoreFile.Writer[]{writer1,writer2});
+  StoreFile sf1=new StoreFile(fs,writer1.getPath(),TEST_UTIL.getConfiguration(),cacheConf,BloomType.NONE);
+  StoreFile sf2=new StoreFile(fs,writer2.getPath(),TEST_UTIL.getConfiguration(),cacheConf,BloomType.NONE);
+  int startRowNum=ROWSIZE / 2;
+  ReversedKeyValueHeap kvHeap=getReversibleKeyValueHeap(memstore,sf1,sf2,ROWS[startRowNum],MAXMVCC);
+  internalTestSeekAndNextForReversibleKeyValueHeap(kvHeap,startRowNum);
+  startRowNum=ROWSIZE - 1;
+  kvHeap=getReversibleKeyValueHeap(memstore,sf1,sf2,HConstants.EMPTY_START_ROW,MAXMVCC);
+  internalTestSeekAndNextForReversibleKeyValueHeap(kvHeap,startRowNum);
+  for (int readPoint=0; readPoint < MAXMVCC; readPoint++) {
+    LOG.info("Setting read point to " + readPoint);
+    startRowNum=ROWSIZE - 1;
+    kvHeap=getReversibleKeyValueHeap(memstore,sf1,sf2,HConstants.EMPTY_START_ROW,readPoint);
+    for (int i=startRowNum; i >= 0; i--) {
+      if (i - 2 < 0)       break;
+      i=i - 2;
+      kvHeap.seekToPreviousRow(KeyValueUtil.createFirstOnRow(ROWS[i + 1]));
+      Pair<Integer,Integer> nextReadableNum=getNextReadableNumWithBackwardScan(i,0,readPoint);
+      if (nextReadableNum == null)       break;
+      KeyValue expecedKey=makeKV(nextReadableNum.getFirst(),nextReadableNum.getSecond());
+      assertEquals(expecedKey,kvHeap.peek());
+      i=nextReadableNum.getFirst();
+      int qualNum=nextReadableNum.getSecond();
+      if (qualNum + 1 < QUALSIZE) {
+        kvHeap.backwardSeek(makeKV(i,qualNum + 1));
+        nextReadableNum=getNextReadableNumWithBackwardScan(i,qualNum + 1,readPoint);
+        if (nextReadableNum == null)         break;
+        expecedKey=makeKV(nextReadableNum.getFirst(),nextReadableNum.getSecond());
+        assertEquals(expecedKey,kvHeap.peek());
+        i=nextReadableNum.getFirst();
+        qualNum=nextReadableNum.getSecond();
+      }
+      kvHeap.next();
+      if (qualNum + 1 >= QUALSIZE) {
+        nextReadableNum=getNextReadableNumWithBackwardScan(i - 1,0,readPoint);
+      }
+ else {
+        nextReadableNum=getNextReadableNumWithBackwardScan(i,qualNum + 1,readPoint);
+      }
+      if (nextReadableNum == null)       break;
+      expecedKey=makeKV(nextReadableNum.getFirst(),nextReadableNum.getSecond());
+      assertEquals(expecedKey,kvHeap.peek());
+      i=nextReadableNum.getFirst();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

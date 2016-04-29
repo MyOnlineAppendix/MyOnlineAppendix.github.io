@@ -1,0 +1,113 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.functional.BalanceInPresenceOfOfflineTableIT (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="21"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('21')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-21"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void test() throws Exception {
+  log.info("Test that balancing is not stopped by an offline table with outstanding migrations.");
+  log.debug("starting test ingestion");
+  TestIngest.Opts opts=new TestIngest.Opts();
+  VerifyIngest.Opts vopts=new VerifyIngest.Opts();
+  ClientConfiguration conf=cluster.getClientConfig();
+  if (conf.getBoolean(ClientProperty.INSTANCE_RPC_SASL_ENABLED.getKey(),false)) {
+    opts.updateKerberosCredentials(cluster.getClientConfig());
+    vopts.updateKerberosCredentials(cluster.getClientConfig());
+  }
+ else {
+    opts.setPrincipal("root");
+    vopts.setPrincipal("root");
+  }
+  vopts.rows=opts.rows=200000;
+  opts.setTableName(TEST_TABLE);
+  TestIngest.ingest(connector,opts,new BatchWriterOpts());
+  connector.tableOperations().flush(TEST_TABLE,null,null,true);
+  vopts.setTableName(TEST_TABLE);
+  VerifyIngest.verifyIngest(connector,vopts,new ScannerOpts());
+  log.debug("waiting for balancing, up to ~5 minutes to allow for migration cleanup.");
+  final long startTime=System.currentTimeMillis();
+  long currentWait=10 * 1000;
+  boolean balancingWorked=false;
+  Credentials creds=new Credentials(getAdminPrincipal(),getAdminToken());
+  while (!balancingWorked && (System.currentTimeMillis() - startTime) < ((5 * 60 + 15) * 1000)) {
+    Thread.sleep(currentWait);
+    currentWait*=2;
+    log.debug("fetch the list of tablets assigned to each tserver.");
+    MasterClientService.Iface client=null;
+    MasterMonitorInfo stats=null;
+    try {
+      Instance instance=new ZooKeeperInstance(cluster.getClientConfig());
+      client=MasterClient.getConnectionWithRetry(new ClientContext(instance,creds,cluster.getClientConfig()));
+      stats=client.getMasterStats(Tracer.traceInfo(),creds.toThrift(instance));
+    }
+ catch (    ThriftSecurityException exception) {
+      throw new AccumuloSecurityException(exception);
+    }
+catch (    TException exception) {
+      throw new AccumuloException(exception);
+    }
+ finally {
+      if (client != null) {
+        MasterClient.close(client);
+      }
+    }
+    if (stats.getTServerInfoSize() < 2) {
+      log.debug("we need >= 2 servers. sleeping for " + currentWait + "ms");
+      continue;
+    }
+    if (stats.getUnassignedTablets() != 0) {
+      log.debug("We shouldn't have unassigned tablets. sleeping for " + currentWait + "ms");
+      continue;
+    }
+    long[] tabletsPerServer=new long[stats.getTServerInfoSize()];
+    Arrays.fill(tabletsPerServer,0l);
+    for (int i=0; i < stats.getTServerInfoSize(); i++) {
+      for (      Map.Entry<String,TableInfo> entry : stats.getTServerInfo().get(i).getTableMap().entrySet()) {
+        tabletsPerServer[i]+=entry.getValue().getTablets();
+      }
+    }
+    if (tabletsPerServer[0] <= 10) {
+      log.debug("We should have > 10 tablets. sleeping for " + currentWait + "ms");
+      continue;
+    }
+    long min=NumberUtils.min(tabletsPerServer), max=NumberUtils.max(tabletsPerServer);
+    log.debug("Min=" + min + ", Max="+ max);
+    if ((min / ((double)max)) < 0.5) {
+      log.debug("ratio of min to max tablets per server should be roughly even. sleeping for " + currentWait + "ms");
+      continue;
+    }
+    balancingWorked=true;
+  }
+  Assert.assertTrue("did not properly balance",balancingWorked);
+}
+
+</code></pre>
+
+<pre class="type-4 type-21 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setupTables() throws AccumuloException, AccumuloSecurityException, TableExistsException, TableNotFoundException {
+  Connector conn=getConnector();
+  Assume.assumeTrue("Not enough tservers to run test",conn.instanceOperations().getTabletServers().size() >= 2);
+  final SortedSet<Text> splits=new TreeSet<Text>();
+  for (int i=0; i < NUM_SPLITS; i++) {
+    splits.add(new Text(String.format("%08x",i * 1000)));
+  }
+  String[] names=getUniqueNames(2);
+  UNUSED_TABLE=names[0];
+  TEST_TABLE=names[1];
+  connector=getConnector();
+  connector.tableOperations().create(UNUSED_TABLE);
+  connector.tableOperations().addSplits(UNUSED_TABLE,splits);
+  connector.tableOperations().offline(UNUSED_TABLE);
+  connector.tableOperations().create(TEST_TABLE);
+  connector.tableOperations().setProperty(TEST_TABLE,Property.TABLE_SPLIT_THRESHOLD.getKey(),"10K");
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

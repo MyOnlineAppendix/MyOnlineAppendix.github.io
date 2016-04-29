@@ -1,0 +1,110 @@
+<h3 style="margin:0px">Class: org.apache.twill.yarn.EchoServerTestRun (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-2 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEchoServer() throws Exception {
+  TwillRunner runner=getTwillRunner();
+  TwillController controller=runner.prepare(new EchoServer(),ResourceSpecification.Builder.with().setVirtualCores(1).setMemory(1,ResourceSpecification.SizeUnit.GIGA).setInstances(2).build()).addLogHandler(new PrinterLogHandler(new PrintWriter(System.out,true))).withApplicationArguments("echo").withArguments("EchoServer","echo2").start();
+  final CountDownLatch running=new CountDownLatch(1);
+  controller.onRunning(new Runnable(){
+    @Override public void run(){
+      running.countDown();
+    }
+  }
+,Threads.SAME_THREAD_EXECUTOR);
+  Assert.assertTrue(running.await(120,TimeUnit.SECONDS));
+  Iterable<Discoverable> echoServices=controller.discoverService("echo");
+  Assert.assertTrue(waitForSize(echoServices,2,120));
+  for (  Discoverable discoverable : echoServices) {
+    String msg="Hello: " + discoverable.getSocketAddress();
+    try (Socket socket=new Socket(discoverable.getSocketAddress().getAddress(),discoverable.getSocketAddress().getPort())){
+      PrintWriter writer=new PrintWriter(new OutputStreamWriter(socket.getOutputStream(),Charsets.UTF_8),true);
+      LineReader reader=new LineReader(new InputStreamReader(socket.getInputStream(),Charsets.UTF_8));
+      writer.println(msg);
+      Assert.assertEquals(msg,reader.readLine());
+    }
+   }
+  controller.changeInstances("EchoServer",3);
+  Assert.assertTrue(waitForSize(echoServices,3,120));
+  echoServices=controller.discoverService("echo2");
+  controller.changeInstances("EchoServer",1);
+  Assert.assertTrue(waitForSize(echoServices,1,120));
+  controller.changeInstances("EchoServer",2);
+  Assert.assertTrue(waitForSize(echoServices,2,120));
+  Map<Integer,String> instanceIdToContainerId=Maps.newHashMap();
+  ResourceReport report=waitForAfterRestartResourceReport(controller,"EchoServer",15L,TimeUnit.MINUTES,2,null);
+  Assert.assertTrue(report != null);
+  Collection<TwillRunResources> runResources=report.getRunnableResources("EchoServer");
+  for (  TwillRunResources twillRunResources : runResources) {
+    instanceIdToContainerId.put(twillRunResources.getInstanceId(),twillRunResources.getContainerId());
+  }
+  controller.restartAllInstances("EchoServer");
+  Assert.assertTrue(waitForSize(echoServices,2,120));
+  report=waitForAfterRestartResourceReport(controller,"EchoServer",15L,TimeUnit.MINUTES,2,instanceIdToContainerId);
+  Assert.assertTrue(report != null);
+  Iterable<TwillRunner.LiveInfo> apps=runner.lookupLive();
+  Assert.assertTrue(waitForSize(apps,1,120));
+  TwillRunnerService runnerService=TWILL_TESTER.createTwillRunnerService();
+  runnerService.start();
+  try {
+    Iterable<TwillController> controllers=runnerService.lookup("EchoServer");
+    Assert.assertTrue(waitForSize(controllers,1,120));
+    for (    TwillController c : controllers) {
+      LOG.info("Stopping application: " + c.getRunId());
+      c.terminate().get(30,TimeUnit.SECONDS);
+    }
+    Assert.assertTrue(waitForSize(apps,0,120));
+  }
+  finally {
+    runnerService.stop();
+  }
+  TimeUnit.SECONDS.sleep(2);
+}
+
+</code></pre>
+
+<pre class="type-7 type-2 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZKCleanup() throws Exception {
+  ZKClientService zkClient=ZKClientService.Builder.of(getZKConnectionString() + "/twill").build();
+  zkClient.startAndWait();
+  try {
+    TwillRunner runner=getTwillRunner();
+    TwillController controller=runner.prepare(new EchoServer()).addLogHandler(new PrinterLogHandler(new PrintWriter(System.out,true))).withApplicationArguments("echo").withArguments("EchoServer","echo2").start();
+    Iterable<Discoverable> echoServices=controller.discoverService("echo");
+    Assert.assertTrue(waitForSize(echoServices,1,120));
+    controller.terminate().get();
+    Assert.assertNull(zkClient.exists("/EchoServer").get());
+    List<TwillController> controllers=new ArrayList<>();
+    for (int i=0; i < 2; i++) {
+      controllers.add(runner.prepare(new EchoServer()).addLogHandler(new PrinterLogHandler(new PrintWriter(System.out,true))).withApplicationArguments("echo").withArguments("EchoServer","echo2").start());
+    }
+    echoServices=controller.discoverService("echo");
+    Assert.assertTrue(waitForSize(echoServices,2,120));
+    controllers.get(0).terminate().get();
+    Assert.assertNotNull(zkClient.exists("/EchoServer").get());
+    echoServices=controller.discoverService("echo");
+    Assert.assertTrue(waitForSize(echoServices,1,120));
+    controllers.get(1).terminate().get();
+    Assert.assertNull(zkClient.exists("/EchoServer").get());
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

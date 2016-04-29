@@ -1,0 +1,307 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.io.sstable.SSTableReaderTest (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(7)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLoadingSummaryUsesCorrectPartitioner() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Indexed1");
+  new RowUpdateBuilder(store.metadata,System.currentTimeMillis(),"k1").clustering("0").add("birthdate",1L).build().applyUnsafe();
+  store.forceBlockingFlush();
+  for (  ColumnFamilyStore indexCfs : store.indexManager.getAllIndexColumnFamilyStores()) {
+    assert indexCfs.isIndex();
+    SSTableReader sstable=indexCfs.getLiveSSTables().iterator().next();
+    assert sstable.first.getToken() instanceof LocalToken;
+    try (SegmentedFile.Builder ibuilder=SegmentedFile.getBuilder(DatabaseDescriptor.getIndexAccessMode(),false);SegmentedFile.Builder dbuilder=SegmentedFile.getBuilder(DatabaseDescriptor.getDiskAccessMode(),sstable.compression)){
+      sstable.saveSummary(ibuilder,dbuilder);
+    }
+     SSTableReader reopened=SSTableReader.open(sstable.descriptor);
+    assert reopened.first.getToken() instanceof LocalToken;
+    reopened.selfRef().release();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * see CASSANDRA-5407 
+ */
+@Test public void testGetScannerForNoIntersectingRanges() throws Exception {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard1");
+  partitioner=store.getPartitioner();
+  new RowUpdateBuilder(store.metadata,0,"k1").clustering("xyz").add("val","abc").build().applyUnsafe();
+  store.forceBlockingFlush();
+  boolean foundScanner=false;
+  for (  SSTableReader s : store.getLiveSSTables()) {
+    try (ISSTableScanner scanner=s.getScanner(new Range<Token>(t(0),t(1)),null)){
+      scanner.next();
+      foundScanner=true;
+    }
+   }
+  assertTrue(foundScanner);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testGetPositionsForRanges(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard2");
+  partitioner=store.getPartitioner();
+  CompactionManager.instance.disableAutoCompaction();
+  for (int j=0; j < 10; j++) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  CompactionManager.instance.performMaximal(store,false);
+  List<Range<Token>> ranges=new ArrayList<Range<Token>>();
+  ranges.add(new Range<>(t(0),t(1)));
+  ranges.add(new Range<>(t(2),t(4)));
+  ranges.add(new Range<>(t(6),partitioner.getMinimumToken()));
+  ranges.add(new Range<>(t(9),t(91)));
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  long previous=-1;
+  for (  Pair<Long,Long> section : sstable.getPositionsForRanges(ranges)) {
+    assert previous <= section.left : previous + " ! < " + section.left;
+    assert section.left < section.right : section.left + " ! < " + section.right;
+    previous=section.right;
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSpannedIndexPositions() throws IOException {
+  MmappedRegions.MAX_SEGMENT_SIZE=40;
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard1");
+  partitioner=store.getPartitioner();
+  CompactionManager.instance.disableAutoCompaction();
+  for (int j=0; j < 100; j+=2) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  CompactionManager.instance.performMaximal(store,false);
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  for (int j=0; j < 100; j+=2) {
+    DecoratedKey dk=Util.dk(String.valueOf(j));
+    FileDataInput file=sstable.getFileDataInput(sstable.getPosition(dk,SSTableReader.Operator.EQ).position);
+    DecoratedKey keyInDisk=sstable.decorateKey(ByteBufferUtil.readWithShortLength(file));
+    assert keyInDisk.equals(dk) : String.format("%s != %s in %s",keyInDisk,dk,file.getPath());
+  }
+  for (int j=1; j < 110; j+=2) {
+    DecoratedKey dk=Util.dk(String.valueOf(j));
+    assert sstable.getPosition(dk,SSTableReader.Operator.EQ) == null;
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIndexSummaryReplacement() throws IOException, ExecutionException, InterruptedException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  final ColumnFamilyStore store=keyspace.getColumnFamilyStore("StandardLowIndexInterval");
+  CompactionManager.instance.disableAutoCompaction();
+  final int NUM_PARTITIONS=512;
+  for (int j=0; j < NUM_PARTITIONS; j++) {
+    new RowUpdateBuilder(store.metadata,j,String.format("%3d",j)).clustering("0").add("val",String.format("%3d",j)).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  CompactionManager.instance.performMaximal(store,false);
+  Collection<SSTableReader> sstables=store.getLiveSSTables();
+  assert sstables.size() == 1;
+  final SSTableReader sstable=sstables.iterator().next();
+  ThreadPoolExecutor executor=new ScheduledThreadPoolExecutor(5);
+  List<Future> futures=new ArrayList<>(NUM_PARTITIONS * 2);
+  for (int i=0; i < NUM_PARTITIONS; i++) {
+    final ByteBuffer key=ByteBufferUtil.bytes(String.format("%3d",i));
+    final int index=i;
+    futures.add(executor.submit(new Runnable(){
+      public void run(){
+        Row row=Util.getOnlyRowUnfiltered(Util.cmd(store,key).build());
+        assertEquals(0,ByteBufferUtil.compare(String.format("%3d",index).getBytes(),row.cells().iterator().next().value()));
+      }
+    }
+));
+    futures.add(executor.submit(new Runnable(){
+      public void run(){
+        Iterable<DecoratedKey> results=store.keySamples(new Range<>(sstable.getPartitioner().getMinimumToken(),sstable.getPartitioner().getToken(key)));
+        assertTrue(results.iterator().hasNext());
+      }
+    }
+));
+  }
+  SSTableReader replacement;
+  try (LifecycleTransaction txn=store.getTracker().tryModify(Arrays.asList(sstable),OperationType.UNKNOWN)){
+    replacement=sstable.cloneWithNewSummarySamplingLevel(store,1);
+    txn.update(replacement,true);
+    txn.finish();
+  }
+   for (  Future future : futures)   future.get();
+  assertEquals(sstable.estimatedKeys(),replacement.estimatedKeys(),1);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testGetPositionsForRangesWithKeyCache(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard2");
+  partitioner=store.getPartitioner();
+  CacheService.instance.keyCache.setCapacity(100);
+  CompactionManager.instance.disableAutoCompaction();
+  for (int j=0; j < 10; j++) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  CompactionManager.instance.performMaximal(store,false);
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  long p2=sstable.getPosition(k(2),SSTableReader.Operator.EQ).position;
+  long p3=sstable.getPosition(k(3),SSTableReader.Operator.EQ).position;
+  long p6=sstable.getPosition(k(6),SSTableReader.Operator.EQ).position;
+  long p7=sstable.getPosition(k(7),SSTableReader.Operator.EQ).position;
+  Pair<Long,Long> p=sstable.getPositionsForRanges(makeRanges(t(2),t(6))).get(0);
+  assert p.left == p3;
+  assert p.right == p7;
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testPersistentStatistics(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard1");
+  partitioner=store.getPartitioner();
+  for (int j=0; j < 100; j+=2) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  clearAndLoad(store);
+  assert store.metric.maxPartitionSize.getValue() != 0;
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testGetPositionsForRangesFromTableOpenedForBulkLoading() throws IOException {
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard2");
+  partitioner=store.getPartitioner();
+  CompactionManager.instance.disableAutoCompaction();
+  for (int j=0; j < 130; j++) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  CompactionManager.instance.performMaximal(store,false);
+  List<Range<Token>> ranges=new ArrayList<Range<Token>>();
+  ranges.add(new Range<Token>(t(98),t(99)));
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  List<Pair<Long,Long>> sections=sstable.getPositionsForRanges(ranges);
+  assert sections.size() == 1 : "Expected to find range in sstable";
+  Set<Component> components=Sets.newHashSet(Component.DATA,Component.PRIMARY_INDEX);
+  if (sstable.components.contains(Component.COMPRESSION_INFO))   components.add(Component.COMPRESSION_INFO);
+  SSTableReader bulkLoaded=SSTableReader.openForBatch(sstable.descriptor,components,store.metadata);
+  sections=bulkLoaded.getPositionsForRanges(ranges);
+  assert sections.size() == 1 : "Expected to find range in sstable opened for bulk loading";
+  bulkLoaded.selfRef().release();
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testReadRateTracking(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore("Standard1");
+  partitioner=store.getPartitioner();
+  for (int j=0; j < 10; j++) {
+    new RowUpdateBuilder(store.metadata,j,String.valueOf(j)).clustering("0").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  assertEquals(0,sstable.getReadMeter().count());
+  DecoratedKey key=sstable.decorateKey(ByteBufferUtil.bytes("4"));
+  Util.getAll(Util.cmd(store,key).build());
+  assertEquals(1,sstable.getReadMeter().count());
+  Util.getAll(Util.cmd(store,key).includeRow("0").build());
+  assertEquals(2,sstable.getReadMeter().count());
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testOpeningSSTable() throws Exception {
+  String ks=KEYSPACE1;
+  String cf="Standard1";
+  Keyspace keyspace=Keyspace.open(ks);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore(cf);
+  store.clearUnsafe();
+  store.disableAutoCompaction();
+  DecoratedKey firstKey=null, lastKey=null;
+  long timestamp=System.currentTimeMillis();
+  for (int i=0; i < store.metadata.params.minIndexInterval; i++) {
+    DecoratedKey key=Util.dk(String.valueOf(i));
+    if (firstKey == null)     firstKey=key;
+    if (lastKey == null)     lastKey=key;
+    if (store.metadata.getKeyValidator().compare(lastKey.getKey(),key.getKey()) < 0)     lastKey=key;
+    new RowUpdateBuilder(store.metadata,timestamp,key.getKey()).clustering("col").add("val",ByteBufferUtil.EMPTY_BYTE_BUFFER).build().applyUnsafe();
+  }
+  store.forceBlockingFlush();
+  SSTableReader sstable=store.getLiveSSTables().iterator().next();
+  Descriptor desc=sstable.descriptor;
+  SSTableReader target=SSTableReader.open(desc);
+  Assert.assertEquals(target.getIndexSummarySize(),1);
+  Assert.assertArrayEquals(ByteBufferUtil.getArray(firstKey.getKey()),target.getIndexSummaryKey(0));
+  assert target.first.equals(firstKey);
+  assert target.last.equals(lastKey);
+  target.selfRef().release();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testPersistentStatisticsWithSecondaryIndex(){
+  Keyspace keyspace=Keyspace.open(KEYSPACE1);
+  ColumnFamilyStore store=keyspace.getColumnFamilyStore(CF_INDEXED);
+  partitioner=store.getPartitioner();
+  new RowUpdateBuilder(store.metadata,System.currentTimeMillis(),"k1").clustering("0").add("birthdate",1L).build().applyUnsafe();
+  store.forceBlockingFlush();
+  assertIndexQueryWorks(store);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

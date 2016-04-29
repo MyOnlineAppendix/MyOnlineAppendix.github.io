@@ -1,0 +1,327 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.compactions.TestStripeCompactionPolicy (15 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testSplitOffStripe() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.unset("hbase.hstore.compaction.min.size");
+  conf.setInt(StripeStoreConfig.MIN_FILES_KEY,2);
+  Long[] toSplit=new Long[]{defaultSplitSize - 2,1L,1L};
+  Long[] noSplit=new Long[]{defaultSplitSize - 2,1L};
+  long splitTargetSize=(long)(defaultSplitSize / defaultSplitCount);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripesWithSizes(0,0,new Long[]{defaultSplitSize - 2,2L});
+  assertNull(createPolicy(conf).selectCompaction(si,al(),false));
+  conf.setFloat(CompactionConfiguration.HBASE_HSTORE_COMPACTION_RATIO_KEY,500f);
+  StripeCompactionPolicy policy=createPolicy(conf);
+  verifyWholeStripesCompaction(policy,si,0,0,null,2,splitTargetSize);
+  si=createStripesWithSizes(0,0,noSplit,noSplit,toSplit);
+  verifyWholeStripesCompaction(policy,si,2,2,null,2,splitTargetSize);
+  si=createStripesWithSizes(0,0,noSplit,toSplit,noSplit);
+  verifyWholeStripesCompaction(policy,si,1,1,null,2,splitTargetSize);
+  StripeCompactionPolicy specPolicy=createPolicy(conf,defaultSplitSize + 1,defaultSplitCount,defaultInitialCount,false);
+  verifySingleStripeCompaction(specPolicy,si,1,null);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOldStripesFromFlush() throws Exception {
+  StripeCompactionPolicy policy=createPolicy(HBaseConfiguration.create());
+  StripeInformationProvider si=createStripes(0,KEY_C,KEY_D);
+  KeyValue[] input=new KeyValue[]{KV_B,KV_C,KV_C,KV_D,KV_E};
+  KeyValue[][] expected=new KeyValue[][]{new KeyValue[]{KV_B},new KeyValue[]{KV_C,KV_C},new KeyValue[]{KV_D,KV_E}};
+  verifyFlush(policy,si,input,expected,new byte[][]{OPEN_KEY,KEY_C,KEY_D,OPEN_KEY});
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSingleStripeDropDeletes() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.unset("hbase.hstore.compaction.min.size");
+  StripeCompactionPolicy policy=createPolicy(conf);
+  Long[][] stripes=new Long[][]{new Long[]{3L,2L,2L,2L},new Long[]{6L}};
+  StripeInformationProvider si=createStripesWithSizes(0,0,stripes);
+  verifySingleStripeCompaction(policy,si,0,true);
+  si=createStripesWithSizes(2,2,stripes);
+  verifySingleStripeCompaction(policy,si,0,false);
+  si=createStripesWithSizes(6,2,stripes);
+  ConcatenatedLists<StoreFile> sfs=new ConcatenatedLists<StoreFile>();
+  sfs.addSublist(si.getLevel0Files());
+  sfs.addSublist(si.getStripes().get(0));
+  verifyCompaction(policy,si,sfs,si.getStartRow(0),si.getEndRow(0),si.getStripeBoundaries());
+  si=createStripesWithSizes(6,2,new Long[][]{new Long[]{10L,1L,1L,1L,1L},new Long[]{12L}});
+  verifyCompaction(policy,si,si.getLevel0Files(),null,null,si.getStripeBoundaries());
+  stripes=new Long[][]{new Long[]{100L,3L,2L,2L,2L},new Long[]{6L}};
+  si=createStripesWithSizes(0,0,stripes);
+  List<StoreFile> compact_file=new ArrayList<StoreFile>();
+  Iterator<StoreFile> iter=si.getStripes().get(0).listIterator(1);
+  while (iter.hasNext()) {
+    compact_file.add(iter.next());
+  }
+  verifyCompaction(policy,si,compact_file,false,1,null,si.getStartRow(0),si.getEndRow(0),true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testInitialCountFromL0() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setInt(StripeStoreConfig.MIN_FILES_L0_KEY,2);
+  StripeCompactionPolicy policy=createPolicy(conf,defaultSplitSize,defaultSplitCount,2,false);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripesL0Only(3,8);
+  verifyCompaction(policy,si,si.getStorefiles(),true,2,12L,OPEN_KEY,OPEN_KEY,true);
+  si=createStripesL0Only(3,10);
+  verifyCompaction(policy,si,si.getStorefiles(),true,3,10L,OPEN_KEY,OPEN_KEY,true);
+  policy=createPolicy(conf,defaultSplitSize,defaultSplitCount,6,false);
+  verifyCompaction(policy,si,si.getStorefiles(),true,6,5L,OPEN_KEY,OPEN_KEY,true);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSingleStripeCompaction() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.unset("hbase.hstore.compaction.min.size");
+  conf.setFloat(CompactionConfiguration.HBASE_HSTORE_COMPACTION_RATIO_KEY,1.0F);
+  conf.setInt(StripeStoreConfig.MIN_FILES_KEY,3);
+  conf.setInt(StripeStoreConfig.MAX_FILES_KEY,4);
+  conf.setLong(StripeStoreConfig.SIZE_TO_SPLIT_KEY,1000);
+  StoreConfigInformation sci=mock(StoreConfigInformation.class);
+  StripeStoreConfig ssc=new StripeStoreConfig(conf,sci);
+  StripeCompactionPolicy policy=new StripeCompactionPolicy(conf,sci,ssc){
+    @Override public StripeCompactionRequest selectCompaction(    StripeInformationProvider si,    List<StoreFile> filesCompacting,    boolean isOffpeak) throws IOException {
+      if (!filesCompacting.isEmpty())       return null;
+      return selectSingleStripeCompaction(si,false,false,isOffpeak);
+    }
+    @Override public boolean needsCompactions(    StripeInformationProvider si,    List<StoreFile> filesCompacting){
+      if (!filesCompacting.isEmpty())       return false;
+      return needsSingleStripeCompaction(si);
+    }
+  }
+;
+  StripeInformationProvider si=createStripesWithSizes(0,0,new Long[]{2L},new Long[]{3L,3L},new Long[]{5L,1L});
+  verifyNoCompaction(policy,si);
+  si=createStripesWithSizes(0,0,new Long[]{2L},new Long[]{3L,3L},new Long[]{5L,1L,1L});
+  assertNull(policy.selectCompaction(si,al(),false));
+  assertTrue(policy.needsCompactions(si,al()));
+  si=createStripesWithSizes(0,0,new Long[]{2L},new Long[]{3L,3L},new Long[]{5L,4L,3L});
+  verifySingleStripeCompaction(policy,si,2,null);
+  si=createStripesWithSizes(0,0,new Long[]{3L,2L,2L},new Long[]{2L,2L,1L},new Long[]{3L,2L,2L,1L});
+  verifySingleStripeCompaction(policy,si,2,null);
+  si=createStripesWithSizes(0,0,new Long[]{5L},new Long[]{3L,2L,2L,1L},new Long[]{3L,2L,2L});
+  verifySingleStripeCompaction(policy,si,1,null);
+  si=createStripesWithSizes(0,0,new Long[]{3L,3L,3L},new Long[]{3L,1L,2L},new Long[]{3L,2L,2L});
+  verifySingleStripeCompaction(policy,si,1,null);
+  si=createStripesWithSizes(0,0,new Long[]{5L},new Long[]{5L,4L,4L,4L,4L});
+  List<StoreFile> sfs=si.getStripes().get(1).subList(1,5);
+  verifyCompaction(policy,si,sfs,null,1,null,si.getStartRow(1),si.getEndRow(1),true);
+  si=createStripesWithSizes(0,0,new Long[]{5L},new Long[]{50L,4L,4L,4L,4L});
+  sfs=si.getStripes().get(1).subList(1,5);
+  verifyCompaction(policy,si,sfs,null,1,null,si.getStartRow(1),si.getEndRow(1),true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNoStripesFromFlush() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setBoolean(StripeStoreConfig.FLUSH_TO_L0_KEY,true);
+  StripeCompactionPolicy policy=createPolicy(conf);
+  StripeInformationProvider si=createStripesL0Only(0,0);
+  KeyValue[] input=new KeyValue[]{KV_A,KV_B,KV_C,KV_D,KV_E};
+  KeyValue[][] expected=new KeyValue[][]{input};
+  verifyFlush(policy,si,input,expected,null);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testMergeExpiredStripes() throws Exception {
+  ManualEnvironmentEdge edge=new ManualEnvironmentEdge();
+  long now=defaultTtl + 2;
+  edge.setValue(now);
+  EnvironmentEdgeManager.injectEdge(edge);
+  try {
+    StoreFile expiredFile=createFile(), notExpiredFile=createFile();
+    when(expiredFile.getReader().getMaxTimestamp()).thenReturn(now - defaultTtl - 1);
+    when(notExpiredFile.getReader().getMaxTimestamp()).thenReturn(now - defaultTtl + 1);
+    List<StoreFile> expired=Lists.newArrayList(expiredFile,expiredFile);
+    List<StoreFile> notExpired=Lists.newArrayList(notExpiredFile,notExpiredFile);
+    StripeCompactionPolicy policy=createPolicy(HBaseConfiguration.create(),defaultSplitSize,defaultSplitCount,defaultInitialCount,true);
+    StripeCompactionPolicy.StripeInformationProvider si=createStripesWithFiles(expired,expired,expired);
+    verifyMergeCompatcion(policy,si,0,2);
+    si=createStripesWithFiles(notExpired,expired,notExpired,expired,expired,notExpired);
+    verifyMergeCompatcion(policy,si,3,4);
+  }
+  finally {
+    EnvironmentEdgeManager.reset();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testMergeExpiredFiles() throws Exception {
+  ManualEnvironmentEdge edge=new ManualEnvironmentEdge();
+  long now=defaultTtl + 2;
+  edge.setValue(now);
+  EnvironmentEdgeManager.injectEdge(edge);
+  try {
+    StoreFile expiredFile=createFile(), notExpiredFile=createFile();
+    when(expiredFile.getReader().getMaxTimestamp()).thenReturn(now - defaultTtl - 1);
+    when(notExpiredFile.getReader().getMaxTimestamp()).thenReturn(now - defaultTtl + 1);
+    List<StoreFile> expired=Lists.newArrayList(expiredFile,expiredFile);
+    List<StoreFile> notExpired=Lists.newArrayList(notExpiredFile,notExpiredFile);
+    List<StoreFile> mixed=Lists.newArrayList(expiredFile,notExpiredFile);
+    StripeCompactionPolicy policy=createPolicy(HBaseConfiguration.create(),defaultSplitSize,defaultSplitCount,defaultInitialCount,true);
+    StripeCompactionPolicy.StripeInformationProvider si=createStripesWithFiles(expired,expired,expired);
+    verifyWholeStripesCompaction(policy,si,0,2,null,1,Long.MAX_VALUE,false);
+    si=createStripesWithFiles(notExpired,notExpired,notExpired);
+    assertNull(policy.selectCompaction(si,al(),false));
+    si=createStripesWithFiles(notExpired,expired,notExpired);
+    verifyWholeStripesCompaction(policy,si,1,2,null,1,Long.MAX_VALUE,false);
+    si=createStripesWithFiles(notExpired,expired,notExpired,expired,expired,notExpired);
+    verifyWholeStripesCompaction(policy,si,3,4,null,1,Long.MAX_VALUE,false);
+    si=createStripesWithFiles(expired,expired,notExpired,expired,mixed);
+    verifyWholeStripesCompaction(policy,si,0,1,null,1,Long.MAX_VALUE,false);
+  }
+  finally {
+    EnvironmentEdgeManager.reset();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNewStripesFromFlush() throws Exception {
+  StripeCompactionPolicy policy=createPolicy(HBaseConfiguration.create());
+  StripeInformationProvider si=createStripesL0Only(0,0);
+  KeyValue[] input=new KeyValue[]{KV_B,KV_C,KV_C,KV_D,KV_E};
+  KeyValue[][] expected=new KeyValue[][]{input};
+  verifyFlush(policy,si,input,expected,new byte[][]{OPEN_KEY,OPEN_KEY});
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+"></span><br>
+@Test public void testWithParallelCompaction() throws Exception {
+  assertNull(createPolicy(HBaseConfiguration.create()).selectCompaction(mock(StripeInformationProvider.class),al(createFile()),false));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNothingToCompactFromL0() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setInt(StripeStoreConfig.MIN_FILES_L0_KEY,4);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripesL0Only(3,10);
+  StripeCompactionPolicy policy=createPolicy(conf);
+  verifyNoCompaction(policy,si);
+  si=createStripes(3,KEY_A);
+  verifyNoCompaction(policy,si);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSplitOffStripeDropDeletes() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setInt(StripeStoreConfig.MIN_FILES_KEY,2);
+  StripeCompactionPolicy policy=createPolicy(conf);
+  Long[] toSplit=new Long[]{defaultSplitSize / 2,defaultSplitSize / 2};
+  Long[] noSplit=new Long[]{1L};
+  long splitTargetSize=(long)(defaultSplitSize / defaultSplitCount);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripesWithSizes(0,0,noSplit,toSplit);
+  verifyWholeStripesCompaction(policy,si,1,1,true,null,splitTargetSize);
+  si=createStripesWithSizes(2,2,noSplit,toSplit);
+  verifyWholeStripesCompaction(policy,si,1,1,false,null,splitTargetSize);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testExistingStripesFromL0() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setInt(StripeStoreConfig.MIN_FILES_L0_KEY,3);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripes(3,KEY_A);
+  verifyCompaction(createPolicy(conf),si,si.getLevel0Files(),null,null,si.getStripeBoundaries());
+}
+
+</code></pre>
+
+<pre class="type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSplitOffStripeOffPeak() throws Exception {
+  Configuration conf=HBaseConfiguration.create();
+  conf.unset("hbase.hstore.compaction.min.size");
+  conf.setInt(StripeStoreConfig.MIN_FILES_KEY,2);
+  StripeCompactionPolicy.StripeInformationProvider si=createStripesWithSizes(0,0,new Long[]{defaultSplitSize - 2,1L,1L});
+  assertEquals(2,createPolicy(conf).selectCompaction(si,al(),false).getRequest().getFiles().size());
+  conf.setFloat("hbase.hstore.compaction.ratio.offpeak",500f);
+  assertEquals(3,createPolicy(conf).selectCompaction(si,al(),true).getRequest().getFiles().size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testWithReferences() throws Exception {
+  StripeCompactionPolicy policy=createPolicy(HBaseConfiguration.create());
+  StripeCompactor sc=mock(StripeCompactor.class);
+  StoreFile ref=createFile();
+  when(ref.isReference()).thenReturn(true);
+  StripeInformationProvider si=mock(StripeInformationProvider.class);
+  Collection<StoreFile> sfs=al(ref,createFile());
+  when(si.getStorefiles()).thenReturn(sfs);
+  assertTrue(policy.needsCompactions(si,al()));
+  StripeCompactionPolicy.StripeCompactionRequest scr=policy.selectCompaction(si,al(),false);
+  assertEquals(si.getStorefiles(),scr.getRequest().getFiles());
+  scr.execute(sc,NoLimitThroughputController.INSTANCE,null);
+  verify(sc,only()).compact(eq(scr.getRequest()),anyInt(),anyLong(),aryEq(OPEN_KEY),aryEq(OPEN_KEY),aryEq(OPEN_KEY),aryEq(OPEN_KEY),any(NoLimitThroughputController.class),any(User.class));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

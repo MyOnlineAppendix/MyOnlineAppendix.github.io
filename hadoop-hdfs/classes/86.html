@@ -1,0 +1,65 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestCorruptFilesJsp (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testCorruptFilesJsp() throws Exception {
+  MiniDFSCluster cluster=null;
+  try {
+    final int FILE_SIZE=512;
+    Path[] filepaths={new Path("/audiobook"),new Path("/audio/audio1"),new Path("/audio/audio2"),new Path("/audio/audio")};
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    FileSystem fs=cluster.getFileSystem();
+    for (    Path filepath : filepaths) {
+      DFSTestUtil.createFile(fs,filepath,FILE_SIZE,(short)1,0L);
+      DFSTestUtil.waitReplication(fs,filepath,(short)1);
+    }
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("There are " + badFiles.size() + " corrupt files, but expecting none",badFiles.size() == 0);
+    URL url=new URL("http://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY) + "/corrupt_files.jsp");
+    String corruptFilesPage=DFSTestUtil.urlGet(url);
+    assertTrue("Corrupt files page is not showing a healthy filesystem",corruptFilesPage.contains("No missing blocks found at the moment."));
+    for (int idx=0; idx < filepaths.length - 1; idx++) {
+      ExtendedBlock blk=DFSTestUtil.getFirstBlock(fs,filepaths[idx]);
+      assertTrue(TestDatanodeBlockScanner.corruptReplica(blk,0));
+      FSDataInputStream in=fs.open(filepaths[idx]);
+      try {
+        in.readFully(new byte[FILE_SIZE]);
+      }
+ catch (      ChecksumException ignored) {
+      }
+      in.close();
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Expecting 3 corrupt files, but got " + badFiles.size(),badFiles.size() == 3);
+    url=new URL("http://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY) + "/corrupt_files.jsp");
+    corruptFilesPage=DFSTestUtil.urlGet(url);
+    assertTrue("'/audiobook' should be corrupt",corruptFilesPage.contains("/audiobook"));
+    assertTrue("'/audio/audio1' should be corrupt",corruptFilesPage.contains("/audio/audio1"));
+    assertTrue("'/audio/audio2' should be corrupt",corruptFilesPage.contains("/audio/audio2"));
+    assertTrue("Summary message shall report 3 corrupt files",corruptFilesPage.contains("At least 3 corrupt file(s)"));
+    for (    Path filepath : filepaths) {
+      fs.delete(filepath,false);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

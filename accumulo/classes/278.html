@@ -1,0 +1,88 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.GetFileInfoBulkIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  final Connector c=getConnector();
+  getCluster().getClusterControl().kill(ServerType.GARBAGE_COLLECTOR,"localhost");
+  final String tableName=getUniqueNames(1)[0];
+  c.tableOperations().create(tableName);
+  c.tableOperations().setProperty(tableName,Property.TABLE_MAJC_RATIO.getKey(),"2000");
+  c.tableOperations().setProperty(tableName,Property.TABLE_FILE_MAX.getKey(),"2000");
+  SortedSet<Text> splits=new TreeSet<>();
+  for (int i=1; i < 0xf; i++) {
+    splits.add(new Text(Integer.toHexString(i)));
+  }
+  c.tableOperations().addSplits(tableName,splits);
+  MasterMonitorInfo stats=getCluster().getMasterMonitorInfo();
+  assertEquals(1,stats.tServerInfo.size());
+  log.info("Creating lots of bulk import files");
+  final FileSystem fs=getCluster().getFileSystem();
+  final Path basePath=getCluster().getTemporaryPath();
+  CachedConfiguration.setInstance(fs.getConf());
+  final Path base=new Path(basePath,"testBulkLoad" + tableName);
+  fs.delete(base,true);
+  fs.mkdirs(base);
+  ExecutorService es=Executors.newFixedThreadPool(5);
+  List<Future<Pair<String,String>>> futures=new ArrayList<>();
+  for (int i=0; i < 10; i++) {
+    final int which=i;
+    futures.add(es.submit(new Callable<Pair<String,String>>(){
+      @Override public Pair<String,String> call() throws Exception {
+        Path bulkFailures=new Path(base,"failures" + which);
+        Path files=new Path(base,"files" + which);
+        fs.mkdirs(bulkFailures);
+        fs.mkdirs(files);
+        for (int i=0; i < 100; i++) {
+          FileSKVWriter writer=FileOperations.getInstance().openWriter(files.toString() + "/bulk_" + i+ "."+ RFile.EXTENSION,fs,fs.getConf(),AccumuloConfiguration.getDefaultConfiguration());
+          writer.startDefaultLocalityGroup();
+          for (int j=0x100; j < 0xfff; j+=3) {
+            writer.append(new Key(Integer.toHexString(j)),new Value(new byte[0]));
+          }
+          writer.close();
+        }
+        return new Pair<String,String>(files.toString(),bulkFailures.toString());
+      }
+    }
+));
+  }
+  List<Pair<String,String>> dirs=new ArrayList<>();
+  for (  Future<Pair<String,String>> f : futures) {
+    dirs.add(f.get());
+  }
+  log.info("Importing");
+  long startOps=getOpts();
+  long now=System.currentTimeMillis();
+  List<Future> errs=new ArrayList<>();
+  for (  Pair<String,String> entry : dirs) {
+    final String dir=entry.getFirst();
+    final String err=entry.getSecond();
+    errs.add(es.submit(new Callable(){
+      @Override public Object call() throws Exception {
+        c.tableOperations().importDirectory(tableName,dir,err,false);
+        return null;
+      }
+    }
+));
+  }
+  for (  Future err : errs) {
+    err.get();
+  }
+  es.shutdown();
+  es.awaitTermination(2,TimeUnit.MINUTES);
+  log.info(String.format("Completed in %.2f seconds",(System.currentTimeMillis() - now) / 1000.));
+  Uninterruptibles.sleepUninterruptibly(30,TimeUnit.SECONDS);
+  long getFileInfoOpts=getOpts() - startOps;
+  log.info("# opts: {}",getFileInfoOpts);
+  assertTrue("unexpected number of getFileOps",getFileInfoOpts < 2100 && getFileInfoOpts > 1000);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

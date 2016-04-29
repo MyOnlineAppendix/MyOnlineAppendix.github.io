@@ -1,0 +1,166 @@
+<h3 style="margin:0px">Class: org.apache.wss4j.dom.message.SymmetricSignatureTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test signing a message body using a symmetric key with EncryptedKeySHA1.
+ * The request is generated using WSHandler, instead of coding it.
+ */
+@Test public void testSymmetricSignatureSHA1Handler() throws Exception {
+  final WSSConfig cfg=WSSConfig.getNewInstance();
+  RequestData reqData=new RequestData();
+  reqData.setWssConfig(cfg);
+  java.util.Map<String,Object> messageContext=new java.util.TreeMap<String,Object>();
+  messageContext.put(WSHandlerConstants.SIG_KEY_ID,"EncryptedKeySHA1");
+  messageContext.put(WSHandlerConstants.SIG_ALGO,SignatureMethod.HMAC_SHA1);
+  messageContext.put(WSHandlerConstants.PW_CALLBACK_REF,this);
+  reqData.setMsgContext(messageContext);
+  reqData.setUsername("");
+  final Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  CustomHandler handler=new CustomHandler();
+  HandlerAction action=new HandlerAction(WSConstants.SIGN);
+  handler.send(doc,reqData,Collections.singletonList(action),true);
+  String outputString=XMLUtils.prettyDocumentToString(doc);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug(outputString);
+  }
+  reqData=new RequestData();
+  reqData.setWssConfig(WSSConfig.getNewInstance());
+  messageContext=new java.util.TreeMap<String,Object>();
+  messageContext.put(WSHandlerConstants.PW_CALLBACK_REF,this);
+  reqData.setMsgContext(messageContext);
+  reqData.setUsername("");
+  handler.receive(Collections.singletonList(WSConstants.SIGN),reqData);
+  secEngine.processSecurityHeader(doc,null,this,null,crypto);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that first signs, then encrypts a WS-Security envelope.
+ * <p/>
+ * @throws Exception Thrown when there is any problem in signing, encryption,
+ * decryption, or verification
+ */
+@Test public void testEncryptedKeySignature() throws Exception {
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  LOG.info("Before Sign/Encryption....");
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  WSSecEncryptedKey encrKey=new WSSecEncryptedKey();
+  encrKey.setKeyIdentifierType(WSConstants.ISSUER_SERIAL);
+  encrKey.setUserInfo("wss40","security");
+  encrKey.setSymmetricEncAlgorithm(WSConstants.AES_192);
+  encrKey.prepare(doc,crypto);
+  WSSecEncrypt encrypt=new WSSecEncrypt();
+  encrypt.setEncKeyId(encrKey.getId());
+  encrypt.setEphemeralKey(encrKey.getEphemeralKey());
+  encrypt.setSymmetricEncAlgorithm(WSConstants.TRIPLE_DES);
+  encrypt.setEncryptSymmKey(false);
+  encrypt.setEncryptedKeyElement(encrKey.getEncryptedKeyElement());
+  WSSecSignature sign=new WSSecSignature();
+  sign.setKeyIdentifierType(WSConstants.CUSTOM_SYMM_SIGNING);
+  sign.setCustomTokenId(encrKey.getId());
+  sign.setCustomTokenValueType(WSConstants.WSS_ENC_KEY_VALUE_TYPE);
+  sign.setSecretKey(encrKey.getEphemeralKey());
+  sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+  Document signedDoc=sign.build(doc,crypto,secHeader);
+  Document encryptedSignedDoc=encrypt.build(signedDoc,crypto,secHeader);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Signed and encrypted message with IssuerSerial key identifier (both), 3DES:");
+    String outputString=XMLUtils.prettyDocumentToString(encryptedSignedDoc);
+    LOG.debug(outputString);
+  }
+  LOG.info("After Sign/Encryption....");
+  verify(encryptedSignedDoc);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test signing a message body using a symmetric key with EncryptedKeySHA1
+ */
+@Test public void testSymmetricSignatureSHA1() throws Exception {
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  WSSecSignature sign=new WSSecSignature();
+  sign.setKeyIdentifierType(WSConstants.ENCRYPTED_KEY_SHA1_IDENTIFIER);
+  sign.setSecretKey(keyData);
+  sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+  Document signedDoc=sign.build(doc,crypto,secHeader);
+  byte[] encodedBytes=KeyUtils.generateDigest(keyData);
+  String identifier=Base64.encode(encodedBytes);
+  secretKeyCallbackHandler.addSecretKey(identifier,keyData);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Signed symmetric message SHA1:");
+    String outputString=XMLUtils.prettyDocumentToString(signedDoc);
+    LOG.debug(outputString);
+  }
+  secEngine.processSecurityHeader(doc,null,secretKeyCallbackHandler,null,crypto);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+/** 
+ * Setup method
+ * <p/>
+ * @throws Exception Thrown when there is a problem in setup
+ */
+@Before public void setUp() throws Exception {
+  KeyGenerator keyGen=KeyGenerator.getInstance("AES");
+  keyGen.init(128);
+  SecretKey key=keyGen.generateKey();
+  keyData=key.getEncoded();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test signing a message body using a symmetric key with Direct Reference to an
+ * EncryptedKey
+ */
+@Test public void testSymmetricSignatureDR() throws Exception {
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  WSSecEncryptedKey encrKey=new WSSecEncryptedKey();
+  encrKey.setKeyIdentifierType(WSConstants.ISSUER_SERIAL);
+  encrKey.setUserInfo("wss40","security");
+  encrKey.setSymmetricEncAlgorithm(WSConstants.AES_192);
+  encrKey.prepare(doc,crypto);
+  WSSecSignature sign=new WSSecSignature();
+  sign.setKeyIdentifierType(WSConstants.CUSTOM_SYMM_SIGNING);
+  sign.setCustomTokenId(encrKey.getId());
+  sign.setSecretKey(encrKey.getEphemeralKey());
+  sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+  sign.setCustomTokenValueType(WSConstants.WSS_ENC_KEY_VALUE_TYPE);
+  Document signedDoc=sign.build(doc,crypto,secHeader);
+  encrKey.prependToHeader(secHeader);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Signed symmetric message DR:");
+    String outputString=XMLUtils.prettyDocumentToString(signedDoc);
+    LOG.debug(outputString);
+  }
+  verify(signedDoc);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

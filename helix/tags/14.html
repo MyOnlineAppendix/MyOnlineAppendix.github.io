@@ -1,0 +1,1560 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.helix.api.accessor.TestAtomicAccessors </h4><pre class="type-14 type-5 type-1 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClusterUpdates(){
+  final ClusterId clusterId=ClusterId.from("TestAtomicAccessors!testCluster");
+  final HelixDataAccessor helixAccessor=new ZKHelixDataAccessor(clusterId.stringify(),_baseAccessor);
+  final LockProvider lockProvider=new LockProvider();
+  final String key1="key1";
+  final String key2="key2";
+  ClusterAccessor accessor=new ClusterAccessor(clusterId,helixAccessor);
+  ClusterConfig config=new ClusterConfig.Builder(clusterId).build();
+  boolean created=accessor.createCluster(config);
+  Assert.assertTrue(created);
+  Thread t1=new Thread(){
+    @Override public void run(){
+      UserConfig userConfig=new UserConfig(Scope.cluster(clusterId));
+      userConfig.setBooleanField(key1,true);
+      ClusterConfig.Delta delta=new ClusterConfig.Delta(clusterId).addUserConfig(userConfig);
+      ClusterAccessor accessor=new AtomicClusterAccessor(clusterId,helixAccessor,lockProvider);
+      accessor.updateCluster(delta);
+    }
+  }
+;
+  Thread t2=new Thread(){
+    @Override public void run(){
+      UserConfig userConfig=new UserConfig(Scope.cluster(clusterId));
+      userConfig.setBooleanField(key2,true);
+      ClusterConfig.Delta delta=new ClusterConfig.Delta(clusterId).addUserConfig(userConfig);
+      ClusterAccessor accessor=new AtomicClusterAccessor(clusterId,helixAccessor,lockProvider);
+      accessor.updateCluster(delta);
+    }
+  }
+;
+  t1.start();
+  t2.start();
+  long startTime=System.currentTimeMillis();
+  try {
+    t1.join(TIMEOUT);
+    t2.join(TIMEOUT);
+  }
+ catch (  InterruptedException e) {
+    Assert.fail(e.getMessage());
+    t1.interrupt();
+    t2.interrupt();
+  }
+  long endTime=System.currentTimeMillis();
+  if (endTime - startTime > TIMEOUT - EXTRA_WAIT) {
+    Assert.fail("Test timed out");
+    t1.interrupt();
+    t2.interrupt();
+  }
+  Assert.assertTrue(lockProvider.hasLockBlocked());
+  accessor.dropCluster();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.controller.strategy.TestAutoRebalanceStrategy </h4><pre class="type-7 type-14 type-1 type-8 type-11 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the following scenario: nodes come up one by one, then one node is taken down. Preference
+ * lists should prefer nodes in the current mapping at all times, but when all nodes are in the
+ * current mapping, then it should distribute states as evenly as possible.
+ */
+@Test public void testOrphansNotPreferred(){
+  final ResourceId RESOURCE=ResourceId.from("resource");
+  final PartitionId[] PARTITIONS={PartitionId.from("resource_0"),PartitionId.from("resource_1"),PartitionId.from("resource_2")};
+  final StateModelDefinition STATE_MODEL=new StateModelDefinition(StateModelConfigGenerator.generateConfigForMasterSlave());
+  final int REPLICA_COUNT=2;
+  final ParticipantId[] NODES={ParticipantId.from("n0"),ParticipantId.from("n1"),ParticipantId.from("n2")};
+  ReplicaPlacementScheme scheme=new AutoRebalanceStrategy.DefaultPlacementScheme();
+  List<ParticipantId> allNodes=Lists.newArrayList(NODES[0]);
+  List<ParticipantId> liveNodes=Lists.newArrayList(NODES[0]);
+  Map<PartitionId,Map<ParticipantId,State>> currentMapping=Maps.newHashMap();
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.put(partition,new HashMap<ParticipantId,State>());
+  }
+  List<PartitionId> partitions=ImmutableList.copyOf(PARTITIONS);
+  Map<State,String> upperBounds=Maps.newHashMap();
+  for (  State state : STATE_MODEL.getTypedStatesPriorityList()) {
+    upperBounds.put(state,STATE_MODEL.getNumParticipantsPerState(state));
+  }
+  LinkedHashMap<State,Integer> stateCount=ConstraintBasedAssignment.stateCount(upperBounds,STATE_MODEL,liveNodes.size(),REPLICA_COUNT);
+  ZNRecord znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  Map<String,List<String>> preferenceLists=znRecord.getListFields();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),1,"invalid preference list for " + partition);
+  }
+  allNodes.add(NODES[1]);
+  liveNodes.add(NODES[1]);
+  stateCount=ConstraintBasedAssignment.stateCount(upperBounds,STATE_MODEL,liveNodes.size(),REPLICA_COUNT);
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.get(partition).put(NODES[0],State.from("MASTER"));
+  }
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.get(0),NODES[0].toString(),"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.get(1),NODES[1].toString(),"invalid preference list for " + partition);
+  }
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.get(partition).put(NODES[1],State.from("SLAVE"));
+  }
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  Set<String> firstNodes=Sets.newHashSet();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    firstNodes.add(preferenceList.get(0));
+  }
+  Assert.assertEquals(firstNodes.size(),2,"masters not evenly distributed");
+  allNodes.add(NODES[2]);
+  liveNodes.add(NODES[2]);
+  stateCount=ConstraintBasedAssignment.stateCount(upperBounds,STATE_MODEL,liveNodes.size(),REPLICA_COUNT);
+  currentMapping.get(PARTITIONS[1]).put(NODES[0],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[1],State.from("MASTER"));
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  boolean newNodeUsed=false;
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    if (preferenceList.contains(NODES[2].toString())) {
+      newNodeUsed=true;
+      Assert.assertEquals(preferenceList.get(1),NODES[2].toString(),"newly added node not at preference list tail for " + partition);
+    }
+  }
+  Assert.assertTrue(newNodeUsed,"not using " + NODES[2]);
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.get(partition).clear();
+  }
+  currentMapping.get(PARTITIONS[0]).put(NODES[0],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[0]).put(NODES[1],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[1],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[2],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[2]).put(NODES[0],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[2]).put(NODES[2],State.from("SLAVE"));
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  firstNodes.clear();
+  Set<String> secondNodes=Sets.newHashSet();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    firstNodes.add(preferenceList.get(0));
+    secondNodes.add(preferenceList.get(1));
+  }
+  Assert.assertEquals(firstNodes.size(),3,"masters not distributed evenly");
+  Assert.assertEquals(secondNodes.size(),3,"slaves not distributed evenly");
+  liveNodes.remove(0);
+  stateCount=ConstraintBasedAssignment.stateCount(upperBounds,STATE_MODEL,liveNodes.size(),REPLICA_COUNT);
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.get(partition).clear();
+  }
+  currentMapping.get(PARTITIONS[0]).put(NODES[1],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[1],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[2],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[2]).put(NODES[2],State.from("MASTER"));
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    Map<ParticipantId,State> stateMap=currentMapping.get(partition);
+    for (    ParticipantId participant : stateMap.keySet()) {
+      Assert.assertTrue(preferenceList.contains(participant.toString()),"minimal movement violated for " + partition);
+    }
+    for (    String participant : preferenceList) {
+      if (!stateMap.containsKey(ParticipantId.from(participant))) {
+        Assert.assertNotSame(preferenceList.get(0),participant,"newly moved replica should not be master for " + partition);
+      }
+    }
+  }
+  for (  PartitionId partition : PARTITIONS) {
+    currentMapping.get(partition).clear();
+  }
+  currentMapping.get(PARTITIONS[0]).put(NODES[1],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[0]).put(NODES[2],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[1],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[1]).put(NODES[2],State.from("MASTER"));
+  currentMapping.get(PARTITIONS[2]).put(NODES[1],State.from("SLAVE"));
+  currentMapping.get(PARTITIONS[2]).put(NODES[2],State.from("MASTER"));
+  znRecord=new AutoRebalanceStrategy(RESOURCE,partitions,stateCount,Integer.MAX_VALUE,scheme).typedComputePartitionAssignment(liveNodes,currentMapping,allNodes);
+  preferenceLists=znRecord.getListFields();
+  firstNodes.clear();
+  for (  PartitionId partition : currentMapping.keySet()) {
+    List<String> preferenceList=preferenceLists.get(partition.toString());
+    Assert.assertNotNull(preferenceList,"invalid preference list for " + partition);
+    Assert.assertEquals(preferenceList.size(),2,"invalid preference list for " + partition);
+    firstNodes.add(preferenceList.get(0));
+  }
+  Assert.assertEquals(firstNodes.size(),2,"masters not evenly distributed");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestClusterStartsup </h4><pre class="type-14 type-5 type-1 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testParticipantStartUp() throws Exception {
+  setupCluster();
+  String controllerMsgPath=HelixUtil.getControllerPropertyPath(CLUSTER_NAME,PropertyType.MESSAGES_CONTROLLER);
+  _zkclient.deleteRecursive(controllerMsgPath);
+  HelixManager manager=null;
+  try {
+    manager=HelixManagerFactory.getZKHelixManager(CLUSTER_NAME,"localhost_" + (START_PORT + 1),InstanceType.PARTICIPANT,_zkaddr);
+    manager.connect();
+    Assert.fail("Should fail on connect() since cluster structure is not set up");
+  }
+ catch (  HelixException e) {
+  }
+  if (manager != null) {
+    AssertJUnit.assertFalse(manager.isConnected());
+  }
+  try {
+    manager=HelixManagerFactory.getZKHelixManager(CLUSTER_NAME,"localhost_" + (START_PORT + 3),InstanceType.PARTICIPANT,_zkaddr);
+    manager.connect();
+    Assert.fail("Should fail on connect() since cluster structure is not set up");
+  }
+ catch (  HelixException e) {
+  }
+  if (manager != null) {
+    AssertJUnit.assertFalse(manager.isConnected());
+  }
+  setupCluster();
+  String stateModelPath=HelixUtil.getStateModelDefinitionPath(CLUSTER_NAME);
+  _zkclient.deleteRecursive(stateModelPath);
+  try {
+    manager=HelixManagerFactory.getZKHelixManager(CLUSTER_NAME,"localhost_" + (START_PORT + 1),InstanceType.PARTICIPANT,_zkaddr);
+    manager.connect();
+    Assert.fail("Should fail on connect() since cluster structure is not set up");
+  }
+ catch (  HelixException e) {
+  }
+  if (manager != null) {
+    AssertJUnit.assertFalse(manager.isConnected());
+  }
+  setupCluster();
+  String instanceStatusUpdatePath=HelixUtil.getInstancePropertyPath(CLUSTER_NAME,"localhost_" + (START_PORT + 1),PropertyType.STATUSUPDATES);
+  _zkclient.deleteRecursive(instanceStatusUpdatePath);
+  try {
+    manager=HelixManagerFactory.getZKHelixManager(CLUSTER_NAME,"localhost_" + (START_PORT + 1),InstanceType.PARTICIPANT,_zkaddr);
+    manager.connect();
+    Assert.fail("Should fail on connect() since cluster structure is not set up");
+  }
+ catch (  HelixException e) {
+  }
+  if (manager != null) {
+    AssertJUnit.assertFalse(manager.isConnected());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestDisableCustomCodeRunner </h4><pre class="type-7 type-14 type-1 type-8 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,PARTITION_NUM,N,2,"MasterSlave",true);
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  Map<String,MockParticipant> participants=new HashMap<String,MockParticipant>();
+  Map<String,HelixCustomCodeRunner> customCodeRunners=new HashMap<String,HelixCustomCodeRunner>();
+  Map<String,DummyCallback> callbacks=new HashMap<String,DummyCallback>();
+  for (int i=0; i < N; i++) {
+    String instanceName="localhost_" + (12918 + i);
+    participants.put(instanceName,new MockParticipant(_zkaddr,clusterName,instanceName));
+    customCodeRunners.put(instanceName,new HelixCustomCodeRunner(participants.get(instanceName),_zkaddr));
+    callbacks.put(instanceName,new DummyCallback());
+    customCodeRunners.get(instanceName).invoke(callbacks.get(instanceName)).on(ChangeType.LIVE_INSTANCE).usingLeaderStandbyModel("TestParticLeader").start();
+    participants.get(instanceName).syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  BaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  final HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,baseAccessor);
+  PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  final String customCodeRunnerResource=customCodeRunners.get("localhost_12918").getResourceName();
+  ExternalView extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+  Map<String,String> instanceStates=extView.getStateMap(customCodeRunnerResource + "_0");
+  String leader=null;
+  for (  String instance : instanceStates.keySet()) {
+    String state=instanceStates.get(instance);
+    if ("LEADER".equals(state)) {
+      leader=instance;
+      break;
+    }
+  }
+  Assert.assertNotNull(leader);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isInitTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isInitTypeInvoked());
+    }
+    callback.reset();
+  }
+  HelixAdmin admin=new ZKHelixAdmin(_zkclient);
+  admin.enableResource(clusterName,customCodeRunnerResource,false);
+  result=TestHelper.verify(new TestHelper.Verifier(){
+    @Override public boolean verify() throws Exception {
+      PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+      ExternalView extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+      if (extView == null) {
+        return false;
+      }
+      Set<String> partitionSet=extView.getPartitionSet();
+      if (partitionSet == null || partitionSet.size() != PARTITION_NUM) {
+        return false;
+      }
+      for (      String partition : partitionSet) {
+        Map<String,String> instanceStates=extView.getStateMap(partition);
+        for (        String state : instanceStates.values()) {
+          if (!"OFFLINE".equals(state)) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+  }
+,10 * 1000);
+  Assert.assertTrue(result);
+  LiveInstance fakeInstance=new LiveInstance("fakeInstance");
+  fakeInstance.setSessionId("fakeSessionId");
+  fakeInstance.setHelixVersion("0.6");
+  accessor.setProperty(keyBuilder.liveInstance("fakeInstance"),fakeInstance);
+  Thread.sleep(1000);
+  for (  Map.Entry<String,DummyCallback> e : callbacks.entrySet()) {
+    String instance=e.getKey();
+    DummyCallback callback=e.getValue();
+    Assert.assertFalse(callback.isInitTypeInvoked());
+    Assert.assertFalse(callback.isCallbackTypeInvoked());
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isFinalizeTypeInvoked());
+    }
+  }
+  accessor.removeProperty(keyBuilder.liveInstance("fakeInstance"));
+  admin.enableResource(clusterName,customCodeRunnerResource,true);
+  result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  extView=accessor.getProperty(keyBuilder.externalView(customCodeRunnerResource));
+  instanceStates=extView.getStateMap(customCodeRunnerResource + "_0");
+  leader=null;
+  for (  String instance : instanceStates.keySet()) {
+    String state=instanceStates.get(instance);
+    if ("LEADER".equals(state)) {
+      leader=instance;
+      break;
+    }
+  }
+  Assert.assertNotNull(leader);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isInitTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isInitTypeInvoked());
+    }
+    callback.reset();
+  }
+  accessor.setProperty(keyBuilder.liveInstance("fakeInstance"),fakeInstance);
+  Thread.sleep(1000);
+  for (  String instance : callbacks.keySet()) {
+    DummyCallback callback=callbacks.get(instance);
+    if (instance.equals(leader)) {
+      Assert.assertTrue(callback.isCallbackTypeInvoked());
+    }
+ else {
+      Assert.assertFalse(callback.isCallbackTypeInvoked());
+    }
+  }
+  controller.syncStop();
+  for (  MockParticipant participant : participants.values()) {
+    participant.syncStop();
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestFullAutoNodeTagging </h4><pre class="type-4 type-7 type-14 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Basic test for tagging behavior. 10 participants, of which 4 are tagged. Launch all 10,
+ * checking external view every time a tagged node is started. Then shut down all 10, checking
+ * external view every time a tagged node is killed.
+ */
+@Test public void testSafeAssignment() throws Exception {
+  final int NUM_PARTICIPANTS=10;
+  final int NUM_PARTITIONS=4;
+  final int NUM_REPLICAS=2;
+  final String RESOURCE_NAME="TestDB0";
+  final String TAG="ASSIGNABLE";
+  final String[] TAGGED_NODES={"localhost_12920","localhost_12922","localhost_12924","localhost_12925"};
+  Set<String> taggedNodes=Sets.newHashSet(TAGGED_NODES);
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"MasterSlave",RebalanceMode.FULL_AUTO,true);
+  HelixAdmin helixAdmin=new ZKHelixAdmin(_zkaddr);
+  for (  String taggedNode : TAGGED_NODES) {
+    helixAdmin.addInstanceTag(clusterName,taggedNode,TAG);
+  }
+  IdealState idealState=helixAdmin.getResourceIdealState(clusterName,RESOURCE_NAME);
+  idealState.setInstanceGroupTag(TAG);
+  helixAdmin.setResourceIdealState(clusterName,RESOURCE_NAME,idealState);
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+    if (taggedNodes.contains(instanceName)) {
+      Thread.sleep(500);
+      boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+      Assert.assertTrue(result);
+      result=ClusterStateVerifier.verifyByZkCallback(new TaggedZkVerifier(clusterName,RESOURCE_NAME,TAGGED_NODES,false));
+      Assert.assertTrue(result,"initial assignment with all tagged nodes live is invalid");
+    }
+  }
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    String participantName=participants[i].getInstanceName();
+    participants[i].syncStop();
+    if (taggedNodes.contains(participantName)) {
+      taggedNodes.remove(participantName);
+      Thread.sleep(500);
+      boolean result=ClusterStateVerifier.verifyByZkCallback(new TaggedZkVerifier(clusterName,RESOURCE_NAME,TAGGED_NODES,taggedNodes.isEmpty()));
+      Assert.assertTrue(result,"incorrect state after removing " + participantName + ", "+ taggedNodes+ " remain");
+    }
+  }
+  controller.syncStop();
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestMessageThrottle </h4><pre class="type-14 type-5 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testMessageThrottle() throws Exception {
+  String clusterName=TestUtil.getTestName();
+  MockParticipant[] participants=new MockParticipant[5];
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,10,5,3,"MasterSlave",true);
+  HelixAdmin admin=new ZKHelixAdmin(_zkclient);
+  ConstraintItemBuilder builder=new ConstraintItemBuilder();
+  builder.addConstraintAttribute("MESSAGE_TYPE","STATE_TRANSITION").addConstraintAttribute("INSTANCE",".*").addConstraintAttribute("CONSTRAINT_VALUE","1");
+  admin.setConstraint(clusterName,ConstraintType.MESSAGE_CONSTRAINT,"constraint1",builder.build());
+  final ZKHelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  final AtomicBoolean success=new AtomicBoolean(true);
+  for (int i=0; i < 5; i++) {
+    String instanceName="localhost_" + (12918 + i);
+    String msgPath=PropertyPathConfig.getPath(PropertyType.MESSAGES,clusterName,instanceName);
+    _zkclient.subscribeChildChanges(msgPath,new IZkChildListener(){
+      @Override public void handleChildChange(      String parentPath,      List<String> currentChilds) throws Exception {
+        if (currentChilds != null && currentChilds.size() > 1) {
+          List<ZNRecord> records=accessor.getBaseDataAccessor().getChildren(parentPath,null,0);
+          int transitionMsgCount=0;
+          for (          ZNRecord record : records) {
+            Message msg=new Message(record);
+            if (msg.getMsgType().equals(Message.MessageType.STATE_TRANSITION.toString())) {
+              transitionMsgCount++;
+            }
+          }
+          if (transitionMsgCount > 1) {
+            success.set(false);
+            Assert.fail("Should not see more than 1 message");
+          }
+        }
+      }
+    }
+);
+  }
+  MockController controller=new MockController(_zkaddr,clusterName,"controller_0");
+  controller.syncStart();
+  for (int i=0; i < 5; i++) {
+    String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new MasterNbInExtViewVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  Assert.assertTrue(success.get());
+  controller.syncStop();
+  for (int i=0; i < 5; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestParticipantErrorMessage </h4><pre class="type-14 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test() public void TestParticipantErrorMessageSend(){
+  String participant1="localhost_" + START_PORT;
+  String participant2="localhost_" + (START_PORT + 1);
+  Message errorMessage1=new Message(MessageType.PARTICIPANT_ERROR_REPORT,MessageId.from(UUID.randomUUID().toString()));
+  errorMessage1.setTgtSessionId(SessionId.from("*"));
+  errorMessage1.getRecord().setSimpleField(DefaultParticipantErrorMessageHandlerFactory.ACTIONKEY,ActionOnError.DISABLE_INSTANCE.toString());
+  Criteria recipientCriteria=new Criteria();
+  recipientCriteria.setRecipientInstanceType(InstanceType.CONTROLLER);
+  recipientCriteria.setSessionSpecific(false);
+  _participants[0].getMessagingService().send(recipientCriteria,errorMessage1);
+  Message errorMessage2=new Message(MessageType.PARTICIPANT_ERROR_REPORT,MessageId.from(UUID.randomUUID().toString()));
+  errorMessage2.setTgtSessionId(SessionId.from("*"));
+  errorMessage2.setResourceId(ResourceId.from("TestDB"));
+  errorMessage2.setPartitionId(PartitionId.from("TestDB_14"));
+  errorMessage2.getRecord().setSimpleField(DefaultParticipantErrorMessageHandlerFactory.ACTIONKEY,ActionOnError.DISABLE_PARTITION.toString());
+  Criteria recipientCriteria2=new Criteria();
+  recipientCriteria2.setRecipientInstanceType(InstanceType.CONTROLLER);
+  recipientCriteria2.setSessionSpecific(false);
+  _participants[1].getMessagingService().send(recipientCriteria2,errorMessage2);
+  try {
+    Thread.sleep(1500);
+  }
+ catch (  InterruptedException e) {
+    LOG.error("Interrupted sleep",e);
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,CLUSTER_NAME));
+  Assert.assertTrue(result);
+  Builder kb=_participants[1].getHelixDataAccessor().keyBuilder();
+  ExternalView externalView=_participants[1].getHelixDataAccessor().getProperty(kb.externalView("TestDB"));
+  for (  String partitionName : externalView.getRecord().getMapFields().keySet()) {
+    for (    String hostName : externalView.getRecord().getMapField(partitionName).keySet()) {
+      if (hostName.equals(participant1)) {
+        Assert.assertTrue(externalView.getRecord().getMapField(partitionName).get(hostName).equalsIgnoreCase("OFFLINE"));
+      }
+    }
+  }
+  Assert.assertTrue(externalView.getRecord().getMapField("TestDB_14").get(participant2).equalsIgnoreCase("OFFLINE"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestReelectedPipelineCorrectness </h4><pre class="type-14 type-5 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReelection() throws Exception {
+  final int NUM_CONTROLLERS=2;
+  final int NUM_PARTICIPANTS=4;
+  final int NUM_PARTITIONS=8;
+  final int NUM_REPLICAS=2;
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"MasterSlave",RebalanceMode.FULL_AUTO,true);
+  String controllerCluster=clusterName + "_controllers";
+  _setupTool.addCluster(controllerCluster,true);
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    _setupTool.addInstanceToCluster(controllerCluster,"controller_" + i);
+  }
+  _setupTool.activateCluster(clusterName,controllerCluster,true);
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+  }
+  MockMultiClusterController[] controllers=new MockMultiClusterController[NUM_CONTROLLERS];
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    controllers[i]=new MockMultiClusterController(_zkaddr,controllerCluster,"controller_" + i);
+    controllers[i].syncStart();
+  }
+  Thread.sleep(1000);
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  HelixDataAccessor accessor=participants[0].getHelixDataAccessor();
+  LiveInstance leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  int totalWait=0;
+  while (leader == null && totalWait < CHECK_TIMEOUT) {
+    Thread.sleep(CHECK_INTERVAL);
+    totalWait+=CHECK_INTERVAL;
+    leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  }
+  if (totalWait >= CHECK_TIMEOUT) {
+    Assert.fail("No leader was ever elected!");
+  }
+  String leaderId=leader.getId();
+  String standbyId=(leaderId.equals("controller_0")) ? "controller_1" : "controller_0";
+  HelixAdmin admin=_setupTool.getClusterManagementTool();
+  admin.enableInstance(controllerCluster,leaderId,false);
+  Thread.sleep(500);
+  participants[0].syncStop();
+  Thread.sleep(500);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  admin.enableInstance(controllerCluster,standbyId,false);
+  Thread.sleep(500);
+  participants[1].syncStop();
+  IdealState idealState=admin.getResourceIdealState(clusterName,"TestDB0");
+  idealState.setMaxPartitionsPerInstance(1);
+  admin.setResourceIdealState(clusterName,"TestDB0",idealState);
+  Thread.sleep(500);
+  admin.enableInstance(clusterName,"localhost_12920",false);
+  admin.enableInstance(controllerCluster,leaderId,true);
+  Thread.sleep(500);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    controllers[i].syncStop();
+  }
+  for (int i=2; i < NUM_PARTICIPANTS; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("STOP " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestSchedulerMessage </h4><pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSchedulerMsgContraints() throws JsonGenerationException, JsonMappingException, IOException, InterruptedException {
+  TestMessagingHandlerFactoryLatch factory=new TestMessagingHandlerFactoryLatch();
+  HelixManager manager=null;
+  for (int i=0; i < NODE_NR; i++) {
+    _participants[i].getMessagingService().registerMessageHandlerFactory(factory.getMessageType(),factory);
+    _participants[i].getMessagingService().registerMessageHandlerFactory(factory.getMessageType(),factory);
+    manager=_participants[i];
+  }
+  Message schedulerMessage=new Message(MessageType.SCHEDULER_MSG + "",UUID.randomUUID().toString());
+  schedulerMessage.setTgtSessionId("*");
+  schedulerMessage.setTgtName("CONTROLLER");
+  schedulerMessage.setSrcName("CONTROLLER");
+  Message msg=new Message(factory.getMessageType(),"Template");
+  msg.setTgtSessionId("*");
+  msg.setMsgState(MessageState.NEW);
+  Criteria cr=new Criteria();
+  cr.setInstanceName("localhost_%");
+  cr.setRecipientInstanceType(InstanceType.PARTICIPANT);
+  cr.setSessionSpecific(false);
+  cr.setResource("%");
+  cr.setPartition("%");
+  ObjectMapper mapper=new ObjectMapper();
+  SerializationConfig serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  StringWriter sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  String crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  schedulerMessage.getRecord().setMapField("MessageTemplate",msg.getRecord().getSimpleFields());
+  schedulerMessage.getRecord().setSimpleField("TIMEOUT","-1");
+  schedulerMessage.getRecord().setSimpleField("WAIT_ALL","true");
+  schedulerMessage.getRecord().setSimpleField(DefaultSchedulerMessageHandlerFactory.SCHEDULER_TASK_QUEUE,"TestSchedulerMsgContraints");
+  Criteria cr2=new Criteria();
+  cr2.setRecipientInstanceType(InstanceType.CONTROLLER);
+  cr2.setInstanceName("*");
+  cr2.setSessionSpecific(false);
+  MockAsyncCallback callback=new MockAsyncCallback();
+  mapper=new ObjectMapper();
+  serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  HelixDataAccessor helixDataAccessor=manager.getHelixDataAccessor();
+  Builder keyBuilder=helixDataAccessor.keyBuilder();
+  Map<String,String> constraints=new TreeMap<String,String>();
+  constraints.put("MESSAGE_TYPE","STATE_TRANSITION");
+  constraints.put("TRANSITION","OFFLINE-COMPLETED");
+  constraints.put("CONSTRAINT_VALUE","1");
+  constraints.put("INSTANCE",".*");
+  manager.getClusterManagmentTool().setConstraint(manager.getClusterName(),ConstraintType.MESSAGE_CONSTRAINT,"constraint1",new ConstraintItem(constraints));
+  crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  manager.getMessagingService().sendAndWait(cr2,schedulerMessage,callback,-1);
+  String msgId=callback._message.getResultMap().get(DefaultSchedulerMessageHandlerFactory.SCHEDULER_MSG_ID);
+  for (int j=0; j < 10; j++) {
+    Thread.sleep(200);
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    if (statusUpdate.getMapFields().containsKey("SentMessageCount")) {
+      Assert.assertEquals(statusUpdate.getMapFields().get("SentMessageCount").get("MessageCount"),"" + (_PARTITIONS * 3));
+      break;
+    }
+  }
+  for (int i=0; i < _PARTITIONS * 3 / 5; i++) {
+    for (int j=0; j < 10; j++) {
+      Thread.sleep(300);
+      if (factory._messageCount == 5 * (i + 1))       break;
+    }
+    Thread.sleep(300);
+    Assert.assertEquals(factory._messageCount,5 * (i + 1));
+    factory.signal();
+  }
+  for (int j=0; j < 10; j++) {
+    Thread.sleep(200);
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    if (statusUpdate.getMapFields().containsKey("Summary")) {
+      break;
+    }
+  }
+  Assert.assertEquals(_PARTITIONS,factory._results.size());
+  PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+  ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+  Assert.assertTrue(statusUpdate.getMapField("SentMessageCount").get("MessageCount").equals("" + (_PARTITIONS * 3)));
+  int messageResultCount=0;
+  for (  String key : statusUpdate.getMapFields().keySet()) {
+    if (key.startsWith("MessageResult ")) {
+      messageResultCount++;
+    }
+  }
+  Assert.assertEquals(messageResultCount,_PARTITIONS * 3);
+  int count=0;
+  for (  Set<String> val : factory._results.values()) {
+    count+=val.size();
+  }
+  Assert.assertEquals(count,_PARTITIONS * 3);
+  manager.getClusterManagmentTool().removeConstraint(manager.getClusterName(),ConstraintType.MESSAGE_CONSTRAINT,"constraint1");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testSchedulerMsg() throws Exception {
+  Logger.getRootLogger().setLevel(Level.INFO);
+  _factory._results.clear();
+  HelixManager manager=null;
+  for (int i=0; i < NODE_NR; i++) {
+    _participants[i].getMessagingService().registerMessageHandlerFactory(_factory.getMessageType(),_factory);
+    manager=_participants[i];
+  }
+  Message schedulerMessage=new Message(MessageType.SCHEDULER_MSG + "",UUID.randomUUID().toString());
+  schedulerMessage.setTgtSessionId("*");
+  schedulerMessage.setTgtName("CONTROLLER");
+  schedulerMessage.setSrcName("CONTROLLER");
+  Message msg=new Message(_factory.getMessageType(),"Template");
+  msg.setTgtSessionId("*");
+  msg.setMsgState(MessageState.NEW);
+  Criteria cr=new Criteria();
+  cr.setInstanceName("localhost_%");
+  cr.setRecipientInstanceType(InstanceType.PARTICIPANT);
+  cr.setSessionSpecific(false);
+  cr.setResource("%");
+  cr.setPartition("%");
+  ObjectMapper mapper=new ObjectMapper();
+  SerializationConfig serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  StringWriter sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  String crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  schedulerMessage.getRecord().setMapField("MessageTemplate",msg.getRecord().getSimpleFields());
+  schedulerMessage.getRecord().setSimpleField("TIMEOUT","-1");
+  HelixDataAccessor helixDataAccessor=manager.getHelixDataAccessor();
+  Builder keyBuilder=helixDataAccessor.keyBuilder();
+  helixDataAccessor.createProperty(keyBuilder.controllerMessage(schedulerMessage.getMsgId()),schedulerMessage);
+  for (int i=0; i < 30; i++) {
+    Thread.sleep(2000);
+    if (_PARTITIONS == _factory._results.size()) {
+      break;
+    }
+  }
+  Assert.assertEquals(_PARTITIONS,_factory._results.size());
+  PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),schedulerMessage.getMsgId());
+  int messageResultCount=0;
+  for (int i=0; i < 10; i++) {
+    Thread.sleep(1000);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    Assert.assertTrue(statusUpdate.getMapField("SentMessageCount").get("MessageCount").equals("" + (_PARTITIONS * 3)));
+    for (    String key : statusUpdate.getMapFields().keySet()) {
+      if (key.startsWith("MessageResult ")) {
+        messageResultCount++;
+        Assert.assertTrue(statusUpdate.getMapField(key).size() > 1);
+      }
+    }
+    if (messageResultCount == _PARTITIONS * 3) {
+      break;
+    }
+ else {
+      Thread.sleep(2000);
+    }
+  }
+  Assert.assertEquals(messageResultCount,_PARTITIONS * 3);
+  int count=0;
+  for (  Set<String> val : _factory._results.values()) {
+    count+=val.size();
+  }
+  Assert.assertEquals(count,_PARTITIONS * 3);
+  String controllerStatusPath=HelixUtil.getControllerPropertyPath(manager.getClusterName(),PropertyType.STATUSUPDATES_CONTROLLER);
+  List<String> subPaths=_zkclient.getChildren(controllerStatusPath);
+  Assert.assertTrue(subPaths.size() > 0);
+  for (  String subPath : subPaths) {
+    String nextPath=controllerStatusPath + "/" + subPath;
+    List<String> subsubPaths=_zkclient.getChildren(nextPath);
+    Assert.assertTrue(subsubPaths.size() > 0);
+  }
+  String instanceStatusPath=HelixUtil.getInstancePropertyPath(manager.getClusterName(),"localhost_" + (START_PORT),PropertyType.STATUSUPDATES);
+  subPaths=_zkclient.getChildren(instanceStatusPath);
+  Assert.assertTrue(subPaths.size() == 0);
+  for (  String subPath : subPaths) {
+    String nextPath=instanceStatusPath + "/" + subPath;
+    List<String> subsubPaths=_zkclient.getChildren(nextPath);
+    Assert.assertTrue(subsubPaths.size() > 0);
+    for (    String subsubPath : subsubPaths) {
+      String nextnextPath=nextPath + "/" + subsubPath;
+      Assert.assertTrue(_zkclient.getChildren(nextnextPath).size() > 0);
+    }
+  }
+  Thread.sleep(3000);
+  ZKPathDataDumpTask dumpTask=new ZKPathDataDumpTask(manager,0L,0L,Integer.MAX_VALUE);
+  dumpTask.run();
+  subPaths=_zkclient.getChildren(controllerStatusPath);
+  Assert.assertTrue(subPaths.size() > 0);
+  for (  String subPath : subPaths) {
+    String nextPath=controllerStatusPath + "/" + subPath;
+    List<String> subsubPaths=_zkclient.getChildren(nextPath);
+    Assert.assertTrue(subsubPaths.size() == 0);
+  }
+  subPaths=_zkclient.getChildren(instanceStatusPath);
+  Assert.assertTrue(subPaths.size() == 0);
+  for (  String subPath : subPaths) {
+    String nextPath=instanceStatusPath + "/" + subPath;
+    List<String> subsubPaths=_zkclient.getChildren(nextPath);
+    Assert.assertTrue(subsubPaths.size() > 0);
+    for (    String subsubPath : subsubPaths) {
+      String nextnextPath=nextPath + "/" + subsubPath;
+      Assert.assertTrue(_zkclient.getChildren(nextnextPath).size() == 0);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestSwapInstance </h4><pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void TestSwap() throws Exception {
+  HelixManager manager=_controller;
+  HelixDataAccessor helixAccessor=manager.getHelixDataAccessor();
+  _setupTool.addResourceToCluster(CLUSTER_NAME,"MyDB",64,STATE_MODEL);
+  _setupTool.rebalanceStorageCluster(CLUSTER_NAME,"MyDB",_replica);
+  ZNRecord idealStateOld1=new ZNRecord("TestDB");
+  ZNRecord idealStateOld2=new ZNRecord("MyDB");
+  IdealState is1=helixAccessor.getProperty(helixAccessor.keyBuilder().idealStates("TestDB"));
+  idealStateOld1.merge(is1.getRecord());
+  IdealState is2=helixAccessor.getProperty(helixAccessor.keyBuilder().idealStates("MyDB"));
+  idealStateOld2.merge(is2.getRecord());
+  String instanceName="localhost_" + (START_PORT + 0);
+  _setupTool.getClusterManagementTool().enableInstance(CLUSTER_NAME,instanceName,false);
+  boolean result=ClusterStateVerifier.verifyByPolling(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,CLUSTER_NAME));
+  Assert.assertTrue(result);
+  String instanceName2="localhost_" + (START_PORT + 444);
+  _setupTool.addInstanceToCluster(CLUSTER_NAME,instanceName2);
+  boolean exception=false;
+  try {
+    _setupTool.swapInstance(CLUSTER_NAME,instanceName,instanceName2);
+  }
+ catch (  Exception e) {
+    exception=true;
+  }
+  Assert.assertTrue(exception);
+  _participants[0].syncStop();
+  Thread.sleep(1000);
+  exception=false;
+  try {
+    _setupTool.swapInstance(CLUSTER_NAME,instanceName,instanceName2);
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+    exception=true;
+  }
+  Assert.assertFalse(exception);
+  MockParticipant newParticipant=new MockParticipant(_zkaddr,CLUSTER_NAME,instanceName2);
+  newParticipant.syncStart();
+  result=ClusterStateVerifier.verifyByPolling(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,CLUSTER_NAME));
+  Assert.assertTrue(result);
+  is1=helixAccessor.getProperty(helixAccessor.keyBuilder().idealStates("TestDB"));
+  is2=helixAccessor.getProperty(helixAccessor.keyBuilder().idealStates("MyDB"));
+  for (  String key : idealStateOld1.getMapFields().keySet()) {
+    for (    String host : idealStateOld1.getMapField(key).keySet()) {
+      if (host.equals(instanceName)) {
+        Assert.assertTrue(idealStateOld1.getMapField(key).get(instanceName).equals(is1.getRecord().getMapField(key).get(instanceName2)));
+      }
+ else {
+        Assert.assertTrue(idealStateOld1.getMapField(key).get(host).equals(is1.getRecord().getMapField(key).get(host)));
+      }
+    }
+  }
+  for (  String key : idealStateOld1.getListFields().keySet()) {
+    Assert.assertEquals(idealStateOld1.getListField(key).size(),is1.getRecord().getListField(key).size());
+    for (int i=0; i < idealStateOld1.getListField(key).size(); i++) {
+      String host=idealStateOld1.getListField(key).get(i);
+      String newHost=is1.getRecord().getListField(key).get(i);
+      if (host.equals(instanceName)) {
+        Assert.assertTrue(newHost.equals(instanceName2));
+      }
+ else {
+        Assert.assertTrue(host.equals(newHost));
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.task.TestTaskRebalancer </h4><pre class="type-4 type-7 type-14 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void timeouts() throws Exception {
+  final String jobResource="timeouts";
+  Workflow flow=WorkflowGenerator.generateDefaultSingleJobWorkflowBuilderWithExtraConfigs(jobResource,WorkflowGenerator.DEFAULT_COMMAND_CONFIG,JobConfig.MAX_ATTEMPTS_PER_TASK,String.valueOf(2),JobConfig.TIMEOUT_PER_TASK,String.valueOf(100)).build();
+  _driver.start(flow);
+  TestUtil.pollForWorkflowState(_manager,jobResource,TaskState.FAILED);
+  JobContext ctx=TaskUtil.getJobContext(_manager,TaskUtil.getNamespacedJobName(jobResource));
+  int maxAttempts=0;
+  for (int i=0; i < NUM_PARTITIONS; i++) {
+    TaskPartitionState state=ctx.getPartitionState(i);
+    if (state != null) {
+      Assert.assertEquals(state,TaskPartitionState.TIMED_OUT);
+      maxAttempts=Math.max(maxAttempts,ctx.getPartitionNumAttempts(i));
+    }
+  }
+  Assert.assertEquals(maxAttempts,2);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestZkManagerFlappingDetection </h4><pre class="type-4 type-14 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDisconnectHistory() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  final String clusterName=className + "_" + methodName;
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,10,5,3,"MasterSlave",true);
+  String instanceName="localhost_" + (12918 + 0);
+  MockParticipant manager=new MockParticipant(_zkaddr,clusterName,instanceName);
+  manager.connect();
+  ZkClient zkClient=manager.getZkClient();
+  ZkTestHelper.expireSession(zkClient);
+  for (int i=0; i < 4; i++) {
+    ZkTestHelper.expireSession(zkClient);
+    Thread.sleep(1000);
+    if (i < 5) {
+      Assert.assertTrue(manager.isConnected());
+    }
+  }
+  ZkTestHelper.disconnectSession(zkClient);
+  for (int i=0; i < 20; i++) {
+    Thread.sleep(500);
+    System.out.println(i);
+    if (!manager.isConnected())     break;
+  }
+  Assert.assertFalse(manager.isConnected());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.messaging.handling.TestConfigThreadpoolSize </h4><pre class="type-4 type-14 type-1 type-6 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void TestThreadPoolSizeConfig(){
+  String instanceName="localhost_" + (START_PORT + 0);
+  HelixManager manager=_participants[0];
+  ConfigAccessor accessor=manager.getConfigAccessor();
+  HelixConfigScope scope=new HelixConfigScopeBuilder(ConfigScopeProperty.PARTICIPANT).forCluster(manager.getClusterName()).forParticipant(instanceName).build();
+  accessor.set(scope,"TestMsg." + HelixTaskExecutor.MAX_THREADS,"" + 12);
+  scope=new HelixConfigScopeBuilder(ConfigScopeProperty.CLUSTER).forCluster(manager.getClusterName()).build();
+  accessor.set(scope,"TestMsg." + HelixTaskExecutor.MAX_THREADS,"" + 8);
+  for (int i=0; i < NODE_NR; i++) {
+    instanceName="localhost_" + (START_PORT + i);
+    _participants[i].getMessagingService().registerMessageHandlerFactory("TestMsg",new TestMessagingHandlerFactory());
+    _participants[i].getMessagingService().registerMessageHandlerFactory("TestMsg2",new TestMessagingHandlerFactory2());
+  }
+  for (int i=0; i < NODE_NR; i++) {
+    instanceName="localhost_" + (START_PORT + i);
+    DefaultMessagingService svc=(DefaultMessagingService)(_participants[i].getMessagingService());
+    HelixTaskExecutor helixExecutor=svc.getExecutor();
+    ThreadPoolExecutor executor=(ThreadPoolExecutor)(helixExecutor._executorMap.get("TestMsg"));
+    ThreadPoolExecutor executor2=(ThreadPoolExecutor)(helixExecutor._executorMap.get("TestMsg2"));
+    if (i != 0) {
+      Assert.assertEquals(8,executor.getMaximumPoolSize());
+    }
+ else {
+      Assert.assertEquals(12,executor.getMaximumPoolSize());
+    }
+    Assert.assertEquals(HelixTaskExecutor.DEFAULT_PARALLEL_TASKS,executor2.getMaximumPoolSize());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.messaging.handling.TestHelixTaskExecutor </h4><pre class="type-4 type-7 type-14 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testNoRetry() throws InterruptedException {
+  HelixTaskExecutor executor=new HelixTaskExecutor();
+  HelixManager manager=new MockClusterManager();
+  CancellableHandlerFactory factory=new CancellableHandlerFactory();
+  executor.registerMessageHandlerFactory(factory.getMessageType(),factory);
+  NotificationContext changeContext=new NotificationContext(manager);
+  List<Message> msgList=new ArrayList<Message>();
+  int nMsgs2=4;
+  for (int i=0; i < nMsgs2; i++) {
+    Message msg=new Message(factory.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from("*"));
+    msg.setTgtName("Localhost_1123");
+    msg.setSrcName("127.101.1.23_2234");
+    msg.setExecutionTimeout((i + 1) * 600);
+    msgList.add(msg);
+  }
+  executor.onMessage("someInstance",msgList,changeContext);
+  Thread.sleep(4000);
+  AssertJUnit.assertTrue(factory._handlersCreated == nMsgs2);
+  AssertJUnit.assertEquals(factory._timedOutMsgIds.size(),2);
+  for (int i=0; i < nMsgs2 - 2; i++) {
+    if (msgList.get(i).getMsgType().equalsIgnoreCase(factory.getMessageType())) {
+      AssertJUnit.assertTrue(msgList.get(i).getRecord().getSimpleFields().containsKey("Cancelcount"));
+      AssertJUnit.assertTrue(factory._timedOutMsgIds.containsKey(msgList.get(i).getId()));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-14 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test() public void testTaskCancellation() throws InterruptedException {
+  HelixTaskExecutor executor=new HelixTaskExecutor();
+  HelixManager manager=new MockClusterManager();
+  CancellableHandlerFactory factory=new CancellableHandlerFactory();
+  executor.registerMessageHandlerFactory(factory.getMessageType(),factory);
+  NotificationContext changeContext=new NotificationContext(manager);
+  List<Message> msgList=new ArrayList<Message>();
+  int nMsgs1=0;
+  for (int i=0; i < nMsgs1; i++) {
+    Message msg=new Message(factory.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from("*"));
+    msg.setTgtName("Localhost_1123");
+    msg.setSrcName("127.101.1.23_2234");
+    msgList.add(msg);
+  }
+  List<Message> msgListToCancel=new ArrayList<Message>();
+  int nMsgs2=4;
+  for (int i=0; i < nMsgs2; i++) {
+    Message msg=new Message(factory.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from("*"));
+    msgList.add(msg);
+    msg.setTgtName("Localhost_1123");
+    msg.setSrcName("127.101.1.23_2234");
+    msgListToCancel.add(msg);
+  }
+  executor.onMessage("someInstance",msgList,changeContext);
+  Thread.sleep(500);
+  for (int i=0; i < nMsgs2; i++) {
+    HelixTask task=new HelixTask(msgListToCancel.get(i),changeContext,null,null);
+    executor.cancelTask(task);
+  }
+  Thread.sleep(1500);
+  AssertJUnit.assertTrue(factory._processedMsgIds.size() == nMsgs1);
+  AssertJUnit.assertTrue(factory._handlersCreated == nMsgs1 + nMsgs2);
+  AssertJUnit.assertTrue(factory._processingMsgIds.size() == nMsgs1 + nMsgs2);
+  for (  Message message : msgList) {
+    if (message.getMsgType().equalsIgnoreCase(factory.getMessageType())) {
+      AssertJUnit.assertTrue(factory._processingMsgIds.containsKey(message.getId()));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-14 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test() public void testUnknownTypeMsgExecution() throws InterruptedException {
+  HelixTaskExecutor executor=new HelixTaskExecutor();
+  HelixManager manager=new MockClusterManager();
+  TestMessageHandlerFactory factory=new TestMessageHandlerFactory();
+  executor.registerMessageHandlerFactory(factory.getMessageType(),factory);
+  TestMessageHandlerFactory2 factory2=new TestMessageHandlerFactory2();
+  NotificationContext changeContext=new NotificationContext(manager);
+  List<Message> msgList=new ArrayList<Message>();
+  int nMsgs1=5;
+  for (int i=0; i < nMsgs1; i++) {
+    Message msg=new Message(factory.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from(manager.getSessionId()));
+    msg.setTgtName("Localhost_1123");
+    msg.setSrcName("127.101.1.23_2234");
+    msgList.add(msg);
+  }
+  int nMsgs2=4;
+  for (int i=0; i < nMsgs2; i++) {
+    Message msg=new Message(factory2.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from(manager.getSessionId()));
+    msg.setTgtName("Localhost_1123");
+    msg.setSrcName("127.101.1.23_2234");
+    msgList.add(msg);
+  }
+  executor.onMessage("someInstance",msgList,changeContext);
+  Thread.sleep(1000);
+  AssertJUnit.assertTrue(factory._processedMsgIds.size() == nMsgs1);
+  AssertJUnit.assertTrue(factory2._processedMsgIds.size() == 0);
+  AssertJUnit.assertTrue(factory._handlersCreated == nMsgs1);
+  AssertJUnit.assertTrue(factory2._handlersCreated == 0);
+  for (  Message message : msgList) {
+    if (message.getMsgType().equalsIgnoreCase(factory.getMessageType())) {
+      AssertJUnit.assertTrue(factory._processedMsgIds.containsKey(message.getId()));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-14 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test() public void testMsgSessionId() throws InterruptedException {
+  HelixTaskExecutor executor=new HelixTaskExecutor();
+  HelixManager manager=new MockClusterManager();
+  TestMessageHandlerFactory factory=new TestMessageHandlerFactory();
+  executor.registerMessageHandlerFactory(factory.getMessageType(),factory);
+  TestMessageHandlerFactory2 factory2=new TestMessageHandlerFactory2();
+  executor.registerMessageHandlerFactory(factory2.getMessageType(),factory2);
+  NotificationContext changeContext=new NotificationContext(manager);
+  List<Message> msgList=new ArrayList<Message>();
+  int nMsgs1=5;
+  for (int i=0; i < nMsgs1; i++) {
+    Message msg=new Message(factory.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from("*"));
+    msg.setTgtName("");
+    msgList.add(msg);
+  }
+  int nMsgs2=4;
+  for (int i=0; i < nMsgs2; i++) {
+    Message msg=new Message(factory2.getMessageType(),MessageId.from(UUID.randomUUID().toString()));
+    msg.setTgtSessionId(SessionId.from("some other session id"));
+    msg.setTgtName("");
+    msgList.add(msg);
+  }
+  executor.onMessage("someInstance",msgList,changeContext);
+  Thread.sleep(1000);
+  AssertJUnit.assertTrue(factory._processedMsgIds.size() == nMsgs1);
+  AssertJUnit.assertTrue(factory2._processedMsgIds.size() == 0);
+  AssertJUnit.assertTrue(factory._handlersCreated == nMsgs1);
+  AssertJUnit.assertTrue(factory2._handlersCreated == 0);
+  for (  Message message : msgList) {
+    if (message.getMsgType().equalsIgnoreCase(factory.getMessageType())) {
+      AssertJUnit.assertTrue(factory._processedMsgIds.containsKey(message.getId()));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.store.zk.TestAutoFallbackPropertyStore </h4><pre class="type-4 type-7 type-14 type-1 type-8 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetChildren(){
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String root=String.format("/%s/%s",clusterName,PropertyType.PROPERTYSTORE.name());
+  String fallbackRoot=String.format("/%s/%s",clusterName,"HELIX_PROPERTYSTORE");
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  for (int i=0; i < 20; i++) {
+    if (i < 10) {
+      String path=String.format("%s/%d",fallbackRoot,i);
+      baseAccessor.create(path,new ZNRecord(Integer.toString(i)),AccessOption.PERSISTENT);
+    }
+ else {
+      String path=String.format("%s/%d",root,i);
+      baseAccessor.create(path,new ZNRecord(Integer.toString(i)),AccessOption.PERSISTENT);
+    }
+  }
+  AutoFallbackPropertyStore<ZNRecord> store=new AutoFallbackPropertyStore<ZNRecord>(baseAccessor,root,fallbackRoot);
+  List<String> paths=new ArrayList<String>();
+  for (int i=0; i < 20; i++) {
+    String path=String.format("/%d",i);
+    if (i < 10) {
+      Assert.assertTrue(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should exist under fallback location");
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",root,path),0),"Should not exist under new location");
+    }
+ else {
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should not exist under fallback location");
+      Assert.assertTrue(baseAccessor.exists(String.format("%s%s",root,path),0),"Should exist under new location");
+    }
+    paths.add(path);
+  }
+  List<String> childs=store.getChildNames("/",0);
+  Assert.assertNotNull(childs);
+  Assert.assertEquals(childs.size(),20);
+  for (int i=0; i < 20; i++) {
+    String child=childs.get(i);
+    Assert.assertTrue(childs.contains(child));
+  }
+  List<ZNRecord> records=store.getChildren("/",null,0);
+  Assert.assertNotNull(records);
+  Assert.assertEquals(records.size(),20);
+  for (int i=0; i < 20; i++) {
+    ZNRecord record=records.get(i);
+    Assert.assertNotNull(record);
+    String id=record.getId();
+    Assert.assertTrue(childs.contains(id));
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-14 type-1 type-8 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultiUpdateUsingNewath(){
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String root=String.format("/%s/%s",clusterName,PropertyType.PROPERTYSTORE.name());
+  String fallbackRoot=String.format("/%s/%s",clusterName,"HELIX_PROPERTYSTORE");
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  for (int i=0; i < 10; i++) {
+    String path=String.format("%s/%d",fallbackRoot,i);
+    baseAccessor.create(path,new ZNRecord(Integer.toString(i)),AccessOption.PERSISTENT);
+    path=String.format("%s/%d",root,i);
+    baseAccessor.create(path,new ZNRecord("new" + i),AccessOption.PERSISTENT);
+  }
+  AutoFallbackPropertyStore<ZNRecord> store=new AutoFallbackPropertyStore<ZNRecord>(baseAccessor,root,fallbackRoot);
+  List<String> paths=new ArrayList<String>();
+  List<DataUpdater<ZNRecord>> updaters=new ArrayList<DataUpdater<ZNRecord>>();
+  for (int i=0; i < 20; i++) {
+    String path=String.format("/%d",i);
+    if (i < 10) {
+      Assert.assertTrue(baseAccessor.exists(String.format("%s%s",root,path),0),"Should exist under new location");
+      Assert.assertTrue(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should exist under fallback location");
+    }
+ else {
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",root,path),0),"Should not exist under new location");
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should not exist under fallback location");
+    }
+    paths.add(path);
+    updaters.add(new MyDataUpdater("new" + i));
+  }
+  boolean succeed[]=store.updateChildren(paths,updaters,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(succeed[i]);
+    String path=paths.get(i);
+    if (i < 10) {
+      ZNRecord record=baseAccessor.get(String.format("%s%s",fallbackRoot,path),null,0);
+      Assert.assertNotNull(record);
+      Assert.assertEquals(record.getId(),"" + i);
+      Assert.assertNull(record.getSimpleField("key"));
+    }
+ else {
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should not exist under fallback location");
+    }
+    ZNRecord record=baseAccessor.get(String.format("%s%s",root,path),null,0);
+    Assert.assertNotNull(record);
+    Assert.assertEquals(record.getId(),"new" + i);
+    if (i < 10) {
+      Assert.assertNotNull(record.getSimpleField("key"));
+      Assert.assertEquals(record.getSimpleField("key"),"value");
+    }
+ else {
+      Assert.assertNull(record.getSimpleField("key"));
+    }
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-14 type-1 type-8 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFailOnMultiGet(){
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String root=String.format("/%s/%s",clusterName,PropertyType.PROPERTYSTORE.name());
+  String fallbackRoot=String.format("/%s/%s",clusterName,"HELIX_PROPERTYSTORE");
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  for (int i=0; i < 10; i++) {
+    String path=String.format("%s/%d",fallbackRoot,i);
+    baseAccessor.create(path,new ZNRecord(Integer.toString(i)),AccessOption.PERSISTENT);
+  }
+  AutoFallbackPropertyStore<ZNRecord> store=new AutoFallbackPropertyStore<ZNRecord>(baseAccessor,root,fallbackRoot);
+  List<String> paths=new ArrayList<String>();
+  for (int i=0; i < 20; i++) {
+    String path=String.format("/%d",i);
+    Assert.assertFalse(baseAccessor.exists(String.format("%s%s",root,path),0),"Should not exist under new location");
+    if (i < 10) {
+      Assert.assertTrue(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should exist under fallback location");
+    }
+ else {
+      Assert.assertFalse(baseAccessor.exists(String.format("%s%s",fallbackRoot,path),0),"Should not exist under fallback location");
+    }
+    paths.add(path);
+  }
+  boolean exists[]=store.exists(paths,0);
+  for (int i=0; i < paths.size(); i++) {
+    if (i < 10) {
+      Assert.assertTrue(exists[i]);
+    }
+ else {
+      Assert.assertFalse(exists[i]);
+    }
+  }
+  Stat stats[]=store.getStats(paths,0);
+  for (int i=0; i < paths.size(); i++) {
+    if (i < 10) {
+      Assert.assertNotNull(stats[i]);
+    }
+ else {
+      Assert.assertNull(stats[i]);
+    }
+  }
+  List<ZNRecord> records=store.get(paths,null,0);
+  Assert.assertNotNull(records);
+  Assert.assertEquals(records.size(),20);
+  for (int i=0; i < 20; i++) {
+    ZNRecord record=records.get(i);
+    String path=paths.get(i);
+    if (i < 10) {
+      Assert.assertNotNull(record);
+      Assert.assertEquals(record.getId(),Integer.toString(i));
+    }
+ else {
+      Assert.assertNull(record);
+    }
+    Assert.assertFalse(baseAccessor.exists(String.format("%s%s",root,path),0),"Should not exist under new location after get");
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.webapp.TestHelixAdminScenariosRest </h4><pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRebalanceResource() throws Exception {
+  final String clusterName="clusterTestRebalanceResource";
+  addCluster(clusterName);
+  addInstancesToCluster(clusterName,"localhost:123",3,_tag1);
+  addResource(clusterName,"db_11",44);
+  String resourceUrl=getResourceUrl(clusterName,"db_11");
+  String idealStateUrl=resourceUrl + "/idealState";
+  String response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(3,null,null),false);
+  ZNRecord record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_11"));
+  Assert.assertEquals(record.getListField("db_11_0").size(),3);
+  Assert.assertEquals(record.getMapField("db_11_0").size(),3);
+  deleteUrl(resourceUrl,false);
+  final String reourcesUrl="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/resourceGroups";
+  response=getUrl(reourcesUrl);
+  Assert.assertFalse(response.contains("db_11"));
+  addResource(clusterName,"db_11",48);
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(3,null,null),false);
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_11"));
+  Assert.assertEquals(record.getListField("db_11_0").size(),3);
+  Assert.assertEquals(record.getMapField("db_11_0").size(),3);
+  addResource(clusterName,"db_22",55);
+  resourceUrl=getResourceUrl(clusterName,"db_22");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,"alias",null),false);
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue(record.getId().equalsIgnoreCase("db_22"));
+  Assert.assertEquals(record.getListField("alias_0").size(),2);
+  Assert.assertEquals(record.getMapField("alias_0").size(),2);
+  Assert.assertTrue((((String)(record.getMapFields().keySet().toArray()[0]))).startsWith("alias_"));
+  Assert.assertFalse(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  addResource(clusterName,"db_33",44);
+  resourceUrl=getResourceUrl(clusterName,"db_33");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,null,_tag1),false);
+  Assert.assertTrue(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  Assert.assertTrue(response.contains(_tag1));
+  for (int i=0; i < 6; i++) {
+    String instance="localhost_123" + i;
+    if (i < 3) {
+      Assert.assertTrue(response.contains(instance));
+    }
+ else {
+      Assert.assertFalse(response.contains(instance));
+    }
+  }
+  addResource(clusterName,"db_44",44);
+  resourceUrl=getResourceUrl(clusterName,"db_44");
+  idealStateUrl=resourceUrl + "/idealState";
+  response=assertSuccessPostOperation(idealStateUrl,rebalanceCmd(2,"alias",_tag1),false);
+  Assert.assertTrue(response.contains(IdealStateProperty.INSTANCE_GROUP_TAG.toString()));
+  Assert.assertTrue(response.contains(_tag1));
+  record=JsonToObject(ZNRecord.class,response);
+  Assert.assertTrue((((String)(record.getMapFields().keySet().toArray()[0]))).startsWith("alias_"));
+  for (int i=0; i < 6; i++) {
+    String instance="localhost_123" + i;
+    if (i < 3) {
+      Assert.assertTrue(response.contains(instance));
+    }
+ else {
+      Assert.assertFalse(response.contains(instance));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

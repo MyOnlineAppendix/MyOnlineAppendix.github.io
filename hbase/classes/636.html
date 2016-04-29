@@ -1,0 +1,598 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.security.access.TestCellACLWithMultipleVersions (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(8)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsWithDeleteWithUserTs() throws Exception {
+  USER_OWNER.runAs(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Put p=new Put(TEST_ROW);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,123L,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,123L,ZERO);
+          p.setACL(prepareCellPermissions(new String[]{USER_OTHER.getShortName(),AuthUtil.toGroupEntry(GROUP),USER_OTHER2.getShortName()},Permission.Action.READ,Permission.Action.WRITE));
+          t.put(p);
+          p=new Put(TEST_ROW);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,125L,ONE);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,125L,ONE);
+          p.setACL(prepareCellPermissions(new String[]{USER_OTHER.getShortName(),AuthUtil.toGroupEntry(GROUP)},Action.READ,Action.WRITE));
+          t.put(p);
+          p=new Put(TEST_ROW);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,127L,TWO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,127L,TWO);
+          p.setACL(prepareCellPermissions(new String[]{USER_OTHER.getShortName(),AuthUtil.toGroupEntry(GROUP)},Action.READ,Action.WRITE));
+          t.put(p);
+          return null;
+        }
+       }
+     }
+  }
+);
+  USER_OTHER2.runAs(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW,124L);
+          d.addColumns(TEST_FAMILY1,TEST_Q1);
+          t.delete(d);
+        }
+       }
+       return null;
+    }
+  }
+);
+  USER_OTHER2.runAs(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW);
+          d.addColumns(TEST_FAMILY1,TEST_Q2,124L);
+          t.delete(d);
+        }
+       }
+       return null;
+    }
+  }
+);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsForIncrementWithMultipleVersions() throws Exception {
+  final byte[] TEST_ROW1=Bytes.toBytes("r1");
+  final byte[] TEST_Q1=Bytes.toBytes("q1");
+  final byte[] TEST_Q2=Bytes.toBytes("q2");
+  final byte[] ZERO=Bytes.toBytes(0L);
+  final User user1=User.createUserForTesting(conf,"user1",new String[0]);
+  final User user2=User.createUserForTesting(conf,"user2",new String[0]);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Map<String,Permission> permsU1andOwner=prepareCellPermissions(new String[]{user1.getShortName(),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Map<String,Permission> permsU2andGUandOwner=prepareCellPermissions(new String[]{user2.getShortName(),AuthUtil.toGroupEntry(GROUP),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)123,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)123,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)127,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)127,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Increment inc=new Increment(TEST_ROW1);
+          inc.setTimeRange(0,123);
+          inc.addColumn(TEST_FAMILY1,TEST_Q1,2L);
+          t.increment(inc);
+          t.incrementColumnValue(TEST_ROW1,TEST_FAMILY1,TEST_Q2,1L);
+        }
+       }
+       return null;
+    }
+  }
+);
+  verifyUserDeniedForIncrementMultipleVersions(user2,TEST_ROW1,TEST_Q2);
+  verifyUserDeniedForIncrementMultipleVersions(GROUP_USER,TEST_ROW1,TEST_Q2);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  HTableDescriptor htd=new HTableDescriptor(TEST_TABLE.getTableName());
+  HColumnDescriptor hcd=new HColumnDescriptor(TEST_FAMILY1);
+  hcd.setMaxVersions(4);
+  htd.setOwner(USER_OWNER);
+  htd.addFamily(hcd);
+  hcd=new HColumnDescriptor(TEST_FAMILY2);
+  hcd.setMaxVersions(4);
+  htd.setOwner(USER_OWNER);
+  htd.addFamily(hcd);
+  try (Connection connection=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration())){
+    try (Admin admin=connection.getAdmin()){
+      admin.createTable(htd,new byte[][]{Bytes.toBytes("s")});
+    }
+   }
+   TEST_UTIL.waitTableEnabled(TEST_TABLE.getTableName());
+  LOG.info("Sleeping a second because of HBASE-12581");
+  Threads.sleep(1000);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionwithVersions() throws Exception {
+  final Map<String,Permission> writePerms=prepareCellPermissions(usersAndGroups,Action.WRITE);
+  final Map<String,Permission> readPerms=prepareCellPermissions(usersAndGroups,Action.READ);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf);Table t=connection.getTable(TEST_TABLE.getTableName())){
+        Put p;
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(writePerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(readPerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(writePerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(readPerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(writePerms);
+        t.put(p);
+      }
+       return null;
+    }
+  }
+,USER_OWNER);
+  AccessTestAction getQ1=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Get get=new Get(TEST_ROW);
+      get.setMaxVersions(10);
+      try (Connection connection=ConnectionFactory.createConnection(conf);Table t=connection.getTable(TEST_TABLE.getTableName())){
+        return t.get(get).listCells();
+      }
+     }
+  }
+;
+  AccessTestAction get2=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Get get=new Get(TEST_ROW);
+      get.setMaxVersions(10);
+      try (Connection connection=ConnectionFactory.createConnection(conf);Table t=connection.getTable(TEST_TABLE.getTableName())){
+        return t.get(get).listCells();
+      }
+     }
+  }
+;
+  verifyAllowed(GROUP_USER,getQ1,2);
+  verifyAllowed(USER_OTHER,getQ1,2);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf);Table t=connection.getTable(TEST_TABLE.getTableName())){
+        Put p;
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(writePerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(readPerms);
+        t.put(p);
+        p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+        p.setACL(writePerms);
+        t.put(p);
+      }
+       return null;
+    }
+  }
+,USER_OWNER);
+  verifyAllowed(USER_OTHER,get2,1);
+  verifyAllowed(GROUP_USER,get2,1);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsForPutWithMultipleVersions() throws Exception {
+  final byte[] TEST_ROW1=Bytes.toBytes("r1");
+  final byte[] TEST_Q1=Bytes.toBytes("q1");
+  final byte[] TEST_Q2=Bytes.toBytes("q2");
+  final byte[] ZERO=Bytes.toBytes(0L);
+  final User user1=User.createUserForTesting(conf,"user1",new String[0]);
+  final User user2=User.createUserForTesting(conf,"user2",new String[0]);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Map<String,Permission> permsU1andOwner=prepareCellPermissions(new String[]{user1.getShortName(),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Map<String,Permission> permsU2andGUandOwner=prepareCellPermissions(new String[]{user1.getShortName(),AuthUtil.toGroupEntry(GROUP),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          permsU2andGUandOwner.put(user2.getShortName(),new Permission(Permission.Action.READ,Permission.Action.WRITE));
+          permsU2andGUandOwner.put(USER_OWNER.getShortName(),new Permission(Permission.Action.READ,Permission.Action.WRITE));
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)123,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)123,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)127,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)127,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)125,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,ZERO);
+          p.setACL(user2.getShortName(),new Permission(Permission.Action.READ,Permission.Action.WRITE));
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+);
+  verifyUserDeniedForPutMultipleVersions(user2,TEST_ROW1,TEST_Q1,TEST_Q2,ZERO);
+  verifyUserDeniedForPutMultipleVersions(GROUP_USER,TEST_ROW1,TEST_Q1,TEST_Q2,ZERO);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsForCheckAndDelete() throws Exception {
+  final byte[] TEST_ROW1=Bytes.toBytes("r1");
+  final byte[] TEST_Q3=Bytes.toBytes("q3");
+  final byte[] ZERO=Bytes.toBytes(0L);
+  final User user1=User.createUserForTesting(conf,"user1",new String[0]);
+  final User user2=User.createUserForTesting(conf,"user2",new String[0]);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Map<String,Permission> permsU1andOwner=prepareCellPermissions(new String[]{user1.getShortName(),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Map<String,Permission> permsU1andU2andGUandOwner=prepareCellPermissions(new String[]{user1.getShortName(),user2.getShortName(),AuthUtil.toGroupEntry(GROUP),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Map<String,Permission> permsU1_U2andGU=prepareCellPermissions(new String[]{user1.getShortName(),user2.getShortName(),AuthUtil.toGroupEntry(GROUP)},Action.READ,Action.WRITE);
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)120,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)120,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q3,(long)120,ZERO);
+          p.setACL(permsU1andU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)123,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)123,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q3,(long)123,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)127,ZERO);
+          p.setACL(permsU1_U2andGU);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)127,ZERO);
+          p.setACL(user2.getShortName(),new Permission(Permission.Action.READ));
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q3,127,ZERO);
+          p.setACL(AuthUtil.toGroupEntry(GROUP),new Permission(Permission.Action.READ));
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW1);
+          d.addColumns(TEST_FAMILY1,TEST_Q1,120);
+          t.checkAndDelete(TEST_ROW1,TEST_FAMILY1,TEST_Q1,ZERO,d);
+        }
+       }
+       return null;
+    }
+  }
+);
+  verifyUserDeniedForCheckAndDelete(user2,TEST_ROW1,ZERO);
+  verifyUserDeniedForCheckAndDelete(GROUP_USER,TEST_ROW1,ZERO);
+  verifyUserAllowedforCheckAndDelete(user2,TEST_ROW1,TEST_Q2,ZERO);
+  verifyUserAllowedforCheckAndDelete(GROUP_USER,TEST_ROW1,TEST_Q3,ZERO);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsWithDeleteMutipleVersions() throws Exception {
+  final byte[] TEST_ROW1=Bytes.toBytes("r1");
+  final byte[] TEST_ROW2=Bytes.toBytes("r2");
+  final byte[] TEST_Q1=Bytes.toBytes("q1");
+  final byte[] TEST_Q2=Bytes.toBytes("q2");
+  final byte[] ZERO=Bytes.toBytes(0L);
+  final User user1=User.createUserForTesting(conf,"user1",new String[0]);
+  final User user2=User.createUserForTesting(conf,"user2",new String[0]);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,ZERO);
+          p.setACL(user1.getShortName(),new Permission(Permission.Action.READ,Permission.Action.WRITE));
+          t.put(p);
+          p=new Put(TEST_ROW2);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,ZERO);
+          p.setACL(user1.getShortName(),new Permission(Permission.Action.READ,Permission.Action.WRITE));
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,ZERO);
+          Map<String,Permission> perms=prepareCellPermissions(new String[]{user1.getShortName(),user2.getShortName(),AuthUtil.toGroupEntry(GROUP)},Action.READ,Action.WRITE);
+          p.setACL(perms);
+          t.put(p);
+          p=new Put(TEST_ROW2);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,ZERO);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,ZERO);
+          p.setACL(perms);
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,user1);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW1);
+          d.addColumns(TEST_FAMILY1,TEST_Q1);
+          d.addColumns(TEST_FAMILY1,TEST_Q2);
+          t.delete(d);
+        }
+       }
+       return null;
+    }
+  }
+);
+  verifyUserDeniedForDeleteMultipleVersions(user2,TEST_ROW2,TEST_Q1,TEST_Q2);
+  verifyUserDeniedForDeleteMultipleVersions(GROUP_USER,TEST_ROW2,TEST_Q1,TEST_Q2);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW2);
+          d.addFamily(TEST_FAMILY1);
+          t.delete(d);
+        }
+       }
+       return null;
+    }
+  }
+);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDeleteWithFutureTimestamp() throws Exception {
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Put p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q2,ONE);
+          Map<String,Permission> readAndWritePerms=prepareCellPermissions(usersAndGroups,Action.READ,Action.WRITE);
+          p.setACL(readAndWritePerms);
+          t.put(p);
+          p=new Put(TEST_ROW).addColumn(TEST_FAMILY2,TEST_Q2,ONE);
+          p.setACL(readAndWritePerms);
+          t.put(p);
+          LOG.info("Stored at current time");
+          p=new Put(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1,EnvironmentEdgeManager.currentTime() + 1000000,ZERO);
+          p.setACL(prepareCellPermissions(new String[]{USER_OTHER.getShortName(),AuthUtil.toGroupEntry(GROUP)},Action.READ));
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  AccessTestAction getQ1=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Get get=new Get(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q1);
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          return t.get(get).listCells();
+        }
+       }
+     }
+  }
+;
+  AccessTestAction getQ2=new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      Get get=new Get(TEST_ROW).addColumn(TEST_FAMILY1,TEST_Q2);
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          return t.get(get).listCells();
+        }
+       }
+     }
+  }
+;
+  verifyAllowed(getQ1,USER_OWNER,USER_OTHER,GROUP_USER);
+  verifyAllowed(getQ2,USER_OWNER,USER_OTHER,GROUP_USER);
+  AccessTestAction deleteFamily1=getDeleteFamilyAction(TEST_FAMILY1);
+  AccessTestAction deleteFamily2=getDeleteFamilyAction(TEST_FAMILY2);
+  verifyAllowed(deleteFamily1,USER_OTHER);
+  verifyAllowed(deleteFamily2,GROUP_USER);
+  verifyAllowed(getQ1,USER_OWNER,USER_OTHER,GROUP_USER);
+  verifyIfNull(getQ2,USER_OTHER,GROUP_USER);
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@After public void tearDown() throws Exception {
+  try {
+    TEST_UTIL.deleteTable(TEST_TABLE.getTableName());
+  }
+ catch (  TableNotFoundException ex) {
+    LOG.info("Test deleted table " + TEST_TABLE.getTableName());
+  }
+  assertEquals(0,AccessControlLists.getTablePermissions(conf,TEST_TABLE.getTableName()).size());
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCellPermissionsWithDeleteExactVersion() throws Exception {
+  final byte[] TEST_ROW1=Bytes.toBytes("r1");
+  final byte[] TEST_Q1=Bytes.toBytes("q1");
+  final byte[] TEST_Q2=Bytes.toBytes("q2");
+  final byte[] ZERO=Bytes.toBytes(0L);
+  final User user1=User.createUserForTesting(conf,"user1",new String[0]);
+  final User user2=User.createUserForTesting(conf,"user2",new String[0]);
+  verifyAllowed(new AccessTestAction(){
+    @Override public Object run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Map<String,Permission> permsU1andOwner=prepareCellPermissions(new String[]{user1.getShortName(),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Map<String,Permission> permsU2andGUandOwner=prepareCellPermissions(new String[]{user2.getShortName(),AuthUtil.toGroupEntry(GROUP),USER_OWNER.getShortName()},Action.READ,Action.WRITE);
+          Put p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)123,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)123,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY2,TEST_Q1,(long)123,ZERO);
+          p.addColumn(TEST_FAMILY2,TEST_Q2,(long)123,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY2,TEST_Q1,(long)125,ZERO);
+          p.addColumn(TEST_FAMILY2,TEST_Q2,(long)125,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q1,(long)127,ZERO);
+          p.setACL(permsU2andGUandOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY1,TEST_Q2,(long)127,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+          p=new Put(TEST_ROW1);
+          p.addColumn(TEST_FAMILY2,TEST_Q1,(long)129,ZERO);
+          p.addColumn(TEST_FAMILY2,TEST_Q2,(long)129,ZERO);
+          p.setACL(permsU1andOwner);
+          t.put(p);
+        }
+       }
+       return null;
+    }
+  }
+,USER_OWNER);
+  user1.runAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      try (Connection connection=ConnectionFactory.createConnection(conf)){
+        try (Table t=connection.getTable(TEST_TABLE.getTableName())){
+          Delete d=new Delete(TEST_ROW1);
+          d.addColumn(TEST_FAMILY1,TEST_Q1,123);
+          d.addColumn(TEST_FAMILY1,TEST_Q2);
+          d.addFamilyVersion(TEST_FAMILY2,125);
+          t.delete(d);
+        }
+       }
+       return null;
+    }
+  }
+);
+  verifyUserDeniedForDeleteExactVersion(user2,TEST_ROW1,TEST_Q1,TEST_Q2);
+  verifyUserDeniedForDeleteExactVersion(GROUP_USER,TEST_ROW1,TEST_Q1,TEST_Q2);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

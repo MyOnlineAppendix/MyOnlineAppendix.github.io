@@ -1,0 +1,220 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestProcessCorruptBlocks (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * The corrupt block has to be removed when the number of valid replicas
+ * matches replication factor for the file. In this the above condition is
+ * tested by reducing the replication factor 
+ * The test strategy : 
+ * Bring up Cluster with 3 DataNodes
+ * Create a file of replication factor 3 
+ * Corrupt one replica of a block of the file 
+ * Verify that there are still 2 good replicas and 1 corrupt replica
+ * (corrupt replica should not be removed since number of good
+ * replicas (2) is less than replication factor (3))
+ * Set the replication factor to 2 
+ * Verify that the corrupt replica is removed. 
+ * (corrupt replica  should not be removed since number of good
+ * replicas (2) is equal to replication factor (2))
+ */
+@Test public void testWhenDecreasingReplication() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000L);
+  conf.set(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,Integer.toString(2));
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  FileSystem fs=cluster.getFileSystem();
+  final FSNamesystem namesystem=cluster.getNamesystem();
+  try {
+    final Path fileName=new Path("/foo1");
+    DFSTestUtil.createFile(fs,fileName,2,(short)3,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)3);
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,fileName);
+    corruptBlock(cluster,fs,fileName,0,block);
+    DFSTestUtil.waitReplication(fs,fileName,(short)2);
+    assertEquals(2,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(1,countReplicas(namesystem,block).corruptReplicas());
+    namesystem.setReplication(fileName.toString(),(short)2);
+    try {
+      Thread.sleep(3000);
+    }
+ catch (    InterruptedException ignored) {
+    }
+    assertEquals(2,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(0,countReplicas(namesystem,block).corruptReplicas());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * None of the blocks can be removed if all blocks are corrupt.
+ * The test strategy : 
+ * Bring up Cluster with 3 DataNodes
+ * Create a file of replication factor 3 
+ * Corrupt all three replicas 
+ * Verify that all replicas are corrupt and 3 replicas are present.
+ * Set the replication factor to 1 
+ * Verify that all replicas are corrupt and 3 replicas are present.
+ */
+@Test public void testWithAllCorruptReplicas() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000L);
+  conf.set(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,Integer.toString(2));
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  FileSystem fs=cluster.getFileSystem();
+  final FSNamesystem namesystem=cluster.getNamesystem();
+  try {
+    final Path fileName=new Path("/foo1");
+    DFSTestUtil.createFile(fs,fileName,2,(short)3,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)3);
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,fileName);
+    corruptBlock(cluster,fs,fileName,0,block);
+    corruptBlock(cluster,fs,fileName,1,block);
+    corruptBlock(cluster,fs,fileName,2,block);
+    try {
+      Thread.sleep(3000);
+    }
+ catch (    InterruptedException ignored) {
+    }
+    assertEquals(0,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(3,countReplicas(namesystem,block).corruptReplicas());
+    namesystem.setReplication(fileName.toString(),(short)1);
+    try {
+      Thread.sleep(3000);
+    }
+ catch (    InterruptedException ignored) {
+    }
+    assertEquals(0,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(3,countReplicas(namesystem,block).corruptReplicas());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * The corrupt block has to be removed when the number of valid replicas
+ * matches replication factor for the file. In this test, the above 
+ * condition is achieved by increasing the number of good replicas by 
+ * replicating on a new Datanode. 
+ * The test strategy : 
+ * Bring up Cluster with 3 DataNodes
+ * Create a file  of replication factor 3
+ * Corrupt one replica of a block of the file 
+ * Verify that there are still 2 good replicas and 1 corrupt replica 
+ * (corrupt replica should not be removed since number of good replicas
+ * (2) is less  than replication factor (3)) 
+ * Start a new data node 
+ * Verify that the a new replica is created and corrupt replica is
+ * removed.
+ */
+@Test public void testByAddingAnExtraDataNode() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000L);
+  conf.set(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,Integer.toString(2));
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(4).build();
+  FileSystem fs=cluster.getFileSystem();
+  final FSNamesystem namesystem=cluster.getNamesystem();
+  DataNodeProperties dnPropsFourth=cluster.stopDataNode(3);
+  try {
+    final Path fileName=new Path("/foo1");
+    DFSTestUtil.createFile(fs,fileName,2,(short)3,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)3);
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,fileName);
+    corruptBlock(cluster,fs,fileName,0,block);
+    DFSTestUtil.waitReplication(fs,fileName,(short)2);
+    assertEquals(2,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(1,countReplicas(namesystem,block).corruptReplicas());
+    cluster.restartDataNode(dnPropsFourth);
+    DFSTestUtil.waitReplication(fs,fileName,(short)3);
+    assertEquals(3,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(0,countReplicas(namesystem,block).corruptReplicas());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * The corrupt block has to be removed when the number of valid replicas
+ * matches replication factor for the file. The above condition should hold
+ * true as long as there is one good replica. This test verifies that.
+ * The test strategy : 
+ * Bring up Cluster with 2 DataNodes
+ * Create a file of replication factor 2 
+ * Corrupt one replica of a block of the file 
+ * Verify that there is  one good replicas and 1 corrupt replica 
+ * (corrupt replica should not be removed since number of good 
+ * replicas (1) is less than replication factor (2)).
+ * Set the replication factor to 1 
+ * Verify that the corrupt replica is removed. 
+ * (corrupt replica should  be removed since number of good
+ * replicas (1) is equal to replication factor (1))
+ */
+@Test(timeout=20000) public void testWithReplicationFactorAsOne() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000L);
+  conf.set(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,Integer.toString(2));
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  FileSystem fs=cluster.getFileSystem();
+  final FSNamesystem namesystem=cluster.getNamesystem();
+  try {
+    final Path fileName=new Path("/foo1");
+    DFSTestUtil.createFile(fs,fileName,2,(short)2,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)2);
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,fileName);
+    corruptBlock(cluster,fs,fileName,0,block);
+    DFSTestUtil.waitReplication(fs,fileName,(short)1);
+    assertEquals(1,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(1,countReplicas(namesystem,block).corruptReplicas());
+    namesystem.setReplication(fileName.toString(),(short)1);
+    for (int i=0; i < 10; i++) {
+      try {
+        Thread.sleep(1000);
+      }
+ catch (      InterruptedException ignored) {
+      }
+      if (countReplicas(namesystem,block).corruptReplicas() == 0) {
+        break;
+      }
+    }
+    assertEquals(1,countReplicas(namesystem,block).liveReplicas());
+    assertEquals(0,countReplicas(namesystem,block).corruptReplicas());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

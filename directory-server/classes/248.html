@@ -1,0 +1,197 @@
+<h3 style="margin:0px">Class: org.apache.directory.server.ldap.JournalTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * test that we can write 1000 ReplicaEventMessages, remove 500 of them, and read the 
+ * remaining ones.
+ */
+@Test public void testJournalTruncate() throws Exception {
+  Csn entryCsn=csnFactory.newInstance();
+  for (int i=0; i < 1000; i++) {
+    Entry entry=new DefaultEntry(schemaManager,"ou=test" + i + ",ou=system","ObjectClass: top","ObjectClass: organizationalUnit","ou","test" + i,"entryCsn",entryCsn.toString());
+    ReplicaEventMessage replicaEventMessage=new ReplicaEventMessage(ChangeType.ADD,entry);
+    journal.put(entryCsn.toString(),replicaEventMessage);
+    journal.sync();
+    entryCsn=csnFactory.newInstance();
+  }
+  Cursor<Tuple<String,ReplicaEventMessage>> deleteCursor=journal.cursor();
+  int deleted=0;
+  while (deleteCursor.next() && (deleted < 500)) {
+    Tuple<String,ReplicaEventMessage> tuple=deleteCursor.get();
+    ReplicaEventMessage replicaEventMessage=tuple.getValue();
+    assertEquals(ChangeType.ADD,replicaEventMessage.getChangeType());
+    assertEquals("test" + deleted,replicaEventMessage.getEntry().get("ou").getString());
+    journal.remove(replicaEventMessage.getEntry().get("entryCsn").getString());
+    journal.sync();
+    deleted++;
+  }
+  deleteCursor.close();
+  assertEquals(500,journal.count());
+  Cursor<Tuple<String,ReplicaEventMessage>> cursor=journal.cursor();
+  cursor.next();
+  Tuple<String,ReplicaEventMessage> tuple=cursor.get();
+  ReplicaEventMessage replicaEventMessage=tuple.getValue();
+  assertEquals(ChangeType.ADD,replicaEventMessage.getChangeType());
+  assertEquals("test500",replicaEventMessage.getEntry().get("ou").getString());
+  cursor.close();
+}
+
+</code></pre>
+
+<pre class="type-13 type-6 type-4 type-1 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Is not executed with the test suite
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the performances for 100 000 writes, read and delete.
+ * On my laptop, it takes : <br>
+ * <ul>
+ * <li>457 seconds to create 100 000 ReplicaEventMessages ( 219/s )</li>
+ * <li>17 seconds to read 100 000 ReplicaEventMessages ( 5893/s )</li>
+ * <li>546 seconds to delete 100 000 ReplicaEventMessages ( 183/s )</li>
+ * </ul>
+ */
+@Test @Ignore("Performance test") public void testJournalPerf() throws Exception {
+  Csn entryCsn=csnFactory.newInstance();
+  long t0=System.currentTimeMillis();
+  for (int i=0; i < 100000; i++) {
+    Entry entry=new DefaultEntry(schemaManager,"ou=test" + i + ",ou=system","ObjectClass: top","ObjectClass: organizationalUnit","ou","test" + i,"entryCsn",entryCsn.toString());
+    ReplicaEventMessage replicaEventMessage=new ReplicaEventMessage(ChangeType.ADD,entry);
+    journal.put(entryCsn.toString(),replicaEventMessage);
+    journal.sync();
+    recman.commit();
+    entryCsn=csnFactory.newInstance();
+  }
+  long t1=System.currentTimeMillis();
+  System.out.println("Time to write 100 000 ReplicaEventMessages : " + (t1 - t0));
+  long t2=System.currentTimeMillis();
+  Cursor<Tuple<String,ReplicaEventMessage>> readCursor=journal.cursor();
+  int pos=0;
+  while (readCursor.next()) {
+    Tuple<String,ReplicaEventMessage> tuple=readCursor.get();
+    ReplicaEventMessage replicaEventMessage=tuple.getValue();
+    assertEquals(ChangeType.ADD,replicaEventMessage.getChangeType());
+    assertEquals("test" + pos,replicaEventMessage.getEntry().get("ou").getString());
+    pos++;
+  }
+  long t3=System.currentTimeMillis();
+  System.out.println("Time to read 100 000 ReplicaEventMessages : " + (t3 - t2));
+  long t4=System.currentTimeMillis();
+  Cursor<Tuple<String,ReplicaEventMessage>> deleteCursor=journal.cursor();
+  int deleted=0;
+  while (deleteCursor.next()) {
+    Tuple<String,ReplicaEventMessage> tuple=deleteCursor.get();
+    ReplicaEventMessage replicaEventMessage=tuple.getValue();
+    assertEquals(ChangeType.ADD,replicaEventMessage.getChangeType());
+    assertEquals("test" + deleted,replicaEventMessage.getEntry().get("ou").getString());
+    journal.remove(replicaEventMessage.getEntry().get("entryCsn").getString());
+    journal.sync();
+    recman.commit();
+    deleted++;
+  }
+  long t5=System.currentTimeMillis();
+  System.out.println("Time to delete 100 000 ReplicaEventMessages : " + (t5 - t4));
+}
+
+</code></pre>
+
+<pre class="type-13 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * test that we can write 1000 ReplicaEventMessages, and read them back in the right order 
+ * starting in the middle.
+ */
+@Test public void testJournalWriting() throws Exception {
+  Csn entryCsn=csnFactory.newInstance();
+  Csn firstCsn=entryCsn;
+  Csn csn100=null;
+  for (int i=0; i < 1000; i++) {
+    if (i == 100) {
+      csn100=entryCsn;
+    }
+    Entry entry=new DefaultEntry(schemaManager,"ou=test" + i + ",ou=system","ObjectClass: top","ObjectClass: organizationalUnit","ou","test" + i,"entryCsn",entryCsn.toString());
+    ReplicaEventMessage replicaEventMessage=new ReplicaEventMessage(ChangeType.ADD,entry);
+    journal.put(entryCsn.toString(),replicaEventMessage);
+    journal.sync();
+    entryCsn=csnFactory.newInstance();
+  }
+  ReplicaEventMessage firstMessage=journal.get(firstCsn.toString());
+  assertEquals(ChangeType.ADD,firstMessage.getChangeType());
+  assertEquals("test0",firstMessage.getEntry().get("ou").getString());
+  Cursor<Tuple<String,ReplicaEventMessage>> cursor=journal.cursor(csn100.toString());
+  int pos=100;
+  while (cursor.next()) {
+    Tuple<String,ReplicaEventMessage> tuple=cursor.get();
+    ReplicaEventMessage replicaEventMessage=tuple.getValue();
+    assertEquals(ChangeType.ADD,replicaEventMessage.getChangeType());
+    assertEquals("test" + pos,replicaEventMessage.getEntry().get("ou").getString());
+    pos++;
+  }
+  cursor.close();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+/** 
+ * Create the JdbmTable
+ */
+@Before public void createTable() throws Exception {
+  destroyTable();
+  File tmpDir=null;
+  if (System.getProperty(TEST_OUTPUT_PATH,null) != null) {
+    tmpDir=new File(System.getProperty(TEST_OUTPUT_PATH));
+  }
+  dbFile=File.createTempFile(getClass().getSimpleName(),"db",tmpDir);
+  recman=new BaseRecordManager(dbFile.getAbsolutePath());
+  TransactionManager transactionManager=((BaseRecordManager)recman).getTransactionManager();
+  transactionManager.setMaximumTransactionsInLog(200);
+  SerializableComparator<String> comparator=new SerializableComparator<String>(SchemaConstants.CSN_ORDERING_MATCH_MR_OID);
+  comparator.setSchemaManager(schemaManager);
+  journal=new JdbmTable<String,ReplicaEventMessage>(schemaManager,"test",recman,comparator,StringSerializer.INSTANCE,new ReplicaEventMessageSerializer(schemaManager));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+/** 
+ * Delete the files on disk
+ */
+@After public void destroyTable() throws Exception {
+  if (journal != null) {
+    journal.close();
+  }
+  journal=null;
+  if (recman != null) {
+    recman.close();
+  }
+  recman=null;
+  if (dbFile != null) {
+    String fileToDelete=dbFile.getAbsolutePath();
+    new File(fileToDelete + ".db").delete();
+    new File(fileToDelete + ".lg").delete();
+    dbFile.delete();
+  }
+  dbFile=null;
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

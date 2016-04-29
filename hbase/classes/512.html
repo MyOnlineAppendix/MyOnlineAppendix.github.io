@@ -1,0 +1,238 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestRegionReplicaFailover (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests the case where killing a primary region with unflushed data recovers
+ */
+@Test(timeout=120000) public void testPrimaryRegionKill() throws Exception {
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName())){
+    HTU.loadNumericRows(table,fam,0,1000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,1,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,2,30000);
+    boolean aborted=false;
+    for (    RegionServerThread rs : HTU.getMiniHBaseCluster().getRegionServerThreads()) {
+      for (      Region r : rs.getRegionServer().getOnlineRegions(htd.getTableName())) {
+        if (r.getRegionInfo().getReplicaId() == 0) {
+          LOG.info("Aborting region server hosting primary region replica");
+          rs.getRegionServer().abort("for test");
+          aborted=true;
+        }
+      }
+    }
+    assertTrue(aborted);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,0,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,1,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,2,30000);
+  }
+   HTU.getMiniHBaseCluster().startRegionServer();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests the case where killing a secondary region with unflushed data recovers, and the replica
+ * becomes available to read again shortly.
+ */
+@Test(timeout=120000) public void testSecondaryRegionKill() throws Exception {
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName())){
+    HTU.loadNumericRows(table,fam,0,1000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,1,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,1000,2,30000);
+    boolean aborted=false;
+    for (    RegionServerThread rs : HTU.getMiniHBaseCluster().getRegionServerThreads()) {
+      for (      Region r : rs.getRegionServer().getOnlineRegions(htd.getTableName())) {
+        if (r.getRegionInfo().getReplicaId() == 1) {
+          LOG.info("Aborting region server hosting secondary region replica");
+          rs.getRegionServer().abort("for test");
+          aborted=true;
+        }
+      }
+    }
+    assertTrue(aborted);
+    Threads.sleep(5000);
+    HTU.verifyNumericRows(table,fam,0,1000,1);
+    HTU.verifyNumericRows(table,fam,0,1000,2);
+  }
+   HTU.getMiniHBaseCluster().startRegionServer();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests the case where a newly created table with region replicas and no data, the secondary
+ * region replicas are available to read immediately.
+ */
+@Test(timeout=60000) public void testSecondaryRegionWithEmptyRegion() throws IOException {
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName())){
+    Get get=new Get(row);
+    get.setConsistency(Consistency.TIMELINE);
+    get.setReplicaId(1);
+    table.get(get);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws Exception {
+  Configuration conf=HTU.getConfiguration();
+  conf.setInt(HConstants.REGION_SERVER_HIGH_PRIORITY_HANDLER_COUNT,10);
+  conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY,true);
+  conf.setBoolean(ServerRegionReplicaUtil.REGION_REPLICA_REPLICATION_CONF_KEY,true);
+  conf.setBoolean(ServerRegionReplicaUtil.REGION_REPLICA_WAIT_FOR_PRIMARY_FLUSH_CONF_KEY,true);
+  conf.setInt("replication.stats.thread.period.seconds",5);
+  conf.setBoolean("hbase.tests.use.shortcircuit.reads",false);
+  conf.setBoolean(HConstants.DISTRIBUTED_LOG_REPLAY_KEY,distributedLogReplay);
+  HTU.startMiniCluster(NB_SERVERS);
+  htd=HTU.createTableDescriptor(name.getMethodName().substring(0,name.getMethodName().length() - 3));
+  htd.setRegionReplication(3);
+  HTU.getHBaseAdmin().createTable(htd);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests the case where we are creating a table with a lot of regions and replicas. Opening region
+ * replicas should not block handlers on RS indefinitely.
+ */
+@Test(timeout=120000) public void testLotsOfRegionReplicas() throws IOException {
+  int numRegions=NB_SERVERS * 20;
+  int regionReplication=10;
+  String tableName=htd.getTableName().getNameAsString() + "2";
+  htd=HTU.createTableDescriptor(tableName);
+  htd.setRegionReplication(regionReplication);
+  byte[] startKey=Bytes.toBytes("aaa");
+  byte[] endKey=Bytes.toBytes("zzz");
+  byte[][] splits=HTU.getRegionSplitStartKeys(startKey,endKey,numRegions);
+  HTU.getHBaseAdmin().createTable(htd,startKey,endKey,numRegions);
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName())){
+    for (int i=1; i < splits.length; i++) {
+      for (int j=0; j < regionReplication; j++) {
+        Get get=new Get(splits[i]);
+        get.setConsistency(Consistency.TIMELINE);
+        get.setReplicaId(j);
+        table.get(get);
+      }
+    }
+  }
+   HTU.deleteTableIfAny(TableName.valueOf(tableName));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void after() throws Exception {
+  HTU.deleteTableIfAny(htd.getTableName());
+  HTU.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-8 type-13 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the case where there are 3 region replicas and the primary is continuously accepting
+ * new writes while one of the secondaries is killed. Verification is done for both of the
+ * secondary replicas.
+ */
+@Test(timeout=120000) public void testSecondaryRegionKillWhilePrimaryIsAcceptingWrites() throws Exception {
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName());Admin admin=connection.getAdmin()){
+    HTU.loadNumericRows(table,fam,0,1000);
+    admin.flush(table.getName());
+    HTU.loadNumericRows(table,fam,1000,2000);
+    final AtomicReference<Throwable> ex=new AtomicReference<Throwable>(null);
+    final AtomicBoolean done=new AtomicBoolean(false);
+    final AtomicInteger key=new AtomicInteger(2000);
+    Thread loader=new Thread(){
+      @Override public void run(){
+        while (!done.get()) {
+          try {
+            HTU.loadNumericRows(table,fam,key.get(),key.get() + 1000);
+            key.addAndGet(1000);
+          }
+ catch (          Throwable e) {
+            ex.compareAndSet(null,e);
+          }
+        }
+      }
+    }
+;
+    loader.start();
+    Thread aborter=new Thread(){
+      @Override public void run(){
+        try {
+          boolean aborted=false;
+          for (          RegionServerThread rs : HTU.getMiniHBaseCluster().getRegionServerThreads()) {
+            for (            Region r : rs.getRegionServer().getOnlineRegions(htd.getTableName())) {
+              if (r.getRegionInfo().getReplicaId() == 1) {
+                LOG.info("Aborting region server hosting secondary region replica");
+                rs.getRegionServer().abort("for test");
+                aborted=true;
+              }
+            }
+          }
+          assertTrue(aborted);
+        }
+ catch (        Throwable e) {
+          ex.compareAndSet(null,e);
+        }
+      }
+    }
+;
+    aborter.start();
+    aborter.join();
+    done.set(true);
+    loader.join();
+    assertNull(ex.get());
+    assertTrue(key.get() > 1000);
+    LOG.info("Loaded up to key :" + key.get());
+    verifyNumericRowsWithTimeout(table,fam,0,key.get(),0,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,key.get(),1,30000);
+    verifyNumericRowsWithTimeout(table,fam,0,key.get(),2,30000);
+  }
+   HTU.getMiniHBaseCluster().startRegionServer();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests the case where if there is some data in the primary region, reopening the region replicas
+ * (enable/disable table, etc) makes the region replicas readable.
+ * @throws IOException
+ */
+@Test(timeout=60000) public void testSecondaryRegionWithNonEmptyRegion() throws IOException {
+  try (Connection connection=ConnectionFactory.createConnection(HTU.getConfiguration());Table table=connection.getTable(htd.getTableName())){
+    HTU.loadNumericRows(table,fam,0,1000);
+    HTU.getHBaseAdmin().disableTable(htd.getTableName());
+    HTU.getHBaseAdmin().enableTable(htd.getTableName());
+    HTU.verifyNumericRows(table,fam,0,1000,1);
+  }
+ }
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,73 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestEntropyFreeNodeBounce (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testBounceAll() throws Exception {
+  final int NUM_PARTICIPANTS=5;
+  final int NUM_PARTITIONS=123;
+  final int NUM_REPLICAS=1;
+  final String RESOURCE_PREFIX="TestDB";
+  final String RESOURCE_NAME=RESOURCE_PREFIX + "0";
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"OnlineOffline",RebalanceMode.FULL_AUTO,true);
+  HelixManager[] participants=new HelixManager[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=createParticipant(clusterName,instanceName);
+    participants[i].connect();
+  }
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  HelixAdmin helixAdmin=new ZKHelixAdmin(_zkclient);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  try {
+    Thread.sleep(1000);
+    boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+    Assert.assertTrue(result);
+    ExternalView stableExternalView=accessor.getProperty(keyBuilder.externalView(RESOURCE_NAME));
+    for (int i=0; i < NUM_PARTICIPANTS; i++) {
+      helixAdmin.enableCluster(clusterName,false);
+      participants[i].disconnect();
+      Thread.sleep(1000);
+      participants[i]=createParticipant(clusterName,participants[i].getInstanceName());
+      participants[i].connect();
+      Thread.sleep(1000);
+      helixAdmin.enableCluster(clusterName,true);
+      Thread.sleep(1000);
+      result=ClusterStateVerifier.verifyByZkCallback(new MatchingExternalViewVerifier(stableExternalView,clusterName,1));
+      if (!result) {
+        ExternalView currentExternalView=accessor.getProperty(keyBuilder.externalView(RESOURCE_NAME));
+        for (        String partition : stableExternalView.getPartitionSet()) {
+          Map<String,String> expect=stableExternalView.getStateMap(partition);
+          Map<String,String> actual=currentExternalView.getStateMap(partition);
+          if (!expect.equals(actual)) {
+            LOG.error(partition + " is moved. expect: " + expect+ ", actual: "+ actual);
+          }
+        }
+      }
+      Assert.assertTrue(result);
+      stableExternalView=accessor.getProperty(keyBuilder.externalView(RESOURCE_NAME));
+    }
+  }
+  finally {
+    controller.syncStop();
+    for (    HelixManager participant : participants) {
+      participant.disconnect();
+    }
+    System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

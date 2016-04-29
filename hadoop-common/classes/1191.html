@@ -1,0 +1,180 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.logaggregation.TestAggregatedLogDeletionService (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testRefreshLogRetentionSettings() throws IOException {
+  long now=System.currentTimeMillis();
+  long before2000Secs=now - (2000 * 1000);
+  long before50Secs=now - (50 * 1000);
+  String root="mockfs://foo/";
+  String remoteRootLogDir=root + "tmp/logs";
+  String suffix="logs";
+  final Configuration conf=new Configuration();
+  conf.setClass("fs.mockfs.impl",MockFileSystem.class,FileSystem.class);
+  conf.set(YarnConfiguration.LOG_AGGREGATION_ENABLED,"true");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_SECONDS,"1800");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_CHECK_INTERVAL_SECONDS,"1");
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,remoteRootLogDir);
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,suffix);
+  Path rootPath=new Path(root);
+  FileSystem rootFs=rootPath.getFileSystem(conf);
+  FileSystem mockFs=((FilterFileSystem)rootFs).getRawFileSystem();
+  Path remoteRootLogPath=new Path(remoteRootLogDir);
+  Path userDir=new Path(remoteRootLogPath,"me");
+  FileStatus userDirStatus=new FileStatus(0,true,0,0,before50Secs,userDir);
+  when(mockFs.listStatus(remoteRootLogPath)).thenReturn(new FileStatus[]{userDirStatus});
+  Path userLogDir=new Path(userDir,suffix);
+  Path app1Dir=new Path(userLogDir,"application_1_1");
+  FileStatus app1DirStatus=new FileStatus(0,true,0,0,before2000Secs,app1Dir);
+  Path app2Dir=new Path(userLogDir,"application_1_2");
+  FileStatus app2DirStatus=new FileStatus(0,true,0,0,before50Secs,app2Dir);
+  when(mockFs.listStatus(userLogDir)).thenReturn(new FileStatus[]{app1DirStatus,app2DirStatus});
+  Path app1Log1=new Path(app1Dir,"host1");
+  FileStatus app1Log1Status=new FileStatus(10,false,1,1,before2000Secs,app1Log1);
+  when(mockFs.listStatus(app1Dir)).thenReturn(new FileStatus[]{app1Log1Status});
+  Path app2Log1=new Path(app2Dir,"host1");
+  FileStatus app2Log1Status=new FileStatus(10,false,1,1,before50Secs,app2Log1);
+  when(mockFs.listStatus(app2Dir)).thenReturn(new FileStatus[]{app2Log1Status});
+  AggregatedLogDeletionService deletionSvc=new AggregatedLogDeletionService(){
+    @Override protected Configuration createConf(){
+      return conf;
+    }
+  }
+;
+  deletionSvc.init(conf);
+  deletionSvc.start();
+  verify(mockFs,timeout(10000)).delete(app1Dir,true);
+  verify(mockFs,timeout(3000).times(0)).delete(app2Dir,true);
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_SECONDS,"50");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_CHECK_INTERVAL_SECONDS,"2");
+  Assert.assertTrue(2000l != deletionSvc.getCheckIntervalMsecs());
+  deletionSvc.refreshLogRetentionSettings();
+  Assert.assertTrue(2000l == deletionSvc.getCheckIntervalMsecs());
+  verify(mockFs,timeout(10000)).delete(app2Dir,true);
+  deletionSvc.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCheckInterval() throws Exception {
+  long RETENTION_SECS=10 * 24 * 3600;
+  long now=System.currentTimeMillis();
+  long toDeleteTime=now - RETENTION_SECS * 1000;
+  String root="mockfs://foo/";
+  String remoteRootLogDir=root + "tmp/logs";
+  String suffix="logs";
+  Configuration conf=new Configuration();
+  conf.setClass("fs.mockfs.impl",MockFileSystem.class,FileSystem.class);
+  conf.set(YarnConfiguration.LOG_AGGREGATION_ENABLED,"true");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_SECONDS,"864000");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_CHECK_INTERVAL_SECONDS,"1");
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,remoteRootLogDir);
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,suffix);
+  FileSystem.closeAll();
+  Path rootPath=new Path(root);
+  FileSystem rootFs=rootPath.getFileSystem(conf);
+  FileSystem mockFs=((FilterFileSystem)rootFs).getRawFileSystem();
+  Path remoteRootLogPath=new Path(remoteRootLogDir);
+  Path userDir=new Path(remoteRootLogPath,"me");
+  FileStatus userDirStatus=new FileStatus(0,true,0,0,now,userDir);
+  when(mockFs.listStatus(remoteRootLogPath)).thenReturn(new FileStatus[]{userDirStatus});
+  Path userLogDir=new Path(userDir,suffix);
+  Path app1Dir=new Path(userLogDir,"application_1_1");
+  FileStatus app1DirStatus=new FileStatus(0,true,0,0,now,app1Dir);
+  when(mockFs.listStatus(userLogDir)).thenReturn(new FileStatus[]{app1DirStatus});
+  Path app1Log1=new Path(app1Dir,"host1");
+  FileStatus app1Log1Status=new FileStatus(10,false,1,1,now,app1Log1);
+  when(mockFs.listStatus(app1Dir)).thenReturn(new FileStatus[]{app1Log1Status});
+  AggregatedLogDeletionService deletionSvc=new AggregatedLogDeletionService();
+  deletionSvc.init(conf);
+  deletionSvc.start();
+  verify(mockFs,timeout(10000).atLeast(4)).listStatus(any(Path.class));
+  verify(mockFs,never()).delete(app1Dir,true);
+  app1DirStatus=new FileStatus(0,true,0,0,toDeleteTime,app1Dir);
+  app1Log1Status=new FileStatus(10,false,1,1,toDeleteTime,app1Log1);
+  when(mockFs.listStatus(userLogDir)).thenReturn(new FileStatus[]{app1DirStatus});
+  when(mockFs.listStatus(app1Dir)).thenReturn(new FileStatus[]{app1Log1Status});
+  verify(mockFs,timeout(10000)).delete(app1Dir,true);
+  deletionSvc.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDeletion() throws Exception {
+  long now=System.currentTimeMillis();
+  long toDeleteTime=now - (2000 * 1000);
+  long toKeepTime=now - (1500 * 1000);
+  String root="mockfs://foo/";
+  String remoteRootLogDir=root + "tmp/logs";
+  String suffix="logs";
+  Configuration conf=new Configuration();
+  conf.setClass("fs.mockfs.impl",MockFileSystem.class,FileSystem.class);
+  conf.set(YarnConfiguration.LOG_AGGREGATION_ENABLED,"true");
+  conf.set(YarnConfiguration.LOG_AGGREGATION_RETAIN_SECONDS,"1800");
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,remoteRootLogDir);
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,suffix);
+  Path rootPath=new Path(root);
+  FileSystem rootFs=rootPath.getFileSystem(conf);
+  FileSystem mockFs=((FilterFileSystem)rootFs).getRawFileSystem();
+  Path remoteRootLogPath=new Path(remoteRootLogDir);
+  Path userDir=new Path(remoteRootLogPath,"me");
+  FileStatus userDirStatus=new FileStatus(0,true,0,0,toKeepTime,userDir);
+  when(mockFs.listStatus(remoteRootLogPath)).thenReturn(new FileStatus[]{userDirStatus});
+  Path userLogDir=new Path(userDir,suffix);
+  Path app1Dir=new Path(userLogDir,"application_1_1");
+  FileStatus app1DirStatus=new FileStatus(0,true,0,0,toDeleteTime,app1Dir);
+  Path app2Dir=new Path(userLogDir,"application_1_2");
+  FileStatus app2DirStatus=new FileStatus(0,true,0,0,toDeleteTime,app2Dir);
+  Path app3Dir=new Path(userLogDir,"application_1_3");
+  FileStatus app3DirStatus=new FileStatus(0,true,0,0,toDeleteTime,app3Dir);
+  Path app4Dir=new Path(userLogDir,"application_1_4");
+  FileStatus app4DirStatus=new FileStatus(0,true,0,0,toDeleteTime,app4Dir);
+  when(mockFs.listStatus(userLogDir)).thenReturn(new FileStatus[]{app1DirStatus,app2DirStatus,app3DirStatus,app4DirStatus});
+  when(mockFs.listStatus(app1Dir)).thenReturn(new FileStatus[]{});
+  Path app2Log1=new Path(app2Dir,"host1");
+  FileStatus app2Log1Status=new FileStatus(10,false,1,1,toDeleteTime,app2Log1);
+  Path app2Log2=new Path(app2Dir,"host2");
+  FileStatus app2Log2Status=new FileStatus(10,false,1,1,toKeepTime,app2Log2);
+  when(mockFs.listStatus(app2Dir)).thenReturn(new FileStatus[]{app2Log1Status,app2Log2Status});
+  Path app3Log1=new Path(app3Dir,"host1");
+  FileStatus app3Log1Status=new FileStatus(10,false,1,1,toDeleteTime,app3Log1);
+  Path app3Log2=new Path(app3Dir,"host2");
+  FileStatus app3Log2Status=new FileStatus(10,false,1,1,toDeleteTime,app3Log2);
+  when(mockFs.delete(app3Dir,true)).thenThrow(new AccessControlException("Injected Error\nStack Trace :("));
+  when(mockFs.listStatus(app3Dir)).thenReturn(new FileStatus[]{app3Log1Status,app3Log2Status});
+  Path app4Log1=new Path(app4Dir,"host1");
+  FileStatus app4Log1Status=new FileStatus(10,false,1,1,toDeleteTime,app4Log1);
+  Path app4Log2=new Path(app4Dir,"host2");
+  FileStatus app4Log2Status=new FileStatus(10,false,1,1,toDeleteTime,app4Log2);
+  when(mockFs.listStatus(app4Dir)).thenReturn(new FileStatus[]{app4Log1Status,app4Log2Status});
+  AggregatedLogDeletionService.LogDeletionTask task=new AggregatedLogDeletionService.LogDeletionTask(conf,1800);
+  task.run();
+  verify(mockFs).delete(app1Dir,true);
+  verify(mockFs,times(0)).delete(app2Dir,true);
+  verify(mockFs).delete(app3Dir,true);
+  verify(mockFs).delete(app4Dir,true);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void closeFilesystems() throws IOException {
+  FileSystem.closeAll();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

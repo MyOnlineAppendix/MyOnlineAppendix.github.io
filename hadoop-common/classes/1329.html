@@ -1,0 +1,86 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.security.TestRMDelegationTokens (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=15000) public void testRMDTMasterKeyStateOnRollingMasterKey() throws Exception {
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  RMState rmState=memStore.getState();
+  Map<RMDelegationTokenIdentifier,Long> rmDTState=rmState.getRMDTSecretManagerState().getTokenState();
+  Set<DelegationKey> rmDTMasterKeyState=rmState.getRMDTSecretManagerState().getMasterKeyState();
+  MockRM rm1=new MyMockRM(conf,memStore);
+  rm1.start();
+  RMDelegationTokenSecretManager dtSecretManager=rm1.getRMContext().getRMDelegationTokenSecretManager();
+  Assert.assertEquals(dtSecretManager.getAllMasterKeys(),rmDTMasterKeyState);
+  Set<DelegationKey> expiringKeys=new HashSet<DelegationKey>();
+  expiringKeys.addAll(dtSecretManager.getAllMasterKeys());
+  GetDelegationTokenRequest request=mock(GetDelegationTokenRequest.class);
+  when(request.getRenewer()).thenReturn("renewer1");
+  GetDelegationTokenResponse response=rm1.getClientRMService().getDelegationToken(request);
+  org.apache.hadoop.yarn.api.records.Token delegationToken=response.getRMDelegationToken();
+  Token<RMDelegationTokenIdentifier> token1=ConverterUtils.convertFromYarn(delegationToken,(Text)null);
+  RMDelegationTokenIdentifier dtId1=token1.decodeIdentifier();
+  while (((TestRMDelegationTokenSecretManager)dtSecretManager).numUpdatedKeys.get() < 3) {
+    ((TestRMDelegationTokenSecretManager)dtSecretManager).checkCurrentKeyInStateStore(rmDTMasterKeyState);
+    Thread.sleep(100);
+  }
+  int count=0;
+  while (rmDTState.containsKey(dtId1) && count < 100) {
+    Thread.sleep(100);
+    count++;
+  }
+  rm1.stop();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup(){
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  ExitUtil.disableSystemExit();
+  conf=new YarnConfiguration();
+  UserGroupInformation.setConfiguration(conf);
+  conf.set(YarnConfiguration.RM_STORE,MemoryRMStateStore.class.getName());
+  conf.set(YarnConfiguration.RM_SCHEDULER,FairScheduler.class.getName());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=15000) public void testRemoveExpiredMasterKeyInRMStateStore() throws Exception {
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  RMState rmState=memStore.getState();
+  Set<DelegationKey> rmDTMasterKeyState=rmState.getRMDTSecretManagerState().getMasterKeyState();
+  MockRM rm1=new MyMockRM(conf,memStore);
+  rm1.start();
+  RMDelegationTokenSecretManager dtSecretManager=rm1.getRMContext().getRMDelegationTokenSecretManager();
+  Assert.assertEquals(dtSecretManager.getAllMasterKeys(),rmDTMasterKeyState);
+  Set<DelegationKey> expiringKeys=new HashSet<DelegationKey>();
+  expiringKeys.addAll(dtSecretManager.getAllMasterKeys());
+  while (true) {
+    boolean allExpired=true;
+    for (    DelegationKey key : expiringKeys) {
+      if (rmDTMasterKeyState.contains(key)) {
+        allExpired=false;
+      }
+    }
+    if (allExpired)     break;
+    Thread.sleep(500);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,73 @@
+<h3 style="margin:0px">Class: org.apache.karaf.shell.security.impl.SecuredCommandProcessorImplTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-3 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCommandProcessor() throws Exception {
+  ThreadIO tio=EasyMock.createMock(ThreadIO.class);
+  EasyMock.replay(tio);
+  @SuppressWarnings("unchecked") ServiceReference<ThreadIO> tioRef=EasyMock.createMock(ServiceReference.class);
+  EasyMock.replay(tioRef);
+  final BundleContext bc=EasyMock.createMock(BundleContext.class);
+  EasyMock.expect(bc.getServiceReference(ThreadIO.class)).andReturn(tioRef).anyTimes();
+  EasyMock.expect(bc.getService(tioRef)).andReturn(tio).anyTimes();
+  EasyMock.expect(bc.createFilter(EasyMock.isA(String.class))).andAnswer(new IAnswer<Filter>(){
+    @Override public Filter answer() throws Throwable {
+      return FrameworkUtil.createFilter((String)EasyMock.getCurrentArguments()[0]);
+    }
+  }
+).anyTimes();
+  EasyMock.expect(bc.getServiceReferences((String)EasyMock.anyObject(),(String)EasyMock.anyObject())).andReturn(null).anyTimes();
+  final Map<String,ServiceListener> listeners=new HashMap<String,ServiceListener>();
+  final String commandFilter="(&(osgi.command.scope=*)(osgi.command.function=*)" + "(|(org.apache.karaf.service.guard.roles=aaabbbccc)(!(org.apache.karaf.service.guard.roles=*))))";
+  expectServiceTracker(bc,commandFilter,listeners);
+  expectServiceTracker(bc,"(objectClass=" + Converter.class.getName() + ")",listeners);
+  expectServiceTracker(bc,"(objectClass=" + CommandSessionListener.class.getName() + ")",listeners);
+  EasyMock.replay(bc);
+  Subject subject=new Subject();
+  subject.getPrincipals().add(new RolePrincipal("aaabbbccc"));
+  Subject.doAs(subject,new PrivilegedAction(){
+    @Override public Object run(){
+      MySecuredCommandProcessorImpl scp=new MySecuredCommandProcessorImpl(bc){
+      }
+;
+      assertEquals(3,scp.getCommands().size());
+      assertTrue(scp.getCommands().contains("osgi:addcommand"));
+      assertTrue(scp.getCommands().contains("osgi:removecommand"));
+      assertTrue(scp.getCommands().contains("osgi:eval"));
+      assertEquals(1,scp.getConstants().size());
+      assertEquals(bc,scp.getConstants().get(".context"));
+      ServiceListener commandListener=listeners.get(commandFilter);
+      ServiceReference<?> cdRef=EasyMock.createMock(ServiceReference.class);
+      EasyMock.expect(cdRef.getProperty(CommandProcessor.COMMAND_SCOPE)).andReturn("foo");
+      EasyMock.expect(cdRef.getProperty(CommandProcessor.COMMAND_FUNCTION)).andReturn("bar");
+      EasyMock.replay(cdRef);
+      ServiceEvent event=new ServiceEvent(ServiceEvent.REGISTERED,cdRef);
+      commandListener.serviceChanged(event);
+      assertEquals(4,scp.getCommands().size());
+      assertTrue(scp.getCommands().contains("foo:bar"));
+      ServiceReference<?> cd2Ref=EasyMock.createMock(ServiceReference.class);
+      EasyMock.expect(cd2Ref.getProperty(CommandProcessor.COMMAND_SCOPE)).andReturn("xxx");
+      EasyMock.expect(cd2Ref.getProperty(CommandProcessor.COMMAND_FUNCTION)).andReturn(new String[]{"aaa","bbb"});
+      EasyMock.replay(cd2Ref);
+      ServiceEvent event2=new ServiceEvent(ServiceEvent.REGISTERED,cd2Ref);
+      commandListener.serviceChanged(event2);
+      assertEquals(6,scp.getCommands().size());
+      assertTrue(scp.getCommands().contains("xxx:aaa"));
+      assertTrue(scp.getCommands().contains("xxx:bbb"));
+      return null;
+    }
+  }
+);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

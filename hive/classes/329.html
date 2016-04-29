@@ -1,0 +1,412 @@
+<h3 style="margin:0px">Class: org.apache.hive.hcatalog.api.repl.commands.TestCommands (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBasicReplEximCommands() throws IOException, CommandNeedRetryException {
+  int evid=111;
+  String exportLocation=TEST_PATH + File.separator + "testBasicReplExim";
+  Path tempPath=new Path(TEST_PATH,"testBasicReplEximTmp");
+  String tempLocation=tempPath.toUri().getPath();
+  String dbName="exim";
+  String tableName="basicSrc";
+  String importedTableName="basicDst";
+  List<HCatFieldSchema> cols=HCatSchemaUtils.getHCatSchema("b:string").getFields();
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  HCatTable table=(new HCatTable(dbName,tableName)).cols(cols).fileFormat("textfile");
+  client.createTable(HCatCreateTableDesc.create(table).build());
+  HCatTable t=client.getTable(dbName,tableName);
+  assertNotNull(t);
+  String[] data=new String[]{"eleven","twelve"};
+  HcatTestUtils.createTestDataFile(tempLocation,data);
+  CommandProcessorResponse ret=driver.run("LOAD DATA LOCAL INPATH '" + tempLocation + "' OVERWRITE INTO TABLE "+ dbName+ "."+ tableName);
+  assertEquals(ret.getResponseCode() + ":" + ret.getErrorMessage(),null,ret.getException());
+  CommandProcessorResponse selectRet=driver.run("SELECT * from " + dbName + "."+ tableName);
+  assertEquals(selectRet.getResponseCode() + ":" + selectRet.getErrorMessage(),null,selectRet.getException());
+  List<String> values=new ArrayList<String>();
+  driver.getResults(values);
+  assertEquals(2,values.size());
+  assertEquals(data[0],values.get(0));
+  assertEquals(data[1],values.get(1));
+  ExportCommand exportCmd=new ExportCommand(dbName,tableName,null,exportLocation,false,evid);
+  LOG.info("About to run :" + exportCmd.get().get(0));
+  CommandProcessorResponse ret2=driver.run(exportCmd.get().get(0));
+  assertEquals(ret2.getResponseCode() + ":" + ret2.getErrorMessage(),null,ret2.getException());
+  List<String> exportPaths=exportCmd.cleanupLocationsAfterEvent();
+  assertEquals(1,exportPaths.size());
+  String metadata=getMetadataContents(exportPaths.get(0));
+  LOG.info("Export returned the following _metadata contents:");
+  LOG.info(metadata);
+  assertTrue(metadata + "did not match \"repl.scope\"=\"all\"",metadata.matches(".*\"repl.scope\":\"all\".*"));
+  assertTrue(metadata + "has \"repl.last.id\"",metadata.matches(".*\"repl.last.id\":.*"));
+  ImportCommand importCmd=new ImportCommand(dbName,importedTableName,null,exportLocation,false,evid);
+  LOG.info("About to run :" + importCmd.get().get(0));
+  CommandProcessorResponse ret3=driver.run(importCmd.get().get(0));
+  assertEquals(ret3.getResponseCode() + ":" + ret3.getErrorMessage(),null,ret3.getException());
+  CommandProcessorResponse selectRet2=driver.run("SELECT * from " + dbName + "."+ importedTableName);
+  assertEquals(selectRet2.getResponseCode() + ":" + selectRet2.getErrorMessage(),null,selectRet2.getException());
+  List<String> values2=new ArrayList<String>();
+  driver.getResults(values2);
+  assertEquals(2,values2.size());
+  assertEquals(data[0],values2.get(0));
+  assertEquals(data[1],values2.get(1));
+  HCatTable importedTable=client.getTable(dbName,importedTableName);
+  assertNotNull(importedTable);
+  assertTrue(importedTable.getTblProps().containsKey("repl.last.id"));
+}
+
+</code></pre>
+
+<pre class="type-11 type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNoopReplEximCommands() throws CommandNeedRetryException, IOException {
+  int evid=333;
+  String exportLocation=TEST_PATH + File.separator + "testNoopReplExim";
+  String dbName="doesNotExist" + System.currentTimeMillis();
+  String tableName="nope" + System.currentTimeMillis();
+  ExportCommand noopExportCmd=new ExportCommand(dbName,tableName,null,exportLocation,false,evid);
+  LOG.info("About to run :" + noopExportCmd.get().get(0));
+  CommandProcessorResponse ret=driver.run(noopExportCmd.get().get(0));
+  assertEquals(ret.getResponseCode() + ":" + ret.getErrorMessage(),null,ret.getException());
+  List<String> exportPaths=noopExportCmd.cleanupLocationsAfterEvent();
+  assertEquals(1,exportPaths.size());
+  String metadata=getMetadataContents(exportPaths.get(0));
+  LOG.info("Export returned the following _metadata contents:");
+  LOG.info(metadata);
+  assertTrue(metadata + "did not match \"repl.noop\"=\"true\"",metadata.matches(".*\"repl.noop\":\"true\".*"));
+  ImportCommand noopImportCmd=new ImportCommand(dbName,tableName,null,exportLocation,false,evid);
+  LOG.info("About to run :" + noopImportCmd.get().get(0));
+  CommandProcessorResponse ret2=driver.run(noopImportCmd.get().get(0));
+  assertEquals(ret2.getResponseCode() + ":" + ret2.getErrorMessage(),null,ret2.getException());
+  Exception onfe=null;
+  try {
+    HCatDatabase d_doesNotExist=client.getDatabase(dbName);
+  }
+ catch (  Exception e) {
+    onfe=e;
+  }
+  assertNotNull(onfe);
+  assertTrue(onfe instanceof ObjectNotFoundException);
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDropTableCommand() throws HCatException, CommandNeedRetryException {
+  String dbName="cmd_testdb";
+  String tableName="cmd_testtable";
+  int evid=789;
+  List<HCatFieldSchema> cols=HCatSchemaUtils.getHCatSchema("a:int,b:string").getFields();
+  Command testReplicatedDropCmd=new DropTableCommand(dbName,tableName,true,evid);
+  assertEquals(evid,testReplicatedDropCmd.getEventId());
+  assertEquals(1,testReplicatedDropCmd.get().size());
+  assertEquals(true,testReplicatedDropCmd.isRetriable());
+  assertEquals(false,testReplicatedDropCmd.isUndoable());
+  CommandTestUtils.testCommandSerialization(testReplicatedDropCmd);
+  Command testNormalDropCmd=new DropTableCommand(dbName,tableName,false,evid);
+  assertEquals(evid,testNormalDropCmd.getEventId());
+  assertEquals(1,testNormalDropCmd.get().size());
+  assertEquals(true,testNormalDropCmd.isRetriable());
+  assertEquals(false,testNormalDropCmd.isUndoable());
+  CommandTestUtils.testCommandSerialization(testNormalDropCmd);
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  Map<String,String> tprops=new HashMap<String,String>();
+  tprops.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid + 5));
+  HCatTable tableToCreate=(new HCatTable(dbName,tableName)).tblProps(tprops).cols(cols);
+  client.createTable(HCatCreateTableDesc.create(tableToCreate).build());
+  HCatTable t1=client.getTable(dbName,tableName);
+  assertNotNull(t1);
+  LOG.info("About to run :" + testReplicatedDropCmd.get().get(0));
+  driver.run(testReplicatedDropCmd.get().get(0));
+  HCatTable t2=client.getTable(dbName,tableName);
+  assertNotNull(t2);
+  LOG.info("About to run :" + testNormalDropCmd.get().get(0));
+  driver.run(testNormalDropCmd.get().get(0));
+  Exception onfe=null;
+  try {
+    HCatTable t_del=client.getTable(dbName,tableName);
+  }
+ catch (  Exception e) {
+    onfe=e;
+  }
+  assertNotNull(onfe);
+  assertTrue(onfe instanceof ObjectNotFoundException);
+  Map<String,String> tprops2=new HashMap<String,String>();
+  tprops2.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid - 5));
+  HCatTable tableToCreate2=(new HCatTable(dbName,tableName)).tblProps(tprops2).cols(cols);
+  client.createTable(HCatCreateTableDesc.create(tableToCreate2).build());
+  HCatTable t3=client.getTable(dbName,tableName);
+  assertNotNull(t3);
+  LOG.info("About to run :" + testReplicatedDropCmd.get().get(0));
+  driver.run(testReplicatedDropCmd.get().get(0));
+  Exception onfe2=null;
+  try {
+    HCatTable t_del=client.getTable(dbName,tableName);
+  }
+ catch (  Exception e) {
+    onfe2=e;
+  }
+  assertNotNull(onfe2);
+  assertTrue(onfe2 instanceof ObjectNotFoundException);
+}
+
+</code></pre>
+
+<pre class="type-11 type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMetadataReplEximCommands() throws IOException, CommandNeedRetryException {
+  int evid=222;
+  String exportLocation=TEST_PATH + File.separator + "testMetadataReplExim";
+  Path tempPath=new Path(TEST_PATH,"testMetadataReplEximTmp");
+  String tempLocation=tempPath.toUri().getPath();
+  String dbName="exim";
+  String tableName="basicSrc";
+  String importedTableName="basicDst";
+  List<HCatFieldSchema> cols=HCatSchemaUtils.getHCatSchema("b:string").getFields();
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  HCatTable table=(new HCatTable(dbName,tableName)).cols(cols).fileFormat("textfile");
+  client.createTable(HCatCreateTableDesc.create(table).build());
+  HCatTable t=client.getTable(dbName,tableName);
+  assertNotNull(t);
+  String[] data=new String[]{"eleven","twelve"};
+  HcatTestUtils.createTestDataFile(tempLocation,data);
+  CommandProcessorResponse ret=driver.run("LOAD DATA LOCAL INPATH '" + tempLocation + "' OVERWRITE INTO TABLE "+ dbName+ "."+ tableName);
+  assertEquals(ret.getResponseCode() + ":" + ret.getErrorMessage(),null,ret.getException());
+  CommandProcessorResponse selectRet=driver.run("SELECT * from " + dbName + "."+ tableName);
+  assertEquals(selectRet.getResponseCode() + ":" + selectRet.getErrorMessage(),null,selectRet.getException());
+  List<String> values=new ArrayList<String>();
+  driver.getResults(values);
+  assertEquals(2,values.size());
+  assertEquals(data[0],values.get(0));
+  assertEquals(data[1],values.get(1));
+  ExportCommand exportMdCmd=new ExportCommand(dbName,tableName,null,exportLocation,true,evid);
+  LOG.info("About to run :" + exportMdCmd.get().get(0));
+  CommandProcessorResponse ret2=driver.run(exportMdCmd.get().get(0));
+  assertEquals(ret2.getResponseCode() + ":" + ret2.getErrorMessage(),null,ret2.getException());
+  List<String> exportPaths=exportMdCmd.cleanupLocationsAfterEvent();
+  assertEquals(1,exportPaths.size());
+  String metadata=getMetadataContents(exportPaths.get(0));
+  LOG.info("Export returned the following _metadata contents:");
+  LOG.info(metadata);
+  assertTrue(metadata + "did not match \"repl.scope\"=\"metadata\"",metadata.matches(".*\"repl.scope\":\"metadata\".*"));
+  assertTrue(metadata + "has \"repl.last.id\"",metadata.matches(".*\"repl.last.id\":.*"));
+  ImportCommand importMdCmd=new ImportCommand(dbName,importedTableName,null,exportLocation,true,evid);
+  LOG.info("About to run :" + importMdCmd.get().get(0));
+  CommandProcessorResponse ret3=driver.run(importMdCmd.get().get(0));
+  assertEquals(ret3.getResponseCode() + ":" + ret3.getErrorMessage(),null,ret3.getException());
+  CommandProcessorResponse selectRet2=driver.run("SELECT * from " + dbName + "."+ importedTableName);
+  assertEquals(selectRet2.getResponseCode() + ":" + selectRet2.getErrorMessage(),null,selectRet2.getException());
+  List<String> values2=new ArrayList<String>();
+  driver.getResults(values2);
+  assertEquals(0,values2.size());
+  HCatTable importedTable=client.getTable(dbName,importedTableName);
+  assertNotNull(importedTable);
+  assertTrue(importedTable.getTblProps().containsKey("repl.last.id"));
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TestHCatClient.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDropTableCommand2() throws HCatException, CommandNeedRetryException, MetaException {
+  String dbName="cmd_testdb";
+  String tableName="cmd_testtable";
+  int evid=157;
+  List<HCatFieldSchema> pcols=HCatSchemaUtils.getHCatSchema("b:string").getFields();
+  List<HCatFieldSchema> cols=HCatSchemaUtils.getHCatSchema("a:int").getFields();
+  Command testReplicatedDropCmd=new DropTableCommand(dbName,tableName,true,evid);
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  Map<String,String> tprops=new HashMap<String,String>();
+  tprops.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid + 2));
+  HCatTable table=(new HCatTable(dbName,tableName)).tblProps(tprops).cols(cols).partCols(pcols);
+  client.createTable(HCatCreateTableDesc.create(table).build());
+  HCatTable tableCreated=client.getTable(dbName,tableName);
+  assertNotNull(tableCreated);
+  Map<String,String> ptnDesc1=new HashMap<String,String>();
+  ptnDesc1.put("b","test-older");
+  Map<String,String> props1=new HashMap<String,String>();
+  props1.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid - 5));
+  HCatPartition ptnToAdd1=(new HCatPartition(tableCreated,ptnDesc1,TestHCatClient.makePartLocation(tableCreated,ptnDesc1))).parameters(props1);
+  client.addPartition(HCatAddPartitionDesc.create(ptnToAdd1).build());
+  Map<String,String> ptnDesc2=new HashMap<String,String>();
+  ptnDesc2.put("b","test-newer");
+  Map<String,String> props2=new HashMap<String,String>();
+  props2.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid + 5));
+  HCatPartition ptnToAdd2=(new HCatPartition(tableCreated,ptnDesc2,TestHCatClient.makePartLocation(tableCreated,ptnDesc2))).parameters(props2);
+  client.addPartition(HCatAddPartitionDesc.create(ptnToAdd2).build());
+  HCatPartition p1=client.getPartition(dbName,tableName,ptnDesc1);
+  assertNotNull(p1);
+  HCatPartition p2=client.getPartition(dbName,tableName,ptnDesc2);
+  assertNotNull(p2);
+  LOG.info("About to run :" + testReplicatedDropCmd.get().get(0));
+  driver.run(testReplicatedDropCmd.get().get(0));
+  HCatTable t_stillExists=client.getTable(dbName,tableName);
+  assertNotNull(t_stillExists);
+  HCatPartition p2_stillExists=client.getPartition(dbName,tableName,ptnDesc2);
+  Exception onfe=null;
+  try {
+    HCatPartition p1_del=client.getPartition(dbName,tableName,ptnDesc1);
+  }
+ catch (  Exception e) {
+    onfe=e;
+  }
+  assertNotNull(onfe);
+  assertTrue(onfe instanceof ObjectNotFoundException);
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDropDatabaseCommand() throws HCatException, CommandNeedRetryException {
+  String dbName="cmd_testdb";
+  int evid=999;
+  Command testCmd=new DropDatabaseCommand(dbName,evid);
+  assertEquals(evid,testCmd.getEventId());
+  assertEquals(1,testCmd.get().size());
+  assertEquals(true,testCmd.isRetriable());
+  assertEquals(false,testCmd.isUndoable());
+  CommandTestUtils.testCommandSerialization(testCmd);
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  HCatDatabase db=client.getDatabase(dbName);
+  assertNotNull(db);
+  LOG.info("About to run :" + testCmd.get().get(0));
+  driver.run(testCmd.get().get(0));
+  Exception onfe=null;
+  try {
+    HCatDatabase db_del=client.getDatabase(dbName);
+  }
+ catch (  Exception e) {
+    onfe=e;
+  }
+  assertNotNull(onfe);
+  assertTrue(onfe instanceof ObjectNotFoundException);
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDropPartitionCommand() throws HCatException, CommandNeedRetryException, MetaException {
+  String dbName="cmd_testdb";
+  String tableName="cmd_testtable";
+  int evid=789;
+  List<HCatFieldSchema> pcols=HCatSchemaUtils.getHCatSchema("b:string").getFields();
+  List<HCatFieldSchema> cols=HCatSchemaUtils.getHCatSchema("a:int").getFields();
+  Map<String,String> ptnDesc=new HashMap<String,String>();
+  ptnDesc.put("b","test");
+  Command testReplicatedDropPtnCmd=new DropPartitionCommand(dbName,tableName,ptnDesc,true,evid);
+  assertEquals(evid,testReplicatedDropPtnCmd.getEventId());
+  assertEquals(1,testReplicatedDropPtnCmd.get().size());
+  assertEquals(true,testReplicatedDropPtnCmd.isRetriable());
+  assertEquals(false,testReplicatedDropPtnCmd.isUndoable());
+  CommandTestUtils.testCommandSerialization(testReplicatedDropPtnCmd);
+  Command testNormalDropPtnCmd=new DropPartitionCommand(dbName,tableName,ptnDesc,false,evid);
+  assertEquals(evid,testNormalDropPtnCmd.getEventId());
+  assertEquals(1,testNormalDropPtnCmd.get().size());
+  assertEquals(true,testNormalDropPtnCmd.isRetriable());
+  assertEquals(false,testNormalDropPtnCmd.isUndoable());
+  CommandTestUtils.testCommandSerialization(testNormalDropPtnCmd);
+  client.dropDatabase(dbName,true,HCatClient.DropDBMode.CASCADE);
+  client.createDatabase(HCatCreateDBDesc.create(dbName).ifNotExists(false).build());
+  Map<String,String> props=new HashMap<String,String>();
+  props.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid + 5));
+  HCatTable table=(new HCatTable(dbName,tableName)).tblProps(props).cols(cols).partCols(pcols);
+  client.createTable(HCatCreateTableDesc.create(table).build());
+  HCatTable tableCreated=client.getTable(dbName,tableName);
+  assertNotNull(tableCreated);
+  HCatPartition ptnToAdd=(new HCatPartition(tableCreated,ptnDesc,TestHCatClient.makePartLocation(tableCreated,ptnDesc))).parameters(props);
+  client.addPartition(HCatAddPartitionDesc.create(ptnToAdd).build());
+  HCatPartition p1=client.getPartition(dbName,tableName,ptnDesc);
+  assertNotNull(p1);
+  LOG.info("About to run :" + testReplicatedDropPtnCmd.get().get(0));
+  driver.run(testReplicatedDropPtnCmd.get().get(0));
+  HCatPartition p2=client.getPartition(dbName,tableName,ptnDesc);
+  assertNotNull(p2);
+  LOG.info("About to run :" + testNormalDropPtnCmd.get().get(0));
+  driver.run(testNormalDropPtnCmd.get().get(0));
+  Exception onfe=null;
+  try {
+    HCatPartition p_del=client.getPartition(dbName,tableName,ptnDesc);
+  }
+ catch (  Exception e) {
+    onfe=e;
+  }
+  assertNotNull(onfe);
+  assertTrue(onfe instanceof ObjectNotFoundException);
+  Map<String,String> props2=new HashMap<String,String>();
+  props2.put(ReplicationUtils.REPL_STATE_ID,String.valueOf(evid - 5));
+  HCatPartition ptnToAdd2=(new HCatPartition(tableCreated,ptnDesc,TestHCatClient.makePartLocation(tableCreated,ptnDesc))).parameters(props2);
+  client.addPartition(HCatAddPartitionDesc.create(ptnToAdd2).build());
+  HCatPartition p3=client.getPartition(dbName,tableName,ptnDesc);
+  assertNotNull(p3);
+  LOG.info("About to run :" + testReplicatedDropPtnCmd.get().get(0));
+  driver.run(testReplicatedDropPtnCmd.get().get(0));
+  Exception onfe2=null;
+  try {
+    HCatPartition p_del=client.getPartition(dbName,tableName,ptnDesc);
+  }
+ catch (  Exception e) {
+    onfe2=e;
+  }
+  assertNotNull(onfe2);
+  assertTrue(onfe2 instanceof ObjectNotFoundException);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

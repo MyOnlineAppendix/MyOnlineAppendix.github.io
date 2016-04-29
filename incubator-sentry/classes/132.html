@@ -1,0 +1,116 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.dbprovider.TestPrivilegeWithGrantOption (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test privileges with grant on parent objects are sufficient for operation
+ * on child objects
+ * @throws Exception
+ */
+@Test public void testImpliedPrivilegesWithGrant() throws Exception {
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS db_1 CASCADE");
+  statement.execute("CREATE DATABASE db_1");
+  statement.execute("CREATE ROLE role1");
+  statement.execute("GRANT ALL ON DATABASE db_1 TO ROLE role1 WITH GRANT OPTION");
+  statement.execute("GRANT ROLE role1 TO GROUP " + USERGROUP1);
+  statement.execute("CREATE ROLE role2");
+  statement.execute("GRANT ROLE role2 TO GROUP " + USERGROUP2);
+  statement.execute("CREATE ROLE role3_1");
+  statement.execute("GRANT ROLE role3_1 TO GROUP " + USERGROUP3);
+  statement.execute("CREATE ROLE role3_2");
+  statement.execute("GRANT ROLE role3_2 TO GROUP " + USERGROUP3);
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE db_1");
+  statement.execute("CREATE TABLE foo (id int)");
+  statement.execute("GRANT ALL ON TABLE foo TO ROLE role2");
+  statement.execute("GRANT SELECT ON DATABASE db_1 TO ROLE role3_1");
+  statement.execute("GRANT INSERT ON TABLE foo TO ROLE role3_2");
+  connection.close();
+  connection=context.createConnection(USER2_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE db_1");
+  runSQLWithError(statement,"GRANT ALL ON TABLE foo TO ROLE role3_2",HiveOperation.GRANT_PRIVILEGE,null,null,true);
+  connection.close();
+  connection=context.createConnection(ADMIN1);
+  statement=context.createStatement(connection);
+  statement.execute("use db_1");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role2 ON TABLE foo",SHOW_GRANT_ROLE_TABLE_POSITION,"foo");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role3_1 ON DATABASE db_1",SHOW_GRANT_ROLE_DB_POSITION,"db_1");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role3_2 ON TABLE foo",SHOW_GRANT_ROLE_TABLE_POSITION,"foo");
+  verifySingleGrantWithGrantOption(statement,"show grant role role1",SHOW_GRANT_ROLE_WITH_GRANT_POSITION,"true");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role1 ON DATABASE db_1",SHOW_GRANT_ROLE_WITH_GRANT_POSITION,"true");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role1 ON TABLE foo",SHOW_GRANT_ROLE_WITH_GRANT_POSITION,"true");
+  verifySingleGrantWithGrantOption(statement,"show grant role role2",SHOW_GRANT_ROLE_WITH_GRANT_POSITION,"false");
+  verifySingleGrantWithGrantOption(statement,"SHOW GRANT ROLE role2 ON TABLE foo",SHOW_GRANT_ROLE_WITH_GRANT_POSITION,"false");
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOnGrantPrivilege() throws Exception {
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS db_1 CASCADE");
+  statement.execute("DROP DATABASE IF EXISTS db_2 CASCADE");
+  statement.execute("CREATE DATABASE db_1");
+  statement.execute("CREATE ROLE group1_role");
+  statement.execute("GRANT ALL ON DATABASE db_1 TO ROLE group1_role");
+  statement.execute("GRANT ROLE group1_role TO GROUP " + USERGROUP1);
+  statement.execute("CREATE ROLE group3_grant_role");
+  statement.execute("GRANT ALL ON DATABASE db_1 TO ROLE group3_grant_role WITH GRANT OPTION");
+  statement.execute("GRANT ROLE group3_grant_role TO GROUP " + USERGROUP3);
+  statement.execute("CREATE ROLE group2_role");
+  statement.execute("GRANT ROLE group2_role TO GROUP " + USERGROUP2);
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE db_1");
+  statement.execute("CREATE TABLE foo (id int)");
+  runSQLWithError(statement,"GRANT ALL ON DATABASE db_1 TO ROLE group2_role",HiveOperation.GRANT_PRIVILEGE,null,null,true);
+  runSQLWithError(statement,"GRANT ALL ON DATABASE db_1 TO ROLE group2_role WITH GRANT OPTION",HiveOperation.GRANT_PRIVILEGE,null,null,true);
+  connection.close();
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("GRANT ALL ON DATABASE db_1 TO ROLE group2_role");
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  runSQLWithError(statement,"REVOKE ALL ON Database db_1 FROM ROLE admin_role",HiveOperation.REVOKE_PRIVILEGE,null,null,true);
+  runSQLWithError(statement,"REVOKE ALL ON Database db_1 FROM ROLE group2_role",HiveOperation.REVOKE_PRIVILEGE,null,null,true);
+  runSQLWithError(statement,"REVOKE ALL ON Database db_1 FROM ROLE group3_grant_role",HiveOperation.REVOKE_PRIVILEGE,null,null,true);
+  connection.close();
+  connection=context.createConnection(USER3_1);
+  statement=context.createStatement(connection);
+  statement.execute("REVOKE ALL ON Database db_1 FROM ROLE group2_role");
+  statement.execute("REVOKE ALL ON Database db_1 FROM ROLE group3_grant_role");
+  runSQLWithError(statement,"REVOKE ALL ON Database db_1 FROM ROLE group1_role",HiveOperation.REVOKE_PRIVILEGE,null,null,true);
+  connection.close();
+  context.close();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before public void setup() throws Exception {
+  DummySentryOnFailureHook.invoked=false;
+  super.setupAdmin();
+  super.setup();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

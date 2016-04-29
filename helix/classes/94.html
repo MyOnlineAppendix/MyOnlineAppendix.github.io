@@ -1,0 +1,85 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestReelectedPipelineCorrectness (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-14 type-5 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReelection() throws Exception {
+  final int NUM_CONTROLLERS=2;
+  final int NUM_PARTICIPANTS=4;
+  final int NUM_PARTITIONS=8;
+  final int NUM_REPLICAS=2;
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,NUM_PARTITIONS,NUM_PARTICIPANTS,NUM_REPLICAS,"MasterSlave",RebalanceMode.FULL_AUTO,true);
+  String controllerCluster=clusterName + "_controllers";
+  _setupTool.addCluster(controllerCluster,true);
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    _setupTool.addInstanceToCluster(controllerCluster,"controller_" + i);
+  }
+  _setupTool.activateCluster(clusterName,controllerCluster,true);
+  MockParticipant[] participants=new MockParticipant[NUM_PARTICIPANTS];
+  for (int i=0; i < NUM_PARTICIPANTS; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    participants[i].syncStart();
+  }
+  MockMultiClusterController[] controllers=new MockMultiClusterController[NUM_CONTROLLERS];
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    controllers[i]=new MockMultiClusterController(_zkaddr,controllerCluster,"controller_" + i);
+    controllers[i].syncStart();
+  }
+  Thread.sleep(1000);
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  HelixDataAccessor accessor=participants[0].getHelixDataAccessor();
+  LiveInstance leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  int totalWait=0;
+  while (leader == null && totalWait < CHECK_TIMEOUT) {
+    Thread.sleep(CHECK_INTERVAL);
+    totalWait+=CHECK_INTERVAL;
+    leader=accessor.getProperty(accessor.keyBuilder().controllerLeader());
+  }
+  if (totalWait >= CHECK_TIMEOUT) {
+    Assert.fail("No leader was ever elected!");
+  }
+  String leaderId=leader.getId();
+  String standbyId=(leaderId.equals("controller_0")) ? "controller_1" : "controller_0";
+  HelixAdmin admin=_setupTool.getClusterManagementTool();
+  admin.enableInstance(controllerCluster,leaderId,false);
+  Thread.sleep(500);
+  participants[0].syncStop();
+  Thread.sleep(500);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  admin.enableInstance(controllerCluster,standbyId,false);
+  Thread.sleep(500);
+  participants[1].syncStop();
+  IdealState idealState=admin.getResourceIdealState(clusterName,"TestDB0");
+  idealState.setMaxPartitionsPerInstance(1);
+  admin.setResourceIdealState(clusterName,"TestDB0",idealState);
+  Thread.sleep(500);
+  admin.enableInstance(clusterName,"localhost_12920",false);
+  admin.enableInstance(controllerCluster,leaderId,true);
+  Thread.sleep(500);
+  result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  for (int i=0; i < NUM_CONTROLLERS; i++) {
+    controllers[i].syncStop();
+  }
+  for (int i=2; i < NUM_PARTICIPANTS; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("STOP " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

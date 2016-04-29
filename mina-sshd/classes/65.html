@@ -1,0 +1,310 @@
+<h3 style="margin:0px">Class: org.apache.sshd.common.forward.PortForwardingLoadTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-8 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testLocalForwardingPayload() throws Exception {
+  final int NUM_ITERATIONS=100;
+  final String PAYLOAD_TMP="This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. ";
+  StringBuilder sb=new StringBuilder(PAYLOAD_TMP.length() * 1000);
+  for (int i=0; i < 1000; i++) {
+    sb.append(PAYLOAD_TMP);
+  }
+  final String PAYLOAD=sb.toString();
+  Session session=createSession();
+  try (final ServerSocket ss=new ServerSocket()){
+    ss.setReuseAddress(true);
+    ss.bind(new InetSocketAddress((InetAddress)null,0));
+    int forwardedPort=ss.getLocalPort();
+    int sinkPort=session.setPortForwardingL(0,TEST_LOCALHOST,forwardedPort);
+    final AtomicInteger conCount=new AtomicInteger(0);
+    Thread tAcceptor=new Thread(getCurrentTestName() + "Acceptor"){
+      @SuppressWarnings("synthetic-access") @Override public void run(){
+        try {
+          byte[] buf=new byte[8192];
+          log.info("Started...");
+          for (int i=0; i < NUM_ITERATIONS; ++i) {
+            try (Socket s=ss.accept()){
+              conCount.incrementAndGet();
+              try (InputStream sockIn=s.getInputStream();ByteArrayOutputStream baos=new ByteArrayOutputStream()){
+                int l;
+                while ((baos.size() < PAYLOAD.length()) && ((l=sockIn.read(buf)) > 0)) {
+                  baos.write(buf,0,l);
+                }
+                assertEquals("Mismatched received data at iteration #" + i,PAYLOAD,baos.toString());
+                try (InputStream inputCopy=new ByteArrayInputStream(baos.toByteArray());OutputStream sockOut=s.getOutputStream()){
+                  while ((l=sockIn.read(buf)) > 0) {
+                    sockOut.write(buf,0,l);
+                  }
+                }
+               }
+             }
+           }
+          log.info("Done");
+        }
+ catch (        Exception e) {
+          log.error("Failed to complete run loop",e);
+        }
+      }
+    }
+;
+    tAcceptor.start();
+    Thread.sleep(50);
+    byte[] buf=new byte[8192];
+    byte[] bytes=PAYLOAD.getBytes(StandardCharsets.UTF_8);
+    for (int i=0; i < NUM_ITERATIONS; i++) {
+      log.info("Iteration {}",Integer.valueOf(i));
+      try (Socket s=new Socket(TEST_LOCALHOST,sinkPort);OutputStream sockOut=s.getOutputStream()){
+        s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+        sockOut.write(bytes);
+        sockOut.flush();
+        try (InputStream sockIn=s.getInputStream();ByteArrayOutputStream baos=new ByteArrayOutputStream(bytes.length)){
+          int l;
+          while ((baos.size() < PAYLOAD.length()) && ((l=sockIn.read(buf)) > 0)) {
+            baos.write(buf,0,l);
+          }
+          assertEquals("Mismatched payload at iteration #" + i,PAYLOAD,baos.toString());
+        }
+       }
+ catch (      Exception e) {
+        log.error("Error in iteration #" + i,e);
+      }
+    }
+    session.delPortForwardingL(sinkPort);
+    ss.close();
+    tAcceptor.join(TimeUnit.SECONDS.toMillis(5L));
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testForwardingOnLoad() throws Exception {
+  final String path="";
+  final String host=TEST_LOCALHOST;
+  final int nbThread=2;
+  final int nbDownloads=2;
+  final int nbLoops=2;
+  StringBuilder resp=new StringBuilder();
+  resp.append("<html><body>\n");
+  for (int i=0; i < 1000; i++) {
+    resp.append("0123456789\n");
+  }
+  resp.append("</body></html>\n");
+  final StringBuilder sb=new StringBuilder();
+  sb.append("HTTP/1.1 200 OK").append('\n');
+  sb.append("Content-Type: text/HTML").append('\n');
+  sb.append("Content-Length: ").append(resp.length()).append('\n');
+  sb.append('\n');
+  sb.append(resp);
+  NioSocketAcceptor acceptor=new NioSocketAcceptor();
+  acceptor.setHandler(new IoHandlerAdapter(){
+    @Override public void messageReceived(    IoSession session,    Object message) throws Exception {
+      session.write(IoBuffer.wrap(sb.toString().getBytes(StandardCharsets.UTF_8)));
+    }
+  }
+);
+  acceptor.setReuseAddress(true);
+  acceptor.bind(new InetSocketAddress(0));
+  final int port=acceptor.getLocalAddress().getPort();
+  Session session=createSession();
+  try {
+    final int forwardedPort1=session.setPortForwardingL(0,host,port);
+    final int forwardedPort2=Utils.getFreePort();
+    session.setPortForwardingR(forwardedPort2,TEST_LOCALHOST,forwardedPort1);
+    System.err.println("URL: http://localhost:" + forwardedPort2);
+    final CountDownLatch latch=new CountDownLatch(nbThread * nbDownloads * nbLoops);
+    final Thread[] threads=new Thread[nbThread];
+    final List<Throwable> errors=new CopyOnWriteArrayList<Throwable>();
+    for (int i=0; i < threads.length; i++) {
+      threads[i]=new Thread(getCurrentTestName() + "[" + i+ "]"){
+        @Override public void run(){
+          for (int j=0; j < nbLoops; j++) {
+            final MultiThreadedHttpConnectionManager mgr=new MultiThreadedHttpConnectionManager();
+            final HttpClient client=new HttpClient(mgr);
+            client.getHttpConnectionManager().getParams().setDefaultMaxConnectionsPerHost(100);
+            client.getHttpConnectionManager().getParams().setMaxTotalConnections(1000);
+            for (int i=0; i < nbDownloads; i++) {
+              try {
+                checkHtmlPage(client,new URL("http://localhost:" + forwardedPort2 + path));
+              }
+ catch (              Throwable e) {
+                errors.add(e);
+              }
+ finally {
+                latch.countDown();
+                System.err.println("Remaining: " + latch.getCount());
+              }
+            }
+            mgr.shutdown();
+          }
+        }
+      }
+;
+    }
+    for (int i=0; i < threads.length; i++) {
+      threads[i].start();
+    }
+    latch.await();
+    for (    Throwable t : errors) {
+      t.printStackTrace();
+    }
+    assertEquals(0,errors.size());
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-12 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRemoteForwardingPayload() throws Exception {
+  final int NUM_ITERATIONS=100;
+  final String PAYLOAD="This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly " + "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. This is significantly longer Test Data. This is significantly "+ "longer Test Data. ";
+  Session session=createSession();
+  try (final ServerSocket ss=new ServerSocket()){
+    ss.setReuseAddress(true);
+    ss.bind(new InetSocketAddress((InetAddress)null,0));
+    int forwardedPort=ss.getLocalPort();
+    int sinkPort=Utils.getFreePort();
+    session.setPortForwardingR(sinkPort,TEST_LOCALHOST,forwardedPort);
+    final boolean started[]=new boolean[1];
+    started[0]=false;
+    final AtomicInteger conCount=new AtomicInteger(0);
+    Thread tWriter=new Thread(getCurrentTestName() + "Writer"){
+      @SuppressWarnings("synthetic-access") @Override public void run(){
+        started[0]=true;
+        try {
+          byte[] bytes=PAYLOAD.getBytes(StandardCharsets.UTF_8);
+          for (int i=0; i < NUM_ITERATIONS; ++i) {
+            try (Socket s=ss.accept()){
+              conCount.incrementAndGet();
+              try (OutputStream sockOut=s.getOutputStream()){
+                sockOut.write(bytes);
+                sockOut.flush();
+              }
+             }
+           }
+        }
+ catch (        Exception e) {
+          log.error("Failed to complete run loop",e);
+        }
+      }
+    }
+;
+    tWriter.start();
+    Thread.sleep(50);
+    assertTrue("Server not started",started[0]);
+    final RuntimeException lenOK[]=new RuntimeException[NUM_ITERATIONS];
+    final RuntimeException dataOK[]=new RuntimeException[NUM_ITERATIONS];
+    byte b2[]=new byte[PAYLOAD.length()];
+    byte b1[]=new byte[b2.length / 2];
+    for (int i=0; i < NUM_ITERATIONS; i++) {
+      final int ii=i;
+      try (Socket s=new Socket(TEST_LOCALHOST,sinkPort);InputStream sockIn=s.getInputStream()){
+        s.setSoTimeout((int)TimeUnit.SECONDS.toMillis(10L));
+        int read1=sockIn.read(b1);
+        String part1=new String(b1,0,read1,StandardCharsets.UTF_8);
+        Thread.sleep(50);
+        int read2=sockIn.read(b2);
+        String part2=new String(b2,0,read2,StandardCharsets.UTF_8);
+        int totalRead=read1 + read2;
+        lenOK[ii]=(PAYLOAD.length() == totalRead) ? null : new IndexOutOfBoundsException("Mismatched length: expected=" + PAYLOAD.length() + ", actual="+ totalRead);
+        String readData=part1 + part2;
+        dataOK[ii]=PAYLOAD.equals(readData) ? null : new IllegalStateException("Mismatched content");
+        if (lenOK[ii] != null) {
+          throw lenOK[ii];
+        }
+        if (dataOK[ii] != null) {
+          throw dataOK[ii];
+        }
+      }
+ catch (      Exception e) {
+        if (e instanceof IOException) {
+          log.warn("I/O exception in iteration #" + i,e);
+        }
+ else {
+          log.error("Failed to complete iteration #" + i,e);
+        }
+      }
+    }
+    int ok=0;
+    for (int i=0; i < NUM_ITERATIONS; i++) {
+      ok+=(lenOK[i] == null) ? 1 : 0;
+    }
+    log.info("Successful iteration: " + ok + " out of "+ NUM_ITERATIONS);
+    Thread.sleep(55L);
+    for (int i=0; i < NUM_ITERATIONS; i++) {
+      assertNull("Bad length at iteration " + i,lenOK[i]);
+      assertNull("Bad data at iteration " + i,dataOK[i]);
+    }
+    session.delPortForwardingR(forwardedPort);
+    ss.close();
+    tWriter.join(TimeUnit.SECONDS.toMillis(5L));
+  }
+  finally {
+    session.disconnect();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  if (sshd != null) {
+    sshd.stop(true);
+  }
+  if (acceptor != null) {
+    acceptor.dispose(true);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  sshd=setupTestServer();
+  sshd.setTcpipForwardingFilter(AcceptAllForwardingFilter.INSTANCE);
+  sshd.start();
+  sshPort=sshd.getPort();
+  NioSocketAcceptor acceptor=new NioSocketAcceptor();
+  acceptor.setHandler(new IoHandlerAdapter(){
+    @Override public void messageReceived(    IoSession session,    Object message) throws Exception {
+      IoBuffer recv=(IoBuffer)message;
+      IoBuffer sent=IoBuffer.allocate(recv.remaining());
+      sent.put(recv);
+      sent.flip();
+      session.write(sent);
+    }
+  }
+);
+  acceptor.setReuseAddress(true);
+  acceptor.bind(new InetSocketAddress(0));
+  log.info("setUp() echo address = {}",acceptor.getLocalAddress());
+  this.acceptor=acceptor;
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

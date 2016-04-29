@@ -1,0 +1,778 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.index.AsyncIndexUpdateTest (20 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(18)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(15)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(11)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >ConditionMatcher&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Async Index Test with 2 index defs at different tree locations
+ * <ul>
+ * <li>Add an index definition</li>
+ * <li>Add some content</li>
+ * <li>Search & verify</li>
+ * </ul>
+ */
+@Test public void testAsyncDoubleSubtree() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  createIndexDefinition(builder.child("newchild").child("other").child(INDEX_DEFINITIONS_NAME),"subIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  builder.child("newchild").child("other").child("testChild").setProperty("foo","xyz");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  NodeState root=store.getRoot();
+  checkPathExists(root,INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME);
+  checkPathExists(root,"newchild","other",INDEX_DEFINITIONS_NAME,"subIndex",INDEX_CONTENT_NODE_NAME);
+  PropertyIndexLookup lookup=new PropertyIndexLookup(root);
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"foo","abc"));
+  PropertyIndexLookup lookupChild=new PropertyIndexLookup(root.getChildNode("newchild").getChildNode("other"));
+  assertEquals(ImmutableSet.of("testChild"),find(lookupChild,"foo","xyz"));
+  assertEquals(ImmutableSet.<String>of(),find(lookupChild,"foo","abc"));
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAsyncExecutionStats() throws Exception {
+  final Set<String> knownCheckpoints=Sets.newHashSet();
+  MemoryNodeStore store=new MemoryNodeStore(){
+    @Override public synchronized NodeState retrieve(    @Nonnull String checkpoint){
+      if (!knownCheckpoints.isEmpty() && !knownCheckpoints.contains(checkpoint)) {
+        return null;
+      }
+      return super.retrieve(checkpoint);
+    }
+  }
+;
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  runOneCycle(async);
+  assertEquals(1,lastExecutionStats(async.getIndexStats().getExecutionCount()));
+  runOneCycle(async);
+  assertEquals(1,lastExecutionStats(async.getIndexStats().getExecutionCount()));
+  runOneCycle(async);
+  assertEquals(1,lastExecutionStats(async.getIndexStats().getExecutionCount()));
+  builder=store.getRoot().builder();
+  builder.child("testRoot2").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  runOneCycle(async);
+  assertEquals(1,lastExecutionStats(async.getIndexStats().getExecutionCount()));
+  builder=store.getRoot().builder();
+  builder.child("testRoot3").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  knownCheckpoints.addAll(store.listCheckpoints());
+  runOneCycle(async);
+  assertEquals(0,lastExecutionStats(async.getIndexStats().getExecutionCount()));
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Async Index Test with 2 index defs at the same location
+ * <ul>
+ * <li>Add an index definition</li>
+ * <li>Add some content</li>
+ * <li>Search & verify</li>
+ * </ul>
+ */
+@Test public void testAsyncDouble() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndexSecond",true,false,ImmutableSet.of("bar"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc").setProperty("bar","def");
+  builder.child("testSecond").setProperty("bar","ghi");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  NodeState root=store.getRoot();
+  checkPathExists(root,INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME);
+  checkPathExists(root,INDEX_DEFINITIONS_NAME,"rootIndexSecond",INDEX_CONTENT_NODE_NAME);
+  PropertyIndexLookup lookup=new PropertyIndexLookup(root);
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"foo","abc"));
+  assertEquals(ImmutableSet.<String>of(),find(lookup,"foo","def"));
+  assertEquals(ImmutableSet.<String>of(),find(lookup,"foo","ghi"));
+  assertEquals(ImmutableSet.<String>of(),find(lookup,"bar","abc"));
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"bar","def"));
+  assertEquals(ImmutableSet.of("testSecond"),find(lookup,"bar","ghi"));
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void checkpointStability() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  async.run();
+  builder=store.getRoot().builder();
+  builder.child("testRoot2").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  async.run();
+  LogCustomizer customLogs=LogCustomizer.forLogger(AsyncIndexUpdate.class.getName()).filter(Level.WARN).create();
+  builder=store.getRoot().builder();
+  builder.child("testRoot3").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  customLogs.starting();
+  async.run();
+  assertEquals(Collections.emptyList(),customLogs.getLogs());
+  customLogs.finished();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAsyncPause() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.getIndexStats().pause();
+  async.run();
+  assertFalse(store.getRoot().getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("rootIndex").hasChildNode(INDEX_CONTENT_NODE_NAME));
+  async.getIndexStats().resume();
+  async.run();
+  NodeState root=store.getRoot();
+  checkPathExists(root,INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME);
+  assertFalse(root.getChildNode(INDEX_DEFINITIONS_NAME).hasChildNode(":conflict"));
+  PropertyIndexLookup lookup=new PropertyIndexLookup(root);
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"foo","abc"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void cpCleanupWUnrelatedChanges() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String firstCp=store.listCheckpoints().iterator().next();
+  builder=store.getRoot().builder();
+  builder.child("testRoot").child(":hidden");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String secondCp=store.listCheckpoints().iterator().next();
+  assertFalse("Store should keep only second checkpoint",secondCp.equals(firstCp));
+  assertEquals(secondCp,store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("async"));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void cpCleanupNoRelease() throws Exception {
+  final MemoryNodeStore mns=new MemoryNodeStore();
+  final AtomicBoolean canRelease=new AtomicBoolean(false);
+  ProxyNodeStore store=new ProxyNodeStore(){
+    @Override protected NodeStore getNodeStore(){
+      return mns;
+    }
+    @Override public boolean release(    String checkpoint){
+      if (canRelease.get()) {
+        return super.release(checkpoint);
+      }
+      return false;
+    }
+  }
+;
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",mns.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Expecting one checkpoint",mns.listCheckpoints().size() == 1);
+  assertTrue("Expecting one temp checkpoint",newHashSet(store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getStrings("async-temp")).size() == 1);
+  builder=store.getRoot().builder();
+  builder.child("testRoot").setProperty("foo","def");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  async.run();
+  assertTrue("Expecting two checkpoints",mns.listCheckpoints().size() == 2);
+  assertTrue("Expecting two temp checkpoints",newHashSet(store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getStrings("async-temp")).size() == 2);
+  canRelease.set(true);
+  builder=store.getRoot().builder();
+  builder.child("testRoot").setProperty("foo","ghi");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  async.run();
+  assertTrue("Expecting one checkpoint",mns.listCheckpoints().size() == 1);
+  String secondCp=mns.listCheckpoints().iterator().next();
+  assertEquals(secondCp,store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("async"));
+  for (  String cp : store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getStrings("async-temp")) {
+    if (cp.equals(secondCp)) {
+      continue;
+    }
+    assertNull("Temp checkpoint was already cleared from store",store.retrieve(cp));
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void cpCleanupWErrors() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  FaultyIndexEditorProvder provider=new FaultyIndexEditorProvder();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Error should have been triggered by the commit",provider.isFailed());
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexStats stats=async.getIndexStats();
+  String since=stats.getFailingSince();
+  assertTrue(stats.isFailing());
+  assertEquals(1,stats.getConsecutiveFailedExecutions());
+  assertEquals(since,stats.getLatestErrorTime());
+  TimeUnit.MILLISECONDS.sleep(100);
+  async.run();
+  assertTrue(stats.isFailing());
+  assertEquals(2,stats.getConsecutiveFailedExecutions());
+  assertEquals(since,stats.getFailingSince());
+  assertNotEquals(since,stats.getLatestErrorTime());
+  stats.fixed();
+  assertFalse(stats.isFailing());
+  assertEquals(0,stats.getConsecutiveFailedExecutions());
+  assertEquals("",stats.getFailingSince());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void closeWithSoftLimit() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final Semaphore asyncLock=new Semaphore(1);
+  final AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider){
+    @Override protected AsyncUpdateCallback newAsyncUpdateCallback(    NodeStore store,    String name,    long leaseTimeOut,    String beforeCheckpoint,    String afterCheckpoint,    AsyncIndexStats indexStats,    AtomicBoolean stopFlag){
+      try {
+        asyncLock.acquire();
+      }
+ catch (      InterruptedException ignore) {
+      }
+      return super.newAsyncUpdateCallback(store,name,leaseTimeOut,beforeCheckpoint,afterCheckpoint,indexStats,stopFlag);
+    }
+  }
+;
+  async.setCloseTimeOut(1000);
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      async.run();
+    }
+  }
+);
+  Thread closer=new Thread(new Runnable(){
+    @Override public void run(){
+      async.close();
+    }
+  }
+);
+  asyncLock.acquire();
+  t.start();
+  while (!asyncLock.hasQueuedThreads())   ;
+  LogCustomizer lc=createLogCustomizer(Level.DEBUG);
+  closer.start();
+  while (!async.isClosing())   ;
+  assertFalse(async.isClosed());
+  assertLogPhrase(lc.getLogs(),"[WAITING]");
+  asyncLock.release();
+  t.join();
+  closer.join();
+  assertLogPhrase(lc.getLogs(),"[CLOSED OK]");
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Async Index Test
+ * <ul>
+ * <li>Add an index definition</li>
+ * <li>Add some content</li>
+ * <li>Search & verify</li>
+ * </ul>
+ */
+@Test public void testAsync() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  NodeState root=store.getRoot();
+  checkPathExists(root,INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME);
+  assertFalse(root.getChildNode(INDEX_DEFINITIONS_NAME).hasChildNode(":conflict"));
+  PropertyIndexLookup lookup=new PropertyIndexLookup(root);
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"foo","abc"));
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * OAK-1959, stale ref to checkpoint thorws the indexer into a reindexing
+ * loop
+ */
+@Test public void recoverFromMissingCpRef() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  new AsyncIndexUpdate("async",store,provider).run();
+  checkPathExists(store.getRoot(),INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME,"abc","testRoot");
+  builder=store.getRoot().builder();
+  builder.child(AsyncIndexUpdate.ASYNC).setProperty("async","faulty");
+  builder.child("testAnother").setProperty("foo","def");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  new AsyncIndexUpdate("async",store,provider).run();
+  checkPathExists(store.getRoot(),INDEX_DEFINITIONS_NAME,"rootIndex",INDEX_CONTENT_NODE_NAME,"def","testAnother");
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void failOnConflict() throws Exception {
+  final Map<Thread,Semaphore> locks=Maps.newIdentityHashMap();
+  NodeStore store=new MemoryNodeStore(){
+    @Nonnull @Override public NodeState merge(    @Nonnull NodeBuilder builder,    @Nonnull CommitHook commitHook,    @Nullable CommitInfo info) throws CommitFailedException {
+      Semaphore s=locks.get(Thread.currentThread());
+      if (s != null) {
+        s.acquireUninterruptibly();
+      }
+      return super.merge(builder,commitHook,info);
+    }
+  }
+;
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"foo",false,ImmutableSet.of("foo"),null,TYPE,Collections.singletonMap(ASYNC_PROPERTY_NAME,"async"));
+  builder.child("test").setProperty("foo","a");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  builder=store.getRoot().builder();
+  builder.child("test").setProperty("foo","b");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      async.run();
+    }
+  }
+);
+  Semaphore s=new Semaphore(0);
+  locks.put(t,s);
+  t.start();
+  builder=store.getRoot().builder();
+  builder.setChildNode("dummy").setProperty("foo","bar");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  while (!s.hasQueuedThreads()) {
+    Thread.yield();
+  }
+  builder=store.getRoot().builder();
+  builder.getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("foo").getChildNode(":index").child("a").remove();
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  s.release(100);
+  t.join();
+  builder=store.getRoot().builder();
+  assertNoConflictMarker(builder);
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 type-15 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void noRunWhenClosed() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  async.close();
+  LogCustomizer lc=createLogCustomizer(Level.WARN);
+  async.run();
+  assertEquals(1,lc.getLogs().size());
+  assertThat(lc.getLogs().get(0),containsString("Could not acquire run permit"));
+  lc.finished();
+  async.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void branchBaseOnCheckpoint() throws Exception {
+  final Semaphore retrieve=new Semaphore(1);
+  final Semaphore checkpoint=new Semaphore(0);
+  NodeStore store=new MemoryNodeStore(){
+    @CheckForNull @Override public NodeState retrieve(    @Nonnull String checkpoint){
+      retrieve.acquireUninterruptibly();
+      try {
+        return super.retrieve(checkpoint);
+      }
+  finally {
+        retrieve.release();
+      }
+    }
+    @Nonnull @Override public String checkpoint(    long lifetime,    @Nonnull Map<String,String> properties){
+      try {
+        return super.checkpoint(lifetime,properties);
+      }
+  finally {
+        checkpoint.release();
+      }
+    }
+  }
+;
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"foo",false,ImmutableSet.of("foo"),null,TYPE,Collections.singletonMap(ASYNC_PROPERTY_NAME,"async"));
+  builder.child("test").setProperty("foo","a");
+  builder.child("child");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  builder=store.getRoot().builder();
+  builder.child("test").setProperty("foo","b");
+  builder.child("child").setProperty("prop","value");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      async.run();
+    }
+  }
+);
+  checkpoint.acquireUninterruptibly(checkpoint.availablePermits());
+  retrieve.acquireUninterruptibly();
+  t.start();
+  retrieve.release();
+  checkpoint.acquireUninterruptibly();
+  builder=store.getRoot().builder();
+  builder.child("child").remove();
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  retrieve.release();
+  t.join();
+  assertFalse(store.getRoot().hasChildNode("child"));
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void closeWithHardLimit() throws Exception {
+  NodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final Semaphore asyncLock=new Semaphore(1);
+  final AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider){
+    @Override protected AsyncUpdateCallback newAsyncUpdateCallback(    NodeStore store,    String name,    long leaseTimeOut,    String beforeCheckpoint,    String afterCheckpoint,    AsyncIndexStats indexStats,    AtomicBoolean stopFlag){
+      try {
+        asyncLock.acquire();
+      }
+ catch (      InterruptedException ignore) {
+      }
+      return super.newAsyncUpdateCallback(store,name,leaseTimeOut,beforeCheckpoint,afterCheckpoint,indexStats,stopFlag);
+    }
+  }
+;
+  async.setCloseTimeOut(1);
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      async.run();
+    }
+  }
+);
+  Thread closer=new Thread(new Runnable(){
+    @Override public void run(){
+      async.close();
+    }
+  }
+);
+  asyncLock.acquire();
+  t.start();
+  while (!asyncLock.hasQueuedThreads())   ;
+  LogCustomizer lc=createLogCustomizer(Level.DEBUG);
+  closer.start();
+  while (!async.isClosed())   ;
+  assertLogPhrase(lc.getLogs(),"[SOFT LIMIT HIT]");
+  asyncLock.release();
+  t.join();
+  assertNotNull(async.getIndexStats().getLatestError());
+  closer.join();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * OAK-2203 Test reindex behavior on an async index when the index provider is missing
+ * for a given type
+ */
+@Test public void testReindexMissingProvider() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"asyncMissing");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("asyncMissing",store,provider);
+  async.run();
+  assertFalse(async.isFailing());
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String firstCp=store.listCheckpoints().iterator().next();
+  assertEquals(firstCp,store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("asyncMissing"));
+  provider=CompositeIndexEditorProvider.compose(new ArrayList<IndexEditorProvider>());
+  async=new AsyncIndexUpdate("asyncMissing",store,provider);
+  async.run();
+  assertTrue(async.isFailing());
+  PropertyState reindex=store.getRoot().getChildNode(INDEX_DEFINITIONS_NAME).getChildNode("rootIndex").getProperty(REINDEX_PROPERTY_NAME);
+  assertTrue(reindex == null || !reindex.getValue(Type.BOOLEAN));
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String secondCp=store.listCheckpoints().iterator().next();
+  assertTrue("Store should not create a new checkpoint",secondCp.equals(firstCp));
+  assertEquals(firstCp,store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("asyncMissing"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void cpCleanupWChanges() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String firstCp=store.listCheckpoints().iterator().next();
+  builder=store.getRoot().builder();
+  builder.child("testRoot").setProperty("foo","def");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String secondCp=store.listCheckpoints().iterator().next();
+  assertFalse("Store should keep only second checkpoint",secondCp.equals(firstCp));
+  assertEquals(secondCp,store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("async"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void cpCleanupNoChanges() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  async.run();
+  assertTrue(async.isFinished());
+  Set<String> checkpoints=newHashSet(store.listCheckpoints());
+  assertTrue("Expecting the initial checkpoint",checkpoints.size() == 1);
+  assertEquals(store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC).getString("async"),checkpoints.iterator().next());
+  async.run();
+  assertEquals("Expecting no checkpoint changes",checkpoints,store.listCheckpoints());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void taskSplitNoMatch() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"ignored",true,false,ImmutableSet.of("baz"),null).setProperty(ASYNC_PROPERTY_NAME,"async-ignored");
+  builder.child("testRoot").setProperty("foo","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String firstCp=store.listCheckpoints().iterator().next();
+  builder=store.getRoot().builder();
+  builder.child("testRoot").setProperty("foo","def");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  IndexTaskSpliter splitter=async.getTaskSplitter();
+  splitter.registerSplit(newHashSet("/oak:index/ignored"),"async-slow");
+  async.run();
+  Set<String> checkpoints=newHashSet(store.listCheckpoints());
+  assertTrue("Expecting a single checkpoint",checkpoints.size() == 1);
+  String secondCp=checkpoints.iterator().next();
+  NodeState asyncNode=store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC);
+  assertEquals(secondCp,asyncNode.getString("async"));
+  assertNull(firstCp,asyncNode.getString("async-slow"));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-8 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void taskSplit() throws Exception {
+  MemoryNodeStore store=new MemoryNodeStore();
+  IndexEditorProvider provider=new PropertyIndexEditorProvider();
+  NodeBuilder builder=store.getRoot().builder();
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"rootIndex",true,false,ImmutableSet.of("foo"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"changedIndex",true,false,ImmutableSet.of("bar"),null).setProperty(ASYNC_PROPERTY_NAME,"async");
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"ignored1",true,false,ImmutableSet.of("baz"),null).setProperty(ASYNC_PROPERTY_NAME,"async-ignored");
+  createIndexDefinition(builder.child(INDEX_DEFINITIONS_NAME),"ignored2",true,false,ImmutableSet.of("etc"),null);
+  builder.child("testRoot").setProperty("foo","abc");
+  builder.child("testRoot").setProperty("bar","abc");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  assertTrue("Expecting no checkpoints",store.listCheckpoints().size() == 0);
+  AsyncIndexUpdate async=new AsyncIndexUpdate("async",store,provider);
+  async.run();
+  assertTrue("Expecting one checkpoint",store.listCheckpoints().size() == 1);
+  String firstCp=store.listCheckpoints().iterator().next();
+  builder=store.getRoot().builder();
+  builder.child("testRoot").setProperty("foo","def");
+  builder.child("testRoot").setProperty("bar","def");
+  store.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  IndexTaskSpliter splitter=async.getTaskSplitter();
+  splitter.registerSplit(newHashSet("/oak:index/changedIndex"),"async-slow");
+  async.run();
+  Set<String> checkpoints=newHashSet(store.listCheckpoints());
+  assertTrue("Expecting two checkpoints",checkpoints.size() == 2);
+  assertTrue(checkpoints.remove(firstCp));
+  String secondCp=checkpoints.iterator().next();
+  NodeState asyncNode=store.getRoot().getChildNode(AsyncIndexUpdate.ASYNC);
+  assertEquals(firstCp,asyncNode.getString("async-slow"));
+  assertEquals(secondCp,asyncNode.getString("async"));
+  assertFalse(newHashSet(asyncNode.getStrings("async-temp")).contains(firstCp));
+  NodeState indexNode=store.getRoot().getChildNode(INDEX_DEFINITIONS_NAME);
+  assertEquals("async",indexNode.getChildNode("rootIndex").getString("async"));
+  assertEquals("async-ignored",indexNode.getChildNode("ignored1").getString("async"));
+  assertNull(indexNode.getChildNode("ignored2").getString("async"));
+  assertEquals("async-slow",indexNode.getChildNode("changedIndex").getString("async"));
+  assertEquals(false,indexNode.getChildNode("changedIndex").getBoolean("reindex"));
+  PropertyIndexLookup lookup=new PropertyIndexLookup(store.getRoot());
+  assertEquals(ImmutableSet.of("testRoot"),find(lookup,"bar","abc"));
+  assertEquals(ImmutableSet.of(),find(lookup,"bar","def"));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,77 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestHRegionOnCluster (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=300000) public void testDataCorrectnessReplayingRecoveredEdits() throws Exception {
+  final int NUM_MASTERS=1;
+  final int NUM_RS=3;
+  Admin hbaseAdmin=null;
+  TEST_UTIL.startMiniCluster(NUM_MASTERS,NUM_RS);
+  try {
+    final TableName TABLENAME=TableName.valueOf("testDataCorrectnessReplayingRecoveredEdits");
+    final byte[] FAMILY=Bytes.toBytes("family");
+    MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+    HMaster master=cluster.getMaster();
+    HTableDescriptor desc=new HTableDescriptor(TABLENAME);
+    desc.addFamily(new HColumnDescriptor(FAMILY));
+    hbaseAdmin=master.getConnection().getAdmin();
+    hbaseAdmin.createTable(desc);
+    assertTrue(hbaseAdmin.isTableAvailable(TABLENAME));
+    LOG.info("Loading r1 to v1 into " + TABLENAME);
+    Table table=TEST_UTIL.getConnection().getTable(TABLENAME);
+    putDataAndVerify(table,"r1",FAMILY,"v1",1);
+    TEST_UTIL.waitUntilAllRegionsAssigned(table.getName());
+    HRegionInfo regionInfo;
+    try (RegionLocator locator=TEST_UTIL.getConnection().getRegionLocator(TABLENAME)){
+      regionInfo=locator.getRegionLocation(Bytes.toBytes("r1")).getRegionInfo();
+    }
+     int originServerNum=cluster.getServerWith(regionInfo.getRegionName());
+    HRegionServer originServer=cluster.getRegionServer(originServerNum);
+    int targetServerNum=(originServerNum + 1) % NUM_RS;
+    HRegionServer targetServer=cluster.getRegionServer(targetServerNum);
+    assertFalse(originServer.equals(targetServer));
+    TEST_UTIL.waitUntilAllRegionsAssigned(table.getName());
+    LOG.info("Moving " + regionInfo.getEncodedName() + " to "+ targetServer.getServerName());
+    hbaseAdmin.move(regionInfo.getEncodedNameAsBytes(),Bytes.toBytes(targetServer.getServerName().getServerName()));
+    do {
+      Thread.sleep(1);
+    }
+ while (cluster.getServerWith(regionInfo.getRegionName()) == originServerNum);
+    LOG.info("Loading r2 to v2 into " + TABLENAME);
+    putDataAndVerify(table,"r2",FAMILY,"v2",2);
+    TEST_UTIL.waitUntilAllRegionsAssigned(table.getName());
+    LOG.info("Moving " + regionInfo.getEncodedName() + " to "+ originServer.getServerName());
+    hbaseAdmin.move(regionInfo.getEncodedNameAsBytes(),Bytes.toBytes(originServer.getServerName().getServerName()));
+    do {
+      Thread.sleep(1);
+    }
+ while (cluster.getServerWith(regionInfo.getRegionName()) == targetServerNum);
+    LOG.info("Loading r3 to v3 into " + TABLENAME);
+    putDataAndVerify(table,"r3",FAMILY,"v3",3);
+    LOG.info("Killing target server " + targetServer.getServerName());
+    targetServer.kill();
+    cluster.getRegionServerThreads().get(targetServerNum).join();
+    while (master.getServerManager().areDeadServersInProgress()) {
+      Thread.sleep(5);
+    }
+    LOG.info("Killing origin server " + targetServer.getServerName());
+    originServer.kill();
+    cluster.getRegionServerThreads().get(originServerNum).join();
+    LOG.info("Loading r4 to v4 into " + TABLENAME);
+    putDataAndVerify(table,"r4",FAMILY,"v4",4);
+  }
+  finally {
+    if (hbaseAdmin != null)     hbaseAdmin.close();
+    TEST_UTIL.shutdownMiniCluster();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

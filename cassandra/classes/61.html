@@ -1,0 +1,186 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.cql3.validation.entities.UFPureScriptTest (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptUTCollections() throws Throwable {
+  String type=createType("CREATE TYPE %s (txt text, i int)");
+  createTable(String.format("CREATE TABLE %%s " + "(key int primary key, lst list<frozen<%s>>, st set<frozen<%s>>, mp map<int, frozen<%s>>)",type,type,type));
+  String fName=createFunction(KEYSPACE,"list<frozen<" + type + ">>","CREATE FUNCTION %s( lst list<frozen<" + type + ">> ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS text "+ "LANGUAGE javascript\n"+ "AS $$"+ "        lst.get(1).getString(\"txt\");$$;");
+  createFunctionOverload(fName,"set<frozen<" + type + ">>","CREATE FUNCTION %s( st set<frozen<" + type + ">> ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS text "+ "LANGUAGE javascript\n"+ "AS $$"+ "        st.iterator().next().getString(\"txt\");$$;");
+  createFunctionOverload(fName,"map<int, frozen<" + type + ">>","CREATE FUNCTION %s( mp map<int, frozen<" + type + ">> ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS text "+ "LANGUAGE javascript\n"+ "AS $$"+ "        mp.get(java.lang.Integer.valueOf(3)).getString(\"txt\");$$;");
+  execute("INSERT INTO %s (key, lst, st, mp) values (1, " + "[ {txt: 'one', i:1}, {txt: 'three', i:1}, {txt: 'one', i:1} ] , " + "{ {txt: 'one', i:1}, {txt: 'three', i:3}, {txt: 'two', i:2} }, "+ "{ 1: {txt: 'one', i:1}, 2: {txt: 'one', i:3}, 3: {txt: 'two', i:2} })");
+  assertRows(execute("SELECT " + fName + "(lst) FROM %s WHERE key = 1"),row("three"));
+  assertRows(execute("SELECT " + fName + "(st) FROM %s WHERE key = 1"),row("one"));
+  assertRows(execute("SELECT " + fName + "(mp) FROM %s WHERE key = 1"),row("two"));
+  String cqlSelect="SELECT " + fName + "(lst), "+ fName+ "(st), "+ fName+ "(mp) FROM %s WHERE key = 1";
+  assertRows(execute(cqlSelect),row("three","one","two"));
+  for (  int version : PROTOCOL_VERSIONS)   assertRowsNet(version,executeNet(version,cqlSelect),row("three","one","two"));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptThrow() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, val double)");
+  String fName=createFunction(KEYSPACE,"double","CREATE OR REPLACE FUNCTION %s(val double) " + "RETURNS NULL ON NULL INPUT " + "RETURNS double "+ "LANGUAGE javascript\n"+ "AS 'throw \"fool\";';");
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",1,1d);
+  assertInvalidThrowMessage("fool",FunctionExecutionException.class,"SELECT key, val, " + fName + "(val) FROM %s");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptTupleType() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, tup frozen<tuple<double, text, int, boolean>>)");
+  String fName=createFunction(KEYSPACE_PER_TEST,"tuple<double, text, int, boolean>","CREATE FUNCTION %s( tup tuple<double, text, int, boolean> ) " + "RETURNS NULL ON NULL INPUT " + "RETURNS tuple<double, text, int, boolean> "+ "LANGUAGE javascript\n"+ "AS $$tup;$$;");
+  Object t=tuple(1d,"foo",2,true);
+  execute("INSERT INTO %s (key, tup) VALUES (1, ?)",t);
+  assertRows(execute("SELECT tup FROM %s WHERE key = 1"),row(t));
+  assertRows(execute("SELECT " + fName + "(tup) FROM %s WHERE key = 1"),row(t));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScriptParamReturnTypes() throws Throwable {
+  UUID ruuid=UUID.randomUUID();
+  UUID tuuid=UUIDGen.getTimeUUID();
+  createTable("CREATE TABLE %s (key int primary key, " + "tival tinyint, sival smallint, ival int, lval bigint, fval float, dval double, vval varint, ddval decimal, " + "timval time, dtval date, tsval timestamp, uval uuid, tuval timeuuid)");
+  execute("INSERT INTO %s (key, tival, sival, ival, lval, fval, dval, vval, ddval, timval, dtval, tsval, uval, tuval) VALUES " + "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",1,(byte)1,(short)1,1,1L,1f,1d,BigInteger.valueOf(1L),BigDecimal.valueOf(1d),1L,Integer.MAX_VALUE,new Date(1),ruuid,tuuid);
+  Object[][] variations={new Object[]{"tinyint","tival",(byte)1,(byte)2},new Object[]{"smallint","sival",(short)1,(short)2},new Object[]{"int","ival",1,2},new Object[]{"bigint","lval",1L,2L},new Object[]{"float","fval",1f,2f},new Object[]{"double","dval",1d,2d},new Object[]{"varint","vval",BigInteger.valueOf(1L),BigInteger.valueOf(2L)},new Object[]{"decimal","ddval",BigDecimal.valueOf(1d),BigDecimal.valueOf(2d)},new Object[]{"time","timval",1L,2L}};
+  for (  Object[] variation : variations) {
+    Object type=variation[0];
+    Object col=variation[1];
+    Object expected1=variation[2];
+    Object expected2=variation[3];
+    String fName=createFunction(KEYSPACE,type.toString(),"CREATE OR REPLACE FUNCTION %s(val " + type + ") "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS "+ type+ ' '+ "LANGUAGE javascript "+ "AS 'val+1;';");
+    assertRows(execute("SELECT key, " + col + ", "+ fName+ '('+ col+ ") FROM %s"),row(1,expected1,expected2));
+  }
+  variations=new Object[][]{new Object[]{"timestamp","tsval",new Date(1),new Date(1)},new Object[]{"uuid","uval",ruuid,ruuid},new Object[]{"timeuuid","tuval",tuuid,tuuid},new Object[]{"date","dtval",Integer.MAX_VALUE,Integer.MAX_VALUE}};
+  for (  Object[] variation : variations) {
+    Object type=variation[0];
+    Object col=variation[1];
+    Object expected1=variation[2];
+    Object expected2=variation[3];
+    String fName=createFunction(KEYSPACE,type.toString(),"CREATE OR REPLACE FUNCTION %s(val " + type + ") "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS "+ type+ ' '+ "LANGUAGE javascript "+ "AS 'val;';");
+    assertRows(execute("SELECT key, " + col + ", "+ fName+ '('+ col+ ") FROM %s"),row(1,expected1,expected2));
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptBadReturnType() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, val double)");
+  String fName=createFunction(KEYSPACE,"double","CREATE OR REPLACE FUNCTION %s(val double) " + "RETURNS NULL ON NULL INPUT " + "RETURNS double "+ "LANGUAGE javascript\n"+ "AS '\"string\";';");
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",1,1d);
+  assertInvalidMessage("Invalid value for CQL type double","SELECT key, val, " + fName + "(val) FROM %s");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScriptReturnTypeCasting() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, val double)");
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",1,1d);
+  Object[][] variations={new Object[]{"true","boolean",true},new Object[]{"false","boolean",false},new Object[]{"100","tinyint",(byte)100},new Object[]{"100.","tinyint",(byte)100},new Object[]{"100","smallint",(short)100},new Object[]{"100.","smallint",(short)100},new Object[]{"100","int",100},new Object[]{"100.","int",100},new Object[]{"100","double",100d},new Object[]{"100.","double",100d},new Object[]{"100","bigint",100L},new Object[]{"100.","bigint",100L},new Object[]{"100","varint",BigInteger.valueOf(100L)},new Object[]{"100.","varint",BigInteger.valueOf(100L)},new Object[]{"parseInt(\"100\");","decimal",BigDecimal.valueOf(100d)},new Object[]{"100.","decimal",BigDecimal.valueOf(100d)}};
+  for (  Object[] variation : variations) {
+    Object functionBody=variation[0];
+    Object returnType=variation[1];
+    Object expectedResult=variation[2];
+    String fName=createFunction(KEYSPACE,"double","CREATE OR REPLACE FUNCTION %s(val double) " + "RETURNS NULL ON NULL INPUT " + "RETURNS " + returnType + ' '+ "LANGUAGE javascript "+ "AS '"+ functionBody+ ";';");
+    assertRows(execute("SELECT key, val, " + fName + "(val) FROM %s"),row(1,1d,expectedResult));
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testJavascriptUserType() throws Throwable {
+  String type=createType("CREATE TYPE %s (txt text, i int)");
+  createTable("CREATE TABLE %s (key int primary key, udt frozen<" + type + ">)");
+  String fUdt1=createFunction(KEYSPACE,type,"CREATE FUNCTION %s( udt " + type + " ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS "+ type+ ' '+ "LANGUAGE javascript\n"+ "AS $$"+ "     udt;$$;");
+  String fUdt2=createFunction(KEYSPACE,type,"CREATE FUNCTION %s( udt " + type + " ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS text "+ "LANGUAGE javascript\n"+ "AS $$"+ "     udt.getString(\"txt\");$$;");
+  String fUdt3=createFunction(KEYSPACE,type,"CREATE FUNCTION %s( udt " + type + " ) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS int "+ "LANGUAGE javascript\n"+ "AS $$"+ "     udt.getInt(\"i\");$$;");
+  execute("INSERT INTO %s (key, udt) VALUES (1, {txt: 'one', i:1})");
+  UntypedResultSet rows=execute("SELECT " + fUdt1 + "(udt) FROM %s WHERE key = 1");
+  Assert.assertEquals(1,rows.size());
+  assertRows(execute("SELECT " + fUdt2 + "(udt) FROM %s WHERE key = 1"),row("one"));
+  assertRows(execute("SELECT " + fUdt3 + "(udt) FROM %s WHERE key = 1"),row(1));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptDisabled() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, val double)");
+  DatabaseDescriptor.enableScriptedUserDefinedFunctions(false);
+  try {
+    assertInvalid("double","CREATE OR REPLACE FUNCTION " + KEYSPACE + ".assertNotEnabled(val double) "+ "RETURNS NULL ON NULL INPUT "+ "RETURNS double "+ "LANGUAGE javascript\n"+ "AS 'Math.sin(val);';");
+  }
+  finally {
+    DatabaseDescriptor.enableScriptedUserDefinedFunctions(true);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptFunction() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, val double)");
+  String functionBody='\n' + "  Math.sin(val);\n";
+  String fName=createFunction(KEYSPACE,"double","CREATE OR REPLACE FUNCTION %s(val double) " + "RETURNS NULL ON NULL INPUT " + "RETURNS double "+ "LANGUAGE javascript\n"+ "AS '" + functionBody + "';");
+  FunctionName fNameName=parseFunctionName(fName);
+  assertRows(execute("SELECT language, body FROM system_schema.functions WHERE keyspace_name=? AND function_name=?",fNameName.keyspace,fNameName.name),row("javascript",functionBody));
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",1,1d);
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",2,2d);
+  execute("INSERT INTO %s (key, val) VALUES (?, ?)",3,3d);
+  assertRows(execute("SELECT key, val, " + fName + "(val) FROM %s"),row(1,1d,Math.sin(1d)),row(2,2d,Math.sin(2d)),row(3,3d,Math.sin(3d)));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testJavascriptSimpleCollections() throws Throwable {
+  createTable("CREATE TABLE %s (key int primary key, lst list<double>, st set<text>, mp map<int, boolean>)");
+  String fName1=createFunction(KEYSPACE_PER_TEST,"list<double>","CREATE FUNCTION %s( lst list<double> ) " + "RETURNS NULL ON NULL INPUT " + "RETURNS list<double> "+ "LANGUAGE javascript\n"+ "AS 'lst;';");
+  String fName2=createFunction(KEYSPACE_PER_TEST,"set<text>","CREATE FUNCTION %s( st set<text> ) " + "RETURNS NULL ON NULL INPUT " + "RETURNS set<text> "+ "LANGUAGE javascript\n"+ "AS 'st;';");
+  String fName3=createFunction(KEYSPACE_PER_TEST,"map<int, boolean>","CREATE FUNCTION %s( mp map<int, boolean> ) " + "RETURNS NULL ON NULL INPUT " + "RETURNS map<int, boolean> "+ "LANGUAGE javascript\n"+ "AS 'mp;';");
+  List<Double> list=Arrays.asList(1d,2d,3d);
+  Set<String> set=new TreeSet<>(Arrays.asList("one","three","two"));
+  Map<Integer,Boolean> map=new TreeMap<>();
+  map.put(1,true);
+  map.put(2,false);
+  map.put(3,true);
+  execute("INSERT INTO %s (key, lst, st, mp) VALUES (1, ?, ?, ?)",list,set,map);
+  assertRows(execute("SELECT lst, st, mp FROM %s WHERE key = 1"),row(list,set,map));
+  assertRows(execute("SELECT " + fName1 + "(lst), "+ fName2+ "(st), "+ fName3+ "(mp) FROM %s WHERE key = 1"),row(list,set,map));
+  for (  int version : PROTOCOL_VERSIONS)   assertRowsNet(version,executeNet(version,"SELECT " + fName1 + "(lst), "+ fName2+ "(st), "+ fName3+ "(mp) FROM %s WHERE key = 1"),row(list,set,map));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

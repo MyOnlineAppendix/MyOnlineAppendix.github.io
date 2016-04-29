@@ -1,0 +1,120 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.document.MongoDbTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+- Is not executed with the test suite
+"></span><br>
+@Test @Ignore public void updateDocument(){
+  DB db=MongoUtils.getConnection().getDB();
+  MongoUtils.dropCollections(db);
+  DBCollection nodes=db.getCollection(Collection.NODES.toString());
+  DBObject index=new BasicDBObject();
+  index.put("_mod",-1L);
+  index.put("_id",1L);
+  DBObject options=new BasicDBObject();
+  nodes.createIndex(index,options);
+  long time;
+  time=System.currentTimeMillis();
+  int nodeCount=4500;
+  String parent="/parent/node/abc";
+  DBObject[] inserts=new DBObject[nodeCount];
+  for (int i=0; i < nodeCount; i++) {
+    BasicDBObject doc=new BasicDBObject();
+    inserts[i]=doc;
+    doc.put("_id",parent + "/node" + i);
+    doc.put("_mod",0);
+    doc.put("_counter",0);
+    doc.put("x",10);
+  }
+  nodes.insert(inserts,WriteConcern.SAFE);
+  time=System.currentTimeMillis() - time;
+  System.out.println("insert: " + time);
+  time=System.currentTimeMillis();
+  for (int i=0; i < nodeCount; i++) {
+    QueryBuilder queryBuilder=QueryBuilder.start(Document.ID).is(parent + "/node" + i);
+    DBObject fields=new BasicDBObject();
+    fields.put("_id",1);
+    DBObject query=queryBuilder.get();
+    BasicDBObject setUpdates=new BasicDBObject();
+    BasicDBObject incUpdates=new BasicDBObject();
+    BasicDBObject unsetUpdates=new BasicDBObject();
+    setUpdates.append("_mod",i);
+    incUpdates.append("_counter",1);
+    unsetUpdates.append("x","1");
+    BasicDBObject update=new BasicDBObject();
+    if (!setUpdates.isEmpty()) {
+      update.append("$set",setUpdates);
+    }
+    if (!incUpdates.isEmpty()) {
+      update.append("$inc",incUpdates);
+    }
+    if (!unsetUpdates.isEmpty()) {
+      update.append("$unset",unsetUpdates);
+    }
+    nodes.findAndModify(query,fields,null,false,update,false,true);
+  }
+  time=System.currentTimeMillis() - time;
+  System.out.println("update: " + time);
+  time=System.currentTimeMillis();
+  db.getMongo().close();
+}
+
+</code></pre>
+
+<pre class="type-10 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+- Is not executed with the test suite
+"></span><br>
+@Test @Ignore public void manyChildNodes(){
+  DB db=MongoUtils.getConnection().getDB();
+  MongoUtils.dropCollections(db);
+  DBCollection nodes=db.getCollection(Collection.NODES.toString());
+  DBObject index=new BasicDBObject();
+  index.put("_mod",-1L);
+  index.put("_id",1L);
+  DBObject options=new BasicDBObject();
+  nodes.createIndex(index,options);
+  int children=1000000;
+  int perInsert=1000;
+  int group=0;
+  String parent="/parent/node/abc";
+  for (int i=0; i < children; ) {
+    DBObject[] inserts=new DBObject[perInsert];
+    group++;
+    for (int j=0; j < perInsert; j++, i++) {
+      BasicDBObject doc=new BasicDBObject();
+      inserts[j]=doc;
+      doc.put("_id",parent + "/node" + i);
+      doc.put("_mod",group);
+    }
+    nodes.insert(inserts,WriteConcern.SAFE);
+    log("inserted " + i + "/"+ children);
+  }
+  QueryBuilder queryBuilder=QueryBuilder.start("_mod");
+  queryBuilder.greaterThanEquals(group - 1);
+  queryBuilder.and("_id").greaterThan(parent + "/");
+  queryBuilder.and("_id").lessThanEquals(parent + "0");
+  DBObject query=queryBuilder.get();
+  BasicDBObject keys=new BasicDBObject();
+  keys.put("_id",1);
+  DBCursor cursor=nodes.find(query,keys);
+  int count=0;
+  log("Query plan: " + cursor.explain());
+  long time=System.currentTimeMillis();
+  while (cursor.hasNext()) {
+    DBObject obj=cursor.next();
+    obj.get("_id");
+    count++;
+  }
+  time=System.currentTimeMillis() - time;
+  log("Time: " + time + " ms");
+  log("Count: " + count);
+  db.getMongo().close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

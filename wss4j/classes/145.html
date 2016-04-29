@@ -1,0 +1,1172 @@
+<h3 style="margin:0px">Class: org.apache.wss4j.stax.test.AttachmentTest (16 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(16)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(15)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentContentEncryptionExternalReferenceList() throws Exception {
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecEncrypt encrypt=new WSSecEncrypt();
+  encrypt.setUserInfo("receiver","default");
+  encrypt.setKeyIdentifierType(WSConstants.ISSUER_SERIAL);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  encrypt.getParts().add(new WSEncryptionPart("Body","http://schemas.xmlsoap.org/soap/envelope/","Content"));
+  encrypt.getParts().add(new WSEncryptionPart("cid:Attachments","Content"));
+  String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  encrypt.setAttachmentCallbackHandler(attachmentCallbackHandler);
+  encrypt.prepare(doc,CryptoFactory.getInstance("transmitter-crypto.properties"));
+  Element refs=encrypt.encrypt();
+  encrypt.addAttachmentEncryptedDataElements(secHeader);
+  encrypt.addExternalRefElement(refs,secHeader);
+  encrypt.prependToHeader(secHeader);
+  NodeList references=doc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+  Assert.assertEquals(2,references.getLength());
+  NodeList cipherReferences=doc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+  Assert.assertEquals(1,cipherReferences.getLength());
+  NodeList encDatas=doc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+  Assert.assertEquals(2,encDatas.getLength());
+  NodeList securityHeaderElement=doc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+  Assert.assertEquals(1,securityHeaderElement.getLength());
+  NodeList childs=securityHeaderElement.item(0).getChildNodes();
+  Assert.assertEquals(3,childs.getLength());
+  Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+  Assert.assertEquals(childs.item(1).getLocalName(),"ReferenceList");
+  Assert.assertEquals(childs.item(2).getLocalName(),"EncryptedData");
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  javax.xml.transform.Transformer transformer=TRANSFORMER_FACTORY.newTransformer();
+  transformer.transform(new DOMSource(doc),new StreamResult(baos));
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  Map<String,String> attHeaders=responseAttachment.getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentCmplEncCmplSign() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[1];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachmentId));
+  attachment[0].setId(attachmentId);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(3,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"Signature");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(2).getLocalName(),"EncryptedData");
+    Assert.assertEquals(1,attachment[0].getHeaders().size());
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment[0].getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  byte[] attachmentBytes=readInputStream(attachment[0].getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",attachment[0].getMimeType());
+  Map<String,String> attHeaders=attachment[0].getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentCompleteSignature() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    Document document=StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+    NodeList sigReferences=document.getElementsByTagNameNS(WSConstants.SIG_NS,"Reference");
+    Assert.assertEquals(2,sigReferences.getLength());
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentCompleteEncryption() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList references=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+    Assert.assertEquals(2,references.getLength());
+    NodeList cipherReferences=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+    Assert.assertEquals(1,cipherReferences.getLength());
+    NodeList encDatas=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+    Assert.assertEquals(2,encDatas.getLength());
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(2,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+    Assert.assertEquals(1,encryptedAttachments.get(0).getHeaders().size());
+  }
+  final PushbackInputStream pis=new PushbackInputStream(encryptedAttachments.get(0).getSourceStream(),1);
+  pis.unread('K');
+  encryptedAttachments.get(0).setSourceStream(pis);
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    try {
+      StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+    }
+ catch (    XMLStreamException e) {
+      Assert.assertTrue(e.getCause() instanceof WSSecurityException);
+      return;
+    }
+    Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+    Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+    byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+    Assert.assertFalse(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+    Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentContentSignature() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Content));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment.getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.replace("15","16").getBytes(StandardCharsets.UTF_8)));
+          attachments.add(attachment);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    try {
+      StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+      Assert.fail("Exception expected");
+    }
+ catch (    XMLStreamException e) {
+      Assert.assertTrue(e.getCause() instanceof XMLSecurityException);
+      Assert.assertTrue(e.getCause().getMessage().startsWith("Invalid digest of reference cid:"));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultipleAttachmentCompleteSignature() throws Exception {
+  final String attachment1Id=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[2];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachment1Id));
+  attachment[0].setId(attachment1Id);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  final String attachment2Id=UUID.randomUUID().toString();
+  attachment[1]=new Attachment();
+  attachment[1].setMimeType("text/plain");
+  attachment[1].addHeaders(getHeaders(attachment2Id));
+  attachment[1].setId(attachment2Id);
+  attachment[1].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Arrays.asList(attachment));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Arrays.asList(attachment));
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    Document document=StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+    NodeList sigReferences=document.getElementsByTagNameNS(WSConstants.SIG_NS,"Reference");
+    Assert.assertEquals(3,sigReferences.getLength());
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentContentEncryptionGCM() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Content));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    securityProperties.setEncryptionSymAlgorithm(WSSConstants.NS_XENC11_AES128_GCM);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList references=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+    Assert.assertEquals(2,references.getLength());
+    NodeList cipherReferences=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+    Assert.assertEquals(1,cipherReferences.getLength());
+    NodeList encDatas=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+    Assert.assertEquals(2,encDatas.getLength());
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(2,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+  }
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  Map<String,String> attHeaders=responseAttachment.getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentCmplSignCmplEnc() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[1];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachmentId));
+  attachment[0].setId(attachmentId);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment[0].getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          if (attachment[0].getHeaders().size() == 6) {
+            attachment[0].addHeader(AttachmentUtils.MIME_HEADER_CONTENT_DESCRIPTION,"Kaputt");
+          }
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    try {
+      StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+      Assert.fail("Exception expected");
+    }
+ catch (    XMLStreamException e) {
+      Assert.assertTrue(e.getCause() instanceof XMLSecurityException);
+      Assert.assertTrue(e.getCause().getMessage().startsWith("Invalid digest of reference cid:"));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentContentSignature() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Content));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    Document document=StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+    NodeList sigReferences=document.getElementsByTagNameNS(WSConstants.SIG_NS,"Reference");
+    Assert.assertEquals(2,sigReferences.getLength());
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentCompleteSignature() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+{
+    attachment.addHeader(AttachmentUtils.MIME_HEADER_CONTENT_DESCRIPTION,"Kaputt");
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment.getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    try {
+      StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+      Assert.fail("Exception expected");
+    }
+ catch (    XMLStreamException e) {
+      Assert.assertTrue(e.getCause() instanceof XMLSecurityException);
+      Assert.assertTrue(e.getCause().getMessage().startsWith("Invalid digest of reference cid:"));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultipleAttachmentCompleteEncryption() throws Exception {
+  final String attachment1Id=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[2];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachment1Id));
+  attachment[0].setId(attachment1Id);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  final String attachment2Id=UUID.randomUUID().toString();
+  attachment[1]=new Attachment();
+  attachment[1].setMimeType("text/plain");
+  attachment[1].addHeaders(getHeaders(attachment2Id));
+  attachment[1].setId(attachment2Id);
+  attachment[1].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Arrays.asList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+  }
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachment1Bytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachment1Bytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  Map<String,String> att1Headers=responseAttachment.getHeaders();
+  Assert.assertEquals(6,att1Headers.size());
+  responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(1);
+  byte[] attachment2Bytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachment2Bytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/plain",responseAttachment.getMimeType());
+  Map<String,String> att2Headers=responseAttachment.getHeaders();
+  Assert.assertEquals(6,att2Headers.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentContentEncryption() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Content));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList references=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+    Assert.assertEquals(2,references.getLength());
+    NodeList cipherReferences=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+    Assert.assertEquals(1,cipherReferences.getLength());
+    NodeList encDatas=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+    Assert.assertEquals(2,encDatas.getLength());
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(2,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+  }
+  final PushbackInputStream pis=new PushbackInputStream(encryptedAttachments.get(0).getSourceStream(),1);
+  pis.unread('K');
+  encryptedAttachments.get(0).setSourceStream(pis);
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  try {
+    byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+    Assert.assertFalse(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+    Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+    Map<String,String> attHeaders=responseAttachment.getHeaders();
+    Assert.assertEquals(6,attHeaders.size());
+  }
+ catch (  IOException ex) {
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentCmplSignCmplEnc() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[1];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachmentId));
+  attachment[0].setId(attachmentId);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE);
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(3,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+    Assert.assertEquals(childs.item(2).getLocalName(),"Signature");
+    Assert.assertEquals(1,attachment[0].getHeaders().size());
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment[0].getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  byte[] attachmentBytes=readInputStream(attachment[0].getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",attachment[0].getMimeType());
+  Map<String,String> attHeaders=attachment[0].getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentCompleteEncryption() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList references=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+    Assert.assertEquals(2,references.getLength());
+    NodeList cipherReferences=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+    Assert.assertEquals(1,cipherReferences.getLength());
+    NodeList encDatas=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+    Assert.assertEquals(2,encDatas.getLength());
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(2,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+    Assert.assertEquals(1,encryptedAttachments.get(0).getHeaders().size());
+  }
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  Map<String,String> attHeaders=responseAttachment.getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testXMLAttachmentContentEncryption() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment attachment=new Attachment();
+  attachment.setMimeType("text/xml");
+  attachment.addHeaders(getHeaders(attachmentId));
+  attachment.setId(attachmentId);
+  attachment.setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  AttachmentCallbackHandler attachmentCallbackHandler=new AttachmentCallbackHandler(Collections.singletonList(attachment));
+  List<Attachment> encryptedAttachments=attachmentCallbackHandler.getResponseAttachments();
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    securityProperties.setActions(actions);
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Content));
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList references=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"DataReference");
+    Assert.assertEquals(2,references.getLength());
+    NodeList cipherReferences=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"CipherReference");
+    Assert.assertEquals(1,cipherReferences.getLength());
+    NodeList encDatas=securedDoc.getElementsByTagNameNS(WSConstants.ENC_NS,"EncryptedData");
+    Assert.assertEquals(2,encDatas.getLength());
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(2,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedData");
+  }
+  attachmentCallbackHandler=new AttachmentCallbackHandler(encryptedAttachments);
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(attachmentCallbackHandler);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+  }
+  Assert.assertFalse(attachmentCallbackHandler.getResponseAttachments().isEmpty());
+  Attachment responseAttachment=attachmentCallbackHandler.getResponseAttachments().get(0);
+  byte[] attachmentBytes=readInputStream(responseAttachment.getSourceStream());
+  Assert.assertTrue(Arrays.equals(attachmentBytes,SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  Assert.assertEquals("text/xml",responseAttachment.getMimeType());
+  Map<String,String> attHeaders=responseAttachment.getHeaders();
+  Assert.assertEquals(6,attHeaders.size());
+}
+
+</code></pre>
+
+<pre class="type-3 type-8 type-5 type-1 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInvalidXMLAttachmentCmplEncCmplSign() throws Exception {
+  final String attachmentId=UUID.randomUUID().toString();
+  final Attachment[] attachment=new Attachment[1];
+  attachment[0]=new Attachment();
+  attachment[0].setMimeType("text/xml");
+  attachment[0].addHeaders(getHeaders(attachmentId));
+  attachment[0].setId(attachmentId);
+  attachment[0].setSourceStream(new ByteArrayInputStream(SOAPUtil.SAMPLE_SOAP_MSG.getBytes(StandardCharsets.UTF_8)));
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT);
+    actions.add(WSSConstants.SIGNATURE);
+    securityProperties.setActions(actions);
+    securityProperties.loadSignatureKeyStore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setSignatureUser("transmitter");
+    securityProperties.addSignaturePart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Element));
+    securityProperties.addSignaturePart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.loadEncryptionKeystore(this.getClass().getClassLoader().getResource("transmitter.jks"),"default".toCharArray());
+    securityProperties.setEncryptionUser("receiver");
+    securityProperties.addEncryptionPart(new SecurePart(new QName("http://schemas.xmlsoap.org/soap/envelope/","Body"),SecurePart.Modifier.Content));
+    securityProperties.addEncryptionPart(new SecurePart("cid:Attachments",SecurePart.Modifier.Element));
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    Document securedDoc=documentBuilderFactory.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList securityHeaderElement=securedDoc.getElementsByTagNameNS(WSConstants.WSSE_NS,"Security");
+    Assert.assertEquals(1,securityHeaderElement.getLength());
+    NodeList childs=securityHeaderElement.item(0).getChildNodes();
+    Assert.assertEquals(3,childs.getLength());
+    Assert.assertEquals(childs.item(0).getLocalName(),"Signature");
+    Assert.assertEquals(childs.item(1).getLocalName(),"EncryptedKey");
+    Assert.assertEquals(childs.item(2).getLocalName(),"EncryptedData");
+  }
+{
+    final PushbackInputStream pis=new PushbackInputStream(attachment[0].getSourceStream(),1);
+    pis.unread('K');
+    attachment[0].setSourceStream(pis);
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandlerImpl());
+    securityProperties.setAttachmentCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof AttachmentRequestCallback) {
+          AttachmentRequestCallback attachmentRequestCallback=(AttachmentRequestCallback)callbacks[0];
+          if (!attachment[0].getId().equals(attachmentRequestCallback.getAttachmentId())) {
+            throw new RuntimeException("wrong attachment requested");
+          }
+          List<Attachment> attachments=new ArrayList<Attachment>();
+          attachments.add(attachment[0]);
+          attachmentRequestCallback.setAttachments(attachments);
+        }
+ else {
+          AttachmentResultCallback attachmentResultCallback=(AttachmentResultCallback)callbacks[0];
+          attachment[0]=attachmentResultCallback.getAttachment();
+        }
+      }
+    }
+);
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())));
+    try {
+      StAX2DOM.readDoc(documentBuilderFactory.newDocumentBuilder(),xmlStreamReader);
+      Assert.fail("Exception expected");
+    }
+ catch (    XMLStreamException e) {
+      Assert.assertNotNull(e.getMessage());
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

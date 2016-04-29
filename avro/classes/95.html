@@ -1,0 +1,70 @@
+<h3 style="margin:0px">Class: org.apache.avro.mapreduce.TestAvroKeyValueRecordReader (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-2 type-4 type-3 type-11 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifies that avro records can be read and progress is reported correctly.
+ */
+@Test public void testReadRecords() throws IOException, InterruptedException {
+  Schema keyValueSchema=AvroKeyValue.getSchema(Schema.create(Schema.Type.STRING),Schema.create(Schema.Type.INT));
+  AvroKeyValue<CharSequence,Integer> firstInputRecord=new AvroKeyValue<CharSequence,Integer>(new GenericData.Record(keyValueSchema));
+  firstInputRecord.setKey("first");
+  firstInputRecord.setValue(1);
+  AvroKeyValue<CharSequence,Integer> secondInputRecord=new AvroKeyValue<CharSequence,Integer>(new GenericData.Record(keyValueSchema));
+  secondInputRecord.setKey("second");
+  secondInputRecord.setValue(2);
+  final SeekableInput avroFileInput=new SeekableFileInput(AvroFiles.createFile(new File(mTempDir.getRoot(),"myInputFile.avro"),keyValueSchema,firstInputRecord.get(),secondInputRecord.get()));
+  RecordReader<AvroKey<CharSequence>,AvroValue<Integer>> recordReader=new AvroKeyValueRecordReader<CharSequence,Integer>(Schema.create(Schema.Type.STRING),Schema.create(Schema.Type.INT)){
+    @Override protected SeekableInput createSeekableInput(    Configuration conf,    Path path) throws IOException {
+      return avroFileInput;
+    }
+  }
+;
+  Configuration conf=new Configuration();
+  FileSplit inputSplit=createMock(FileSplit.class);
+  expect(inputSplit.getPath()).andReturn(new Path("/path/to/an/avro/file")).anyTimes();
+  expect(inputSplit.getStart()).andReturn(0L).anyTimes();
+  expect(inputSplit.getLength()).andReturn(avroFileInput.length()).anyTimes();
+  TaskAttemptContext context=createMock(TaskAttemptContext.class);
+  expect(context.getConfiguration()).andReturn(conf).anyTimes();
+  replay(inputSplit);
+  replay(context);
+  recordReader.initialize(inputSplit,context);
+  assertEquals("Progress should be zero before any records are read",0.0f,recordReader.getProgress(),0.0f);
+  AvroKey<CharSequence> key;
+  AvroValue<Integer> value;
+  assertTrue("Expected at least one record",recordReader.nextKeyValue());
+  key=recordReader.getCurrentKey();
+  value=recordReader.getCurrentValue();
+  assertNotNull("First record had null key",key);
+  assertNotNull("First record had null value",value);
+  assertEquals("first",key.datum().toString());
+  assertEquals(1,value.datum().intValue());
+  assertTrue("getCurrentKey() returned different keys for the same record",key == recordReader.getCurrentKey());
+  assertTrue("getCurrentValue() returned different values for the same record",value == recordReader.getCurrentValue());
+  assertTrue("Expected to read a second record",recordReader.nextKeyValue());
+  key=recordReader.getCurrentKey();
+  value=recordReader.getCurrentValue();
+  assertNotNull("Second record had null key",key);
+  assertNotNull("Second record had null value",value);
+  assertEquals("second",key.datum().toString());
+  assertEquals(2,value.datum().intValue());
+  assertEquals("Progress should be complete (2 out of 2 records processed)",1.0f,recordReader.getProgress(),0.0f);
+  assertFalse("Expected only 2 records",recordReader.nextKeyValue());
+  recordReader.close();
+  verify(inputSplit);
+  verify(context);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

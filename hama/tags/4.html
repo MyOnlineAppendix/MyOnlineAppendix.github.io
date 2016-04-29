@@ -1,0 +1,527 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAPIUtilityVerifier</h3><kbd>Verifies values of objects/variables related to API calls (Java or TPL) </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hama.bsp.TestTaskAllocationRoundRobin </h4><pre class="type-4 type-6 type-5 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This test simulates the allocation of 30 tasks in round robin fashion
+ * on 10 Grooms.
+ */
+@Test public void testRoundRobinAllocation(){
+  TaskAllocationStrategy strategy=ReflectionUtils.newInstance(conf.getClass("",RoundRobinTaskAllocator.class,TaskAllocationStrategy.class),conf);
+  for (int i=0; i < 30; i++) {
+    GroomServerStatus groomStatus=strategy.getGroomToAllocate(groomStatuses,null,taskCountInGroomMap,resources,taskInProgress);
+    if (groomStatus != null) {
+      taskCountInGroomMap.put(groomStatus,taskCountInGroomMap.get(groomStatus) + 1);
+      assertEquals("","host" + (i % 10),groomStatus.getGroomHostName());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.bsp.TestZooKeeper </h4><pre class="type-4 type-1 type-3 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClearZKNodes() throws IOException, KeeperException, InterruptedException {
+  final ZooKeeperSyncServerImpl server=new ZooKeeperSyncServerImpl();
+  boolean done=false;
+  try {
+    server.init(configuration);
+    ExecutorService executorService=Executors.newCachedThreadPool();
+    executorService.submit(new Runnable(){
+      @Override public void run(){
+        try {
+          server.start();
+        }
+ catch (        Exception e) {
+          e.printStackTrace();
+        }
+      }
+    }
+);
+    executorService.awaitTermination(10,TimeUnit.SECONDS);
+    String bspRoot="/bsp";
+    ZooKeeperSyncClientImpl peerClient=(ZooKeeperSyncClientImpl)SyncServiceFactory.getPeerSyncClient(configuration);
+    ZKSyncBSPMasterClient masterClient=(ZKSyncBSPMasterClient)SyncServiceFactory.getMasterSyncClient(configuration);
+    masterClient.init(configuration);
+    Thread.sleep(100);
+    Log.info("Created master and client sync clients");
+    assertTrue(masterClient.hasKey(bspRoot));
+    Log.info("BSP root exists");
+    BSPJobID jobID=new BSPJobID("test1",1);
+    masterClient.registerJob(jobID.toString());
+    TaskID taskId1=new TaskID(jobID,1);
+    TaskID taskId2=new TaskID(jobID,2);
+    TaskAttemptID task1=new TaskAttemptID(taskId1,1);
+    TaskAttemptID task2=new TaskAttemptID(taskId2,1);
+    int zkPort=BSPNetUtils.getFreePort(21815);
+    configuration.setInt(Constants.PEER_PORT,zkPort);
+    peerClient.init(configuration,jobID,task1);
+    peerClient.registerTask(jobID,"hamanode1",5000L,task1);
+    peerClient.registerTask(jobID,"hamanode2",5000L,task2);
+    peerClient.storeInformation(peerClient.constructKey(jobID,"info","level2"),new IntWritable(5),true,null);
+    String[] names=peerClient.getAllPeerNames(task1.getJobID());
+    Log.info("Found child count = " + names.length);
+    assertEquals(2,names.length);
+    Log.info("Passed the child count test");
+    masterClient.addKey(masterClient.constructKey(jobID,"peer","1"),true,null);
+    masterClient.addKey(masterClient.constructKey(jobID,"peer","2"),true,null);
+    String[] peerChild=masterClient.getChildKeySet(masterClient.constructKey(jobID,"peer"),null);
+    Log.info("Found child count = " + peerChild.length);
+    assertEquals(2,peerChild.length);
+    Log.info(" Peer name " + peerChild[0]);
+    Log.info(" Peer name " + peerChild[1]);
+    Log.info("Passed the child key set test");
+    masterClient.deregisterJob(jobID.toString());
+    Log.info(masterClient.constructKey(jobID));
+    Thread.sleep(200);
+    assertEquals(false,masterClient.hasKey(masterClient.constructKey(jobID)));
+    Log.info("Passed the key presence test");
+    boolean result=masterClient.getInformation(masterClient.constructKey(jobID,"info","level3"),new IntWritable());
+    assertEquals(false,result);
+    Writable[] writableArr=new Writable[2];
+    writableArr[0]=new LongWritable(3L);
+    writableArr[1]=new LongWritable(5L);
+    ArrayWritable arrWritable=new ArrayWritable(LongWritable.class);
+    arrWritable.set(writableArr);
+    masterClient.storeInformation(masterClient.constructKey(jobID,"info","level3"),arrWritable,true,null);
+    ArrayWritable valueHolder=new ArrayWritable(LongWritable.class);
+    boolean getResult=masterClient.getInformation(masterClient.constructKey(jobID,"info","level3"),valueHolder);
+    assertTrue(getResult);
+    assertEquals(arrWritable.get()[0],valueHolder.get()[0]);
+    assertEquals(arrWritable.get()[1],valueHolder.get()[1]);
+    Log.info("Passed array writable test");
+    done=true;
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+ finally {
+    server.stopServer();
+  }
+  assertEquals(true,done);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.bsp.message.TestAvroMessageManager </h4><pre class="type-4 type-1 type-3 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAvroMessenger() throws Exception {
+  BSPMessageBundle<Writable> randomBundle=getRandomBundle();
+  Configuration conf=new Configuration();
+  conf.set("hama.messenger.class","org.apache.hama.bsp.message.AvroMessageManagerImpl");
+  conf.set(DiskQueue.DISK_QUEUE_PATH_KEY,TMP_OUTPUT_PATH);
+  MessageManager<Writable> messageManager=MessageManagerFactory.getMessageManager(conf);
+  conf.set(BSPMessageCompressorFactory.COMPRESSION_CODEC_CLASS,SnappyCompressor.class.getName());
+  assertTrue(messageManager instanceof AvroMessageManagerImpl);
+  InetSocketAddress peer=new InetSocketAddress(BSPNetUtils.getCanonicalHostname(),BSPNetUtils.getFreePort());
+  BSPPeer<?,?,?,?,Writable> dummyPeer=new BSPPeerImpl<NullWritable,NullWritable,NullWritable,NullWritable,Writable>(conf,FileSystem.get(conf),new Counters());
+  TaskAttemptID id=new TaskAttemptID("1",1,1,1);
+  messageManager.init(id,dummyPeer,conf,peer);
+  messageManager.transfer(peer,randomBundle);
+  messageManager.clearOutgoingQueues();
+  assertEquals(SUM,messageManager.getNumCurrentMessages());
+  int numIntMsgs=0, numBoolMsgs=0, numDoubleMsgs=0;
+  Writable msg=null;
+  while ((msg=messageManager.getCurrentMessage()) != null) {
+    if (msg instanceof IntegerMessage) {
+      numIntMsgs++;
+    }
+ else     if (msg instanceof BooleanMessage) {
+      numBoolMsgs++;
+    }
+ else     if (msg instanceof DoubleMessage) {
+      numDoubleMsgs++;
+    }
+  }
+  assertEquals(INT_MSG_COUNT,numIntMsgs);
+  assertEquals(BOOL_MSG_COUNT,numBoolMsgs);
+  assertEquals(DOUBLE_MSG_COUNT,numDoubleMsgs);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.bsp.sync.TestSyncServiceFactory </h4><pre class="type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testServerInstantiation() throws Exception {
+  Configuration conf=new Configuration();
+  SyncServer syncServer=SyncServiceFactory.getSyncServer(conf);
+  assertTrue(syncServer instanceof ZooKeeperSyncServerImpl);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testClientInstantiation() throws Exception {
+  Configuration conf=new Configuration();
+  PeerSyncClient syncClient=SyncServiceFactory.getPeerSyncClient(conf);
+  assertTrue(syncClient instanceof ZooKeeperSyncClientImpl);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-1 type-3 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZKSyncStore() throws Exception {
+  Configuration conf=new Configuration();
+  int zkPort=BSPNetUtils.getFreePort(21811);
+  conf.set("bsp.local.dir","/tmp/hama-test");
+  conf.set("bsp.output.dir","/tmp/hama-test_out");
+  conf.setInt(Constants.PEER_PORT,zkPort);
+  conf.set(Constants.ZOOKEEPER_QUORUM,"localhost");
+  conf.setInt(Constants.ZOOKEEPER_CLIENT_PORT,zkPort);
+  System.setProperty("user.dir","/tmp");
+  final SyncServer syncServer=SyncServiceFactory.getSyncServer(conf);
+  syncServer.init(conf);
+  assertTrue(syncServer instanceof ZooKeeperSyncServerImpl);
+  ZKServerThread serverThread=new ZKServerThread(syncServer);
+  ExecutorService executorService=Executors.newFixedThreadPool(1);
+  executorService.submit(serverThread);
+  executorService.awaitTermination(10,TimeUnit.SECONDS);
+  final PeerSyncClient syncClient=SyncServiceFactory.getPeerSyncClient(conf);
+  assertTrue(syncClient instanceof ZooKeeperSyncClientImpl);
+  BSPJobID jobId=new BSPJobID("abc",1);
+  TaskAttemptID taskId=new TaskAttemptID(new TaskID(jobId,1),1);
+  syncClient.init(conf,jobId,taskId);
+  Runtime.getRuntime().addShutdownHook(new Thread(){
+    @Override public void run(){
+      try {
+        syncServer.stopServer();
+      }
+ catch (      Exception e) {
+      }
+    }
+  }
+);
+  Thread.sleep(3000);
+  IntWritable data=new IntWritable(5);
+  syncClient.storeInformation(syncClient.constructKey(jobId,String.valueOf(1L),"test"),data,true,null);
+  ListenerTest listenerTest=new ListenerTest();
+  syncClient.registerListener(syncClient.constructKey(jobId,String.valueOf(1L),"test"),ZKSyncEventFactory.getValueChangeEvent(),listenerTest);
+  IntWritable valueHolder=new IntWritable();
+  boolean result=syncClient.getInformation(syncClient.constructKey(jobId,String.valueOf(1L),"test"),valueHolder);
+  assertTrue(result);
+  int intVal=valueHolder.get();
+  assertTrue(intVal == data.get());
+  data.set(6);
+  syncClient.storeInformation(syncClient.constructKey(jobId,String.valueOf(1L),"test"),data,true,null);
+  valueHolder=new IntWritable();
+  result=syncClient.getInformation(syncClient.constructKey(jobId,String.valueOf(1L),"test"),valueHolder);
+  assertTrue(result);
+  intVal=valueHolder.get();
+  assertTrue(intVal == data.get());
+  Thread.sleep(5000);
+  assertEquals(true,listenerTest.getValue().equals("Changed"));
+  syncServer.stopServer();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.commons.math.TestDenseDoubleVector </h4><pre class="type-4 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+"></span><br>
+@Test public void testSort(){
+  double[] vals={12,32,31,11,52,13,-1,-222,2};
+  DoubleVector vec=new DenseDoubleVector(vals);
+  Comparator<Double> comparator=new Comparator<Double>(){
+    @Override public int compare(    Double arg0,    Double arg1){
+      return Double.compare(arg0,arg1);
+    }
+  }
+;
+  List<Tuple<Double,Integer>> sorted=DenseDoubleVector.sort(vec,comparator);
+  for (int i=1; i < sorted.size(); ++i) {
+    Tuple<Double,Integer> previous=sorted.get(i - 1);
+    Tuple<Double,Integer> cur=sorted.get(i);
+    assertTrue(previous.getFirst() <= cur.getFirst());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-6 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=100) public void testIterator(){
+  double[] expectedRes=new double[]{38,44,50,56,0,0,3,0,0,0};
+  DoubleVector vec=new DenseDoubleVector(expectedRes);
+  Iterator<DoubleVectorElement> itr=vec.iterate();
+  int curIdx=0;
+  while (itr.hasNext()) {
+    DoubleVectorElement elem=itr.next();
+    assertEquals(curIdx,elem.getIndex());
+    assertEquals(expectedRes[curIdx++],elem.getValue(),0.000001);
+  }
+  Iterator<DoubleVectorElement> itrNonZero=vec.iterateNonDefault();
+  curIdx=0;
+  while (itrNonZero.hasNext()) {
+    while (expectedRes[curIdx] == 0.0) {
+      ++curIdx;
+    }
+    assertEquals(expectedRes[curIdx++],itrNonZero.next().getValue(),0.000001);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testFromUpTo(){
+  double from=11;
+  double to=111.5;
+  double stepsize=2.5;
+  DoubleVector vec=DenseDoubleVector.fromUpTo(from,to,stepsize);
+  int curIndex=0;
+  double cur=11;
+  while (cur <= to) {
+    assertEquals(cur,vec.get(curIndex),0.000001);
+    cur+=stepsize;
+    ++curIndex;
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.commons.math.TestSparseDoubleVector </h4><pre class="type-4 type-6 type-1 type-3 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIterators(){
+  DoubleVector v1=new SparseDoubleVector(10,5.5);
+  Iterator<DoubleVectorElement> itr1=v1.iterate();
+  int idx1=0;
+  while (itr1.hasNext()) {
+    DoubleVectorElement elem=itr1.next();
+    assertEquals(idx1++,elem.getIndex());
+    assertEquals(5.5,elem.getValue(),0.000001);
+  }
+  v1.set(2,20);
+  v1.set(6,30);
+  Iterator<DoubleVectorElement> itr2=v1.iterateNonDefault();
+  DoubleVectorElement elem=itr2.next();
+  assertEquals(2,elem.getIndex());
+  assertEquals(20,elem.getValue(),0.000001);
+  elem=itr2.next();
+  assertEquals(6,elem.getIndex());
+  assertEquals(30,elem.getValue(),0.000001);
+  assertFalse(itr2.hasNext());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.examples.FastGraphGenTest </h4><pre class="type-4 type-6 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testJsonGraphGenerator() throws Exception {
+  Configuration conf=new Configuration();
+  FastGraphGen.main(new String[]{"-v","20","-e","10","-o",TEST_OUTPUT,"-t","1","-of","json","-w","0"});
+  FileSystem fs=FileSystem.get(conf);
+  FileStatus[] globStatus=fs.globStatus(new Path(TEST_OUTPUT + "/part-*"));
+  JSONParser parser=new JSONParser();
+  for (  FileStatus fts : globStatus) {
+    BufferedReader br=new BufferedReader(new InputStreamReader(fs.open(fts.getPath())));
+    try {
+      String line;
+      line=br.readLine();
+      while (line != null) {
+        JSONArray jsonArray=(JSONArray)parser.parse(line);
+        JSONArray edgeArray=(JSONArray)jsonArray.get(2);
+        assertTrue(edgeArray.size() <= 10);
+        for (        Object obj : edgeArray) {
+          JSONArray edge=(JSONArray)obj;
+          assertTrue(Integer.parseInt(edge.get(0).toString()) < 20);
+          assertTrue(Integer.parseInt(edge.get(0).toString()) >= 0);
+          assertTrue(Integer.parseInt(edge.get(1).toString()) == 0);
+        }
+        line=br.readLine();
+      }
+    }
+  finally {
+      br.close();
+    }
+  }
+  fs.delete(new Path(TEST_OUTPUT),true);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-6 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testGraphGenerator() throws Exception {
+  Configuration conf=new Configuration();
+  FastGraphGen.main(new String[]{"-v","20","-e","10","-o",TEST_OUTPUT,"-t","3"});
+  FileSystem fs=FileSystem.get(conf);
+  FileStatus[] globStatus=fs.globStatus(new Path(TEST_OUTPUT + "/part-*"));
+  for (  FileStatus fts : globStatus) {
+    BufferedReader br=new BufferedReader(new InputStreamReader(fs.open(fts.getPath())));
+    try {
+      String line;
+      line=br.readLine();
+      while (line != null) {
+        String[] keyValue=line.split("\t");
+        String[] outlinkId=keyValue[1].split(" ");
+        assertTrue(outlinkId.length <= 10);
+        for (        String edge : outlinkId) {
+          assertTrue(Integer.parseInt(edge) < 20);
+          assertTrue(Integer.parseInt(edge) >= 0);
+        }
+        line=br.readLine();
+      }
+    }
+  finally {
+      br.close();
+    }
+  }
+  fs.delete(new Path(TEST_OUTPUT),true);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.graph.TestGraphJobMessage </h4><pre class="type-4 type-1 type-3 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPriorityQueue() throws IOException {
+  PriorityQueue<GraphJobMessage> prio=new PriorityQueue<GraphJobMessage>();
+  prio.addAll(getMessages());
+  GraphJobMessage poll=prio.poll();
+  assertEquals(true,poll.isMapMessage());
+  poll=prio.poll();
+  assertEquals(true,poll.isVertexMessage());
+  assertEquals("1",poll.getVertexId().toString());
+  poll=prio.poll();
+  assertEquals(true,poll.isVertexMessage());
+  assertEquals("2",poll.getVertexId().toString());
+  poll=prio.poll();
+  assertEquals(true,poll.isVertexMessage());
+  assertEquals("3",poll.getVertexId().toString());
+  assertTrue(prio.isEmpty());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hama.ml.recommendation.TestOnlineCF </h4><pre class="type-4 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@SuppressWarnings({"deprecation","rawtypes","unchecked"}) @Test public void testOnlineCF(){
+  Preference[] train_prefs={new Preference<Integer,Integer>(1,1,4),new Preference<Integer,Integer>(1,2,2.5),new Preference<Integer,Integer>(1,3,3.5),new Preference<Integer,Integer>(1,4,1),new Preference<Integer,Integer>(1,5,3.5),new Preference<Integer,Integer>(2,1,4),new Preference<Integer,Integer>(2,2,2.5),new Preference<Integer,Integer>(2,3,3.5),new Preference<Integer,Integer>(2,4,1),new Preference<Integer,Integer>(2,5,3.5),new Preference<Integer,Integer>(3,1,4),new Preference<Integer,Integer>(3,2,2.5),new Preference<Integer,Integer>(3,3,3.5)};
+  Preference[] test_prefs={new Preference<Integer,Integer>(1,3,3.5),new Preference<Integer,Integer>(2,4,1),new Preference<Integer,Integer>(3,4,1),new Preference<Integer,Integer>(3,5,3.5)};
+  Random rnd=new Random();
+  Long num=Long.valueOf(rnd.nextInt(100000));
+  String fileName="onlinecf_train" + num.toString();
+  String outputFileName="onlinecf_model" + num.toString();
+  Configuration fsConf=new Configuration();
+  String strDataPath="/tmp/" + fileName;
+  String convertedFileName="/tmp/converted_" + fileName;
+  Path dataPath=new Path(strDataPath);
+  try {
+    URI uri=new URI(strDataPath);
+    FileSystem fs=FileSystem.get(uri,fsConf);
+    fs.delete(dataPath,true);
+    FSDataOutputStream fileOut=fs.create(dataPath,true);
+    StringBuilder str=new StringBuilder();
+    for (    Preference taste : train_prefs) {
+      str.append(taste.getUserId());
+      str.append("::");
+      str.append(taste.getItemId());
+      str.append("::");
+      str.append(taste.getValue().get());
+      str.append("\n");
+    }
+    fileOut.writeBytes(str.toString());
+    fileOut.close();
+    MovieLensConverter converter=new MovieLensConverter();
+    assertEquals(true,converter.convert(strDataPath,null,convertedFileName));
+    OnlineCF recommender=new OnlineCF();
+    recommender.setInputPreferences(convertedFileName);
+    recommender.setIteration(150);
+    recommender.setMatrixRank(3);
+    recommender.setSkipCount(1);
+    recommender.setTaskCount(2);
+    recommender.setUpdateFunction(MeanAbsError.class);
+    recommender.setOutputPath(outputFileName);
+    assertEquals(true,recommender.train());
+    recommender.load(outputFileName,false);
+    int correct=0;
+    for (    Preference<Integer,Integer> test : test_prefs) {
+      double actual=test.getValue().get();
+      double estimated=recommender.estimatePreference(test.getUserId(),test.getItemId());
+      correct+=(Math.abs(actual - estimated) < 0.5) ? 1 : 0;
+    }
+    assertEquals(test_prefs.length * 0.75,correct,1);
+    fs.delete(new Path(outputFileName));
+    fs.delete(new Path(strDataPath));
+    fs.delete(new Path(convertedFileName));
+  }
+ catch (  Exception e) {
+    e.printStackTrace();
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

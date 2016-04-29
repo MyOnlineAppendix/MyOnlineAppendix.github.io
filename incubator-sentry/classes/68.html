@@ -1,0 +1,183 @@
+<h3 style="margin:0px">Class: org.apache.sentry.provider.db.generic.service.thrift.TestAuditLogForSentryGenericService (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After public void after(){
+  try {
+    runTestAsSubject(new TestOperation(){
+      @Override public void runTestAsSubject() throws Exception {
+        Set<TSentryRole> tRoles=client.listAllRoles(ADMIN_USER,COMPONENT);
+        for (        TSentryRole tRole : tRoles) {
+          client.dropRole(ADMIN_USER,tRole.getRoleName(),COMPONENT);
+        }
+        if (client != null) {
+          client.close();
+        }
+      }
+    }
+);
+  }
+ catch (  Exception e) {
+    LOGGER.warn("Exception happened after test case.",e);
+  }
+ finally {
+    policyFilePath.delete();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testAuditLogForGenericModel() throws Exception {
+  runTestAsSubject(new TestOperation(){
+    @Override public void runTestAsSubject() throws Exception {
+      String requestorUserName=ADMIN_USER;
+      Set<String> requestorUserGroupNames=Sets.newHashSet(ADMIN_GROUP);
+      String roleName="admin_r";
+      String testGroupName="g1";
+      String action="all";
+      String service="sentryService";
+      setLocalGroupMapping(requestorUserName,requestorUserGroupNames);
+      writePolicyFile();
+      client.createRole(requestorUserName,roleName,COMPONENT);
+      Map<String,String> fieldValueMap=new HashMap<String,String>();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_CREATE_ROLE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"CREATE ROLE " + roleName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      try {
+        client.createRole(requestorUserName,roleName,COMPONENT);
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_CREATE_ROLE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"CREATE ROLE " + roleName);
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+      client.addRoleToGroups(requestorUserName,roleName,COMPONENT,Sets.newHashSet(testGroupName));
+      fieldValueMap.clear();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_ADD_ROLE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"GRANT ROLE " + roleName + " TO GROUP "+ testGroupName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      try {
+        client.addRoleToGroups(requestorUserName,"invalidRole",COMPONENT,Sets.newHashSet(testGroupName));
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_ADD_ROLE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"GRANT ROLE invalidRole TO GROUP " + testGroupName);
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+      TSentryPrivilege privilege=new TSentryPrivilege(COMPONENT,service,Lists.newArrayList(new TAuthorizable("resourceType1","resourceName1"),new TAuthorizable("resourceType2","resourceName2")),action);
+      client.grantPrivilege(requestorUserName,roleName,COMPONENT,privilege);
+      fieldValueMap.clear();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_GRANT_PRIVILEGE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"GRANT ALL ON resourceType1 resourceName1 resourceType2 resourceName2 TO ROLE " + roleName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      TSentryPrivilege invalidPrivilege=new TSentryPrivilege(COMPONENT,service,Lists.newArrayList(new TAuthorizable("resourceType1","resourceName1")),"invalidAction");
+      try {
+        client.grantPrivilege(requestorUserName,roleName,COMPONENT,invalidPrivilege);
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_GRANT_PRIVILEGE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"GRANT INVALIDACTION ON resourceType1 resourceName1 TO ROLE " + roleName);
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+      client.revokePrivilege(requestorUserName,roleName,COMPONENT,privilege);
+      fieldValueMap.clear();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_REVOKE_PRIVILEGE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"REVOKE ALL ON resourceType1 resourceName1 resourceType2 resourceName2 FROM ROLE " + roleName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      try {
+        client.revokePrivilege(requestorUserName,"invalidRole",COMPONENT,invalidPrivilege);
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_REVOKE_PRIVILEGE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"REVOKE INVALIDACTION ON resourceType1 resourceName1 FROM ROLE invalidRole");
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+      client.deleteRoleToGroups(requestorUserName,roleName,COMPONENT,Sets.newHashSet(testGroupName));
+      fieldValueMap.clear();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_DELETE_ROLE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"REVOKE ROLE " + roleName + " FROM GROUP "+ testGroupName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      try {
+        client.deleteRoleToGroups(requestorUserName,"invalidRole",COMPONENT,Sets.newHashSet(testGroupName));
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_DELETE_ROLE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"REVOKE ROLE invalidRole FROM GROUP " + testGroupName);
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+      client.dropRole(requestorUserName,roleName,COMPONENT);
+      fieldValueMap.clear();
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_DROP_ROLE);
+      fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+      fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"DROP ROLE " + roleName);
+      fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.TRUE);
+      fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+      assertAuditLog(fieldValueMap);
+      try {
+        client.dropRole(requestorUserName,roleName,COMPONENT);
+        fail("Exception should have been thrown");
+      }
+ catch (      Exception e) {
+        fieldValueMap.clear();
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION,Constants.OPERATION_DROP_ROLE);
+        fieldValueMap.put(Constants.LOG_FIELD_COMPONENT,COMPONENT);
+        fieldValueMap.put(Constants.LOG_FIELD_OPERATION_TEXT,"DROP ROLE " + roleName);
+        fieldValueMap.put(Constants.LOG_FIELD_ALLOWED,Constants.FALSE);
+        fieldValueMap.put(Constants.LOG_FIELD_IP_ADDRESS,null);
+        assertAuditLog(fieldValueMap);
+      }
+    }
+  }
+);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

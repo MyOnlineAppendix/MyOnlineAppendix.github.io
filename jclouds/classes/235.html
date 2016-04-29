@@ -1,0 +1,135 @@
+<h3 style="margin:0px">Class: org.jclouds.ec2.CloudApplicationArchitecturesEC2ApiLiveTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Invokes logging operations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >Logger&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(enabled=false,dependsOnMethods="testCreateRunningInstance") void testReboot() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+  RunningInstance instance=getInstance(instanceId);
+  System.out.printf("%d: %s rebooting instance %n",System.currentTimeMillis(),instanceId);
+  client.getInstanceApi().get().rebootInstancesInRegion(null,instanceId);
+  Thread.sleep(1000);
+  instance=getInstance(instanceId);
+  blockUntilWeCanSshIntoInstance(instance);
+  SshClient ssh=sshFactory.create(HostAndPort.fromParts(instance.getIpAddress(),22),LoginCredentials.builder().user("root").privateKey(keyPair.getKeyMaterial()).build());
+  try {
+    ssh.connect();
+    ExecResponse uptime=ssh.exec("uptime");
+    assert uptime.getOutput().indexOf("0 min") != -1 : "reboot didn't work: " + uptime;
+  }
+  finally {
+    if (ssh != null)     ssh.disconnect();
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-1 type-6 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(enabled=false,dependsOnMethods={"testCreateKeyPair","testCreateSecurityGroupIngressCidr"}) public void testCreateRunningInstance() throws Exception {
+  String script=new ScriptBuilder().addStatement(exec("runurl run.alestic.com/apt/upgrade")).addStatement(exec("runurl run.alestic.com/install/lamp")).render(OsFamily.UNIX);
+  RunningInstance instance=null;
+  while (instance == null) {
+    try {
+      System.out.printf("%d: running instance%n",System.currentTimeMillis());
+      Reservation<? extends RunningInstance> reservation=client.getInstanceApi().get().runInstancesInRegion(null,null,"ami-ccf615a5",1,1,asType(InstanceType.M1_SMALL).withKeyName(keyPair.getKeyName()).withSecurityGroup(securityGroupName).withUserData(script.getBytes()));
+      instance=Iterables.getOnlyElement(reservation);
+    }
+ catch (    HttpResponseException htpe) {
+      if (htpe.getResponse().getStatusCode() == 400)       continue;
+      throw htpe;
+    }
+  }
+  assertNotNull(instance.getId());
+  instanceId=instance.getId();
+  assertEquals(instance.getInstanceState(),InstanceState.PENDING);
+  instance=blockUntilWeCanSshIntoInstance(instance);
+  verifyInstanceProperties(script);
+  tryToChangeStuff();
+  sshPing(instance);
+  System.out.printf("%d: %s ssh connection made%n",System.currentTimeMillis(),instanceId);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(enabled=false) void testCreateSecurityGroupIngressCidr() throws InterruptedException, ExecutionException, TimeoutException {
+  securityGroupName=instancePrefix + "ingress";
+  try {
+    client.getSecurityGroupApi().get().deleteSecurityGroupInRegion(null,securityGroupName);
+  }
+ catch (  Exception e) {
+  }
+  client.getSecurityGroupApi().get().createSecurityGroupInRegion(null,securityGroupName,securityGroupName);
+  for (  int port : new int[]{80,443,22}) {
+    client.getSecurityGroupApi().get().authorizeSecurityGroupIngressInRegion(null,securityGroupName,IpProtocol.TCP,port,port,"0.0.0.0/0");
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-1 type-6 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(enabled=false,dependsOnMethods="testReboot") void testElasticIpAddress() throws InterruptedException, ExecutionException, TimeoutException, IOException {
+  address=client.getElasticIPAddressApi().get().allocateAddressInRegion(null);
+  assertNotNull(address);
+  PublicIpInstanceIdPair compare=Iterables.getLast(client.getElasticIPAddressApi().get().describeAddressesInRegion(null,address));
+  assertEquals(compare.getPublicIp(),address);
+  assert compare.getInstanceId() == null;
+  client.getElasticIPAddressApi().get().associateAddressInRegion(null,address,instanceId);
+  compare=Iterables.getLast(client.getElasticIPAddressApi().get().describeAddressesInRegion(null,address));
+  assertEquals(compare.getPublicIp(),address);
+  assertEquals(compare.getInstanceId(),instanceId);
+  Reservation<? extends RunningInstance> reservation=Iterables.getOnlyElement(client.getInstanceApi().get().describeInstancesInRegion(null,instanceId));
+  assertNotNull(Iterables.getOnlyElement(reservation).getIpAddress());
+  assertNotEquals(address,Iterables.getOnlyElement(reservation).getIpAddress());
+  doCheckKey(address);
+  client.getElasticIPAddressApi().get().disassociateAddressInRegion(null,address);
+  compare=Iterables.getLast(client.getElasticIPAddressApi().get().describeAddressesInRegion(null,address));
+  assertEquals(compare.getPublicIp(),address);
+  assert compare.getInstanceId() == null;
+  reservation=Iterables.getOnlyElement(client.getInstanceApi().get().describeInstancesInRegion(null,instanceId));
+}
+
+</code></pre>
+
+<pre class="type-13 type-1 type-6 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(enabled=false) void testCreateKeyPair() throws InterruptedException, ExecutionException, TimeoutException {
+  String keyName=instancePrefix + "1";
+  try {
+    client.getKeyPairApi().get().deleteKeyPairInRegion(null,keyName);
+  }
+ catch (  Exception e) {
+  }
+  client.getKeyPairApi().get().deleteKeyPairInRegion(null,keyName);
+  keyPair=client.getKeyPairApi().get().createKeyPairInRegion(null,keyName);
+  assertNotNull(keyPair);
+  assertNotNull(keyPair.getKeyMaterial());
+  assertNotNull(keyPair.getSha1OfPrivateKey());
+  assertEquals(keyPair.getKeyName(),keyName);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

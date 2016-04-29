@@ -1,0 +1,1330 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspIterativeVerifier</h3><kbd>Verifies assertions in iterations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.hdfs.TestDistributedFileSystem </h4><pre class="type-16 type-3 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFileChecksum() throws Exception {
+  ((Log4JLogger)HftpFileSystem.LOG).getLogger().setLevel(Level.ALL);
+  final long seed=RAN.nextLong();
+  System.out.println("seed=" + seed);
+  RAN.setSeed(seed);
+  final Configuration conf=getTestConfiguration();
+  conf.set(DFSConfigKeys.DFS_DATANODE_HOST_NAME_KEY,"localhost");
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  final FileSystem hdfs=cluster.getFileSystem();
+  final String hftpuri="hftp://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY);
+  System.out.println("hftpuri=" + hftpuri);
+  final FileSystem hftp=new Path(hftpuri).getFileSystem(conf);
+  final String dir="/filechecksum";
+  final int block_size=1024;
+  final int buffer_size=conf.getInt("io.file.buffer.size",4096);
+  conf.setInt(DFSConfigKeys.DFS_BYTES_PER_CHECKSUM_KEY,512);
+  for (int n=0; n < 5; n++) {
+    final byte[] data=new byte[RAN.nextInt(block_size / 2 - 1) + n * block_size + 1];
+    RAN.nextBytes(data);
+    System.out.println("data.length=" + data.length);
+    final Path foo=new Path(dir,"foo" + n);
+{
+      final FSDataOutputStream out=hdfs.create(foo,false,buffer_size,(short)2,block_size);
+      out.write(data);
+      out.close();
+    }
+    final FileChecksum hdfsfoocs=hdfs.getFileChecksum(foo);
+    System.out.println("hdfsfoocs=" + hdfsfoocs);
+    final FileChecksum hftpfoocs=hftp.getFileChecksum(foo);
+    System.out.println("hftpfoocs=" + hftpfoocs);
+    final Path qualified=new Path(hftpuri + dir,"foo" + n);
+    final FileChecksum qfoocs=hftp.getFileChecksum(qualified);
+    System.out.println("qfoocs=" + qfoocs);
+    final Path bar=new Path(dir,"bar" + n);
+{
+      final FSDataOutputStream out=hdfs.create(bar,false,buffer_size,(short)2,block_size);
+      out.write(data);
+      out.close();
+    }
+{
+      final FileChecksum barcs=hdfs.getFileChecksum(bar);
+      final int barhashcode=barcs.hashCode();
+      assertEquals(hdfsfoocs.hashCode(),barhashcode);
+      assertEquals(hdfsfoocs,barcs);
+      assertEquals(hftpfoocs.hashCode(),barhashcode);
+      assertEquals(hftpfoocs,barcs);
+      assertEquals(qfoocs.hashCode(),barhashcode);
+      assertEquals(qfoocs,barcs);
+    }
+{
+      hdfs.setPermission(new Path(dir),new FsPermission((short)0));
+      try {
+        final String username=UserGroupInformation.getCurrentUser().getShortUserName() + "1";
+        final HftpFileSystem hftp2=cluster.getHftpFileSystemAs(username,conf,0,"somegroup");
+        hftp2.getFileChecksum(qualified);
+        fail();
+      }
+ catch (      IOException ioe) {
+        FileSystem.LOG.info("GOOD: getting an exception",ioe);
+      }
+    }
+  }
+  cluster.shutdown();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.TestFileAppend </h4><pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test that copy on write for blocks works correctly
+ * @throws IOException an exception might be thrown
+ */
+@Test public void testCopyOnWrite() throws IOException {
+  Configuration conf=new HdfsConfiguration();
+  if (simulatedStorage) {
+    conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED,true);
+  }
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).build();
+  FileSystem fs=cluster.getFileSystem();
+  InetSocketAddress addr=new InetSocketAddress("localhost",cluster.getNameNodePort());
+  DFSClient client=new DFSClient(addr,conf);
+  try {
+    Path file1=new Path("/filestatus.dat");
+    FSDataOutputStream stm=AppendTestUtil.createFile(fs,file1,1);
+    writeFile(stm);
+    stm.close();
+    DataNode[] dn=cluster.listDataNodes();
+    assertTrue("There should be only one datanode but found " + dn.length,dn.length == 1);
+    LocatedBlocks locations=client.getNamenode().getBlockLocations(file1.toString(),0,Long.MAX_VALUE);
+    List<LocatedBlock> blocks=locations.getLocatedBlocks();
+    FSDataset dataset=(FSDataset)dn[0].data;
+    for (int i=0; i < blocks.size(); i=i + 2) {
+      ExtendedBlock b=blocks.get(i).getBlock();
+      File f=dataset.getFile(b.getBlockPoolId(),b.getLocalBlock());
+      File link=new File(f.toString() + ".link");
+      System.out.println("Creating hardlink for File " + f + " to "+ link);
+      HardLink.createHardLink(f,link);
+    }
+    for (int i=0; i < blocks.size(); i++) {
+      ExtendedBlock b=blocks.get(i).getBlock();
+      System.out.println("testCopyOnWrite detaching block " + b);
+      assertTrue("Detaching block " + b + " should have returned true",dataset.unlinkBlock(b,1));
+    }
+    for (int i=0; i < blocks.size(); i++) {
+      ExtendedBlock b=blocks.get(i).getBlock();
+      System.out.println("testCopyOnWrite detaching block " + b);
+      assertTrue("Detaching block " + b + " should have returned false",!dataset.unlinkBlock(b,1));
+    }
+  }
+  finally {
+    fs.close();
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.TestLeaseRecovery2 </h4><pre class="type-16 type-10 type-3 type-8 type-9 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test makes the client does not renew its lease and also
+ * set the soft lease expiration period to be short 1s. Thus triggering
+ * soft lease expiration to happen immediately by having another client
+ * trying to create the same file.
+ * The test makes sure that the lease recovery completes.
+ * @throws Exception
+ */
+@Test public void testSoftLeaseRecovery() throws Exception {
+  Map<String,String[]> u2g_map=new HashMap<String,String[]>(1);
+  u2g_map.put(fakeUsername,new String[]{fakeGroup});
+  DFSTestUtil.updateConfWithFakeGroupMapping(conf,u2g_map);
+  String filestr="/foo" + AppendTestUtil.nextInt();
+  AppendTestUtil.LOG.info("filestr=" + filestr);
+  Path filepath=new Path(filestr);
+  FSDataOutputStream stm=dfs.create(filepath,true,BUF_SIZE,REPLICATION_NUM,BLOCK_SIZE);
+  assertTrue(dfs.dfs.exists(filestr));
+  int size=AppendTestUtil.nextInt(FILE_SIZE);
+  AppendTestUtil.LOG.info("size=" + size);
+  stm.write(buffer,0,size);
+  AppendTestUtil.LOG.info("hflush");
+  stm.hflush();
+  AppendTestUtil.LOG.info("leasechecker.interruptAndJoin()");
+  dfs.dfs.leaserenewer.interruptAndJoin();
+  cluster.setLeasePeriod(SHORT_LEASE_PERIOD,LONG_LEASE_PERIOD);
+{
+    UserGroupInformation ugi=UserGroupInformation.createUserForTesting(fakeUsername,new String[]{fakeGroup});
+    FileSystem dfs2=DFSTestUtil.getFileSystemAs(ugi,conf);
+    boolean done=false;
+    for (int i=0; i < 10 && !done; i++) {
+      AppendTestUtil.LOG.info("i=" + i);
+      try {
+        dfs2.create(filepath,false,BUF_SIZE,REPLICATION_NUM,BLOCK_SIZE);
+        fail("Creation of an existing file should never succeed.");
+      }
+ catch (      FileAlreadyExistsException ex) {
+        done=true;
+      }
+catch (      AlreadyBeingCreatedException ex) {
+        AppendTestUtil.LOG.info("GOOD! got " + ex.getMessage());
+      }
+catch (      IOException ioe) {
+        AppendTestUtil.LOG.warn("UNEXPECTED IOException",ioe);
+      }
+      if (!done) {
+        AppendTestUtil.LOG.info("sleep " + 5000 + "ms");
+        try {
+          Thread.sleep(5000);
+        }
+ catch (        InterruptedException e) {
+        }
+      }
+    }
+    assertTrue(done);
+  }
+  AppendTestUtil.LOG.info("Lease for file " + filepath + " is recovered. "+ "Validating its contents now...");
+  long fileSize=dfs.getFileStatus(filepath).getLen();
+  assertTrue("File should be " + size + " bytes, but is actually "+ " found to be "+ fileSize+ " bytes",fileSize == size);
+  AppendTestUtil.LOG.info("File size is good. " + "Now validating data and sizes from datanodes...");
+  AppendTestUtil.checkFullFile(dfs,filepath,size,buffer,filestr);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.TestReplaceDatanodeOnFailure </h4><pre class="type-16 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test DEFAULT ReplaceDatanodeOnFailure policy. 
+ */
+@Test public void testDefaultPolicy() throws Exception {
+  final ReplaceDatanodeOnFailure p=ReplaceDatanodeOnFailure.DEFAULT;
+  final DatanodeInfo[] infos=new DatanodeInfo[5];
+  final DatanodeInfo[][] datanodes=new DatanodeInfo[infos.length + 1][];
+  datanodes[0]=new DatanodeInfo[0];
+  for (int i=0; i < infos.length; ) {
+    infos[i]=new DatanodeInfo(new DatanodeID("dn" + i));
+    i++;
+    datanodes[i]=new DatanodeInfo[i];
+    System.arraycopy(infos,0,datanodes[i],0,datanodes[i].length);
+  }
+  final boolean[] isAppend={true,true,false,false};
+  final boolean[] isHflushed={true,false,true,false};
+  for (short replication=1; replication <= infos.length; replication++) {
+    for (int nExistings=0; nExistings < datanodes.length; nExistings++) {
+      final DatanodeInfo[] existings=datanodes[nExistings];
+      Assert.assertEquals(nExistings,existings.length);
+      for (int i=0; i < isAppend.length; i++) {
+        for (int j=0; j < isHflushed.length; j++) {
+          final int half=replication / 2;
+          final boolean enoughReplica=replication <= nExistings;
+          final boolean noReplica=nExistings == 0;
+          final boolean replicationL3=replication < 3;
+          final boolean existingsLEhalf=nExistings <= half;
+          final boolean isAH=isAppend[i] || isHflushed[j];
+          final boolean expected;
+          if (enoughReplica || noReplica || replicationL3) {
+            expected=false;
+          }
+ else {
+            expected=isAH || existingsLEhalf;
+          }
+          final boolean computed=p.satisfy(replication,existings,isAppend[i],isHflushed[j]);
+          try {
+            Assert.assertEquals(expected,computed);
+          }
+ catch (          AssertionError e) {
+            final String s="replication=" + replication + "\nnExistings ="+ nExistings+ "\nisAppend   ="+ isAppend[i]+ "\nisHflushed ="+ isHflushed[j];
+            throw new RuntimeException(s,e);
+          }
+        }
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-16 type-10 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test replace datanode on failure. 
+ */
+@Test public void testReplaceDatanodeOnFailure() throws Exception {
+  final Configuration conf=new HdfsConfiguration();
+  ReplaceDatanodeOnFailure.ALWAYS.write(conf);
+  final String[] racks=new String[REPLICATION];
+  Arrays.fill(racks,RACK0);
+  final MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).racks(racks).numDataNodes(REPLICATION).build();
+  try {
+    final DistributedFileSystem fs=(DistributedFileSystem)cluster.getFileSystem();
+    final Path dir=new Path(DIR);
+    final SlowWriter[] slowwriters=new SlowWriter[10];
+    for (int i=1; i <= slowwriters.length; i++) {
+      slowwriters[i - 1]=new SlowWriter(fs,new Path(dir,"file" + i),i * 200L);
+    }
+    for (    SlowWriter s : slowwriters) {
+      s.start();
+    }
+    sleepSeconds(1);
+    cluster.startDataNodes(conf,2,true,null,new String[]{RACK1,RACK1});
+    cluster.stopDataNode(AppendTestUtil.nextInt(REPLICATION));
+    sleepSeconds(5);
+    for (    SlowWriter s : slowwriters) {
+      s.checkReplication();
+      s.interruptRunning();
+    }
+    for (    SlowWriter s : slowwriters) {
+      s.joinAndClose();
+    }
+    LOG.info("Verify the file");
+    for (int i=0; i < slowwriters.length; i++) {
+      LOG.info(slowwriters[i].filepath + ": length=" + fs.getFileStatus(slowwriters[i].filepath).getLen());
+      FSDataInputStream in=null;
+      try {
+        in=fs.open(slowwriters[i].filepath);
+        for (int j=0, x; (x=in.read()) != -1; j++) {
+          Assert.assertEquals(j,x);
+        }
+      }
+  finally {
+        IOUtils.closeStream(in);
+      }
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.security.token.block.TestBlockToken </h4><pre class="type-16 type-10 type-12 type-3 type-9 type-18 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that fast repeated invocations of createClientDatanodeProtocolProxy
+ * will not end up using up thousands of sockets. This is a regression test for
+ * HDFS-1965.
+ */
+@Test public void testBlockTokenRpcLeak() throws Exception {
+  Assume.assumeTrue(FD_DIR.exists());
+  BlockTokenSecretManager sm=new BlockTokenSecretManager(true,blockKeyUpdateInterval,blockTokenLifetime);
+  Token<BlockTokenIdentifier> token=sm.generateToken(block3,EnumSet.allOf(BlockTokenSecretManager.AccessMode.class));
+  final Server server=createMockDatanode(sm,token);
+  server.start();
+  final InetSocketAddress addr=NetUtils.getConnectAddress(server);
+  DatanodeID fakeDnId=new DatanodeID("localhost:" + addr.getPort(),"fake-storage",0,addr.getPort());
+  ExtendedBlock b=new ExtendedBlock("fake-pool",new Block(12345L));
+  LocatedBlock fakeBlock=new LocatedBlock(b,new DatanodeInfo[0]);
+  fakeBlock.setBlockToken(token);
+  ClientDatanodeProtocol proxyToNoWhere=RPC.getProxy(ClientDatanodeProtocol.class,ClientDatanodeProtocol.versionID,new InetSocketAddress("1.1.1.1",1),UserGroupInformation.createRemoteUser("junk"),conf,NetUtils.getDefaultSocketFactory(conf));
+  ClientDatanodeProtocol proxy=null;
+  int fdsAtStart=countOpenFileDescriptors();
+  try {
+    long endTime=System.currentTimeMillis() + 3000;
+    while (System.currentTimeMillis() < endTime) {
+      proxy=DFSTestUtil.createClientDatanodeProtocolProxy(fakeDnId,conf,1000,fakeBlock);
+      assertEquals(block3.getBlockId(),proxy.getReplicaVisibleLength(block3));
+      if (proxy != null) {
+        RPC.stopProxy(proxy);
+      }
+      LOG.info("Num open fds:" + countOpenFileDescriptors());
+    }
+    int fdsAtEnd=countOpenFileDescriptors();
+    if (fdsAtEnd - fdsAtStart > 50) {
+      fail("Leaked " + (fdsAtEnd - fdsAtStart) + " fds!");
+    }
+  }
+  finally {
+    server.stop();
+  }
+  RPC.stopProxy(proxyToNoWhere);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestBlockReport </h4><pre class="type-16 type-10 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test write a file, verifies and closes it. Then the length of the blocks
+ * are messed up and BlockReport is forced.
+ * The modification of blocks' length has to be ignored
+ * @throws java.io.IOException on an error
+ */
+@Test public void blockReport_01() throws IOException {
+  final String METHOD_NAME=GenericTestUtils.getMethodName();
+  Path filePath=new Path("/" + METHOD_NAME + ".dat");
+  ArrayList<Block> blocks=prepareForRide(filePath,METHOD_NAME,FILE_SIZE);
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("Number of blocks allocated " + blocks.size());
+  }
+  long[] oldLengths=new long[blocks.size()];
+  int tempLen;
+  for (int i=0; i < blocks.size(); i++) {
+    Block b=blocks.get(i);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Block " + b.getBlockName() + " before\t"+ "Size "+ b.getNumBytes());
+    }
+    oldLengths[i]=b.getNumBytes();
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Setting new length");
+    }
+    tempLen=rand.nextInt(BLOCK_SIZE);
+    b.set(b.getBlockId(),tempLen,b.getGenerationStamp());
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Block " + b.getBlockName() + " after\t "+ "Size "+ b.getNumBytes());
+    }
+  }
+  DataNode dn=cluster.getDataNodes().get(DN_N0);
+  String poolId=cluster.getNamesystem().getBlockPoolId();
+  DatanodeRegistration dnR=dn.getDNRegistrationForBP(poolId);
+  cluster.getNameNode().blockReport(dnR,poolId,new BlockListAsLongs(blocks,null).getBlockListAsLongs());
+  List<LocatedBlock> blocksAfterReport=DFSTestUtil.getAllBlocks(fs.open(filePath));
+  if (LOG.isDebugEnabled()) {
+    LOG.debug("After mods: Number of blocks allocated " + blocksAfterReport.size());
+  }
+  for (int i=0; i < blocksAfterReport.size(); i++) {
+    ExtendedBlock b=blocksAfterReport.get(i).getBlock();
+    assertEquals("Length of " + i + "th block is incorrect",oldLengths[i],b.getNumBytes());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestDatanodeRestart </h4><pre class="type-16 type-10 type-9 type-6 type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRecoverReplicas() throws IOException {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,1024L);
+  conf.setInt(DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY,512);
+  conf.setBoolean("dfs.support.append",true);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).build();
+  cluster.waitActive();
+  try {
+    FileSystem fs=cluster.getFileSystem();
+    for (int i=0; i < 4; i++) {
+      Path fileName=new Path("/test" + i);
+      DFSTestUtil.createFile(fs,fileName,1,(short)1,0L);
+      DFSTestUtil.waitReplication(fs,fileName,(short)1);
+    }
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    DataNode dn=cluster.getDataNodes().get(0);
+    Iterator<ReplicaInfo> replicasItor=((FSDataset)dn.data).volumeMap.replicas(bpid).iterator();
+    ReplicaInfo replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,true);
+    createUnlinkTmpFile(replica,false,true);
+    replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,false);
+    createUnlinkTmpFile(replica,false,false);
+    replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,true);
+    createUnlinkTmpFile(replica,false,false);
+    cluster.restartDataNodes();
+    cluster.waitActive();
+    dn=cluster.getDataNodes().get(0);
+    Collection<ReplicaInfo> replicas=((FSDataset)(dn.data)).volumeMap.replicas(bpid);
+    Assert.assertEquals(4,replicas.size());
+    replicasItor=replicas.iterator();
+    while (replicasItor.hasNext()) {
+      Assert.assertEquals(ReplicaState.FINALIZED,replicasItor.next().getState());
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestRefreshNamenodes </h4><pre class="type-16 type-10 type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRefreshNamenodes() throws IOException {
+  Configuration conf=new Configuration();
+  MiniDFSCluster cluster=null;
+  try {
+    conf.set(DFSConfigKeys.DFS_FEDERATION_NAMESERVICES,"namesServerId1");
+    cluster=new MiniDFSCluster.Builder(conf).federation(true).numNameNodes(1).nameNodePort(nnPort1).build();
+    DataNode dn=cluster.getDataNodes().get(0);
+    assertEquals(1,dn.getAllBpOs().length);
+    cluster.addNameNode(conf,nnPort2);
+    assertEquals(2,dn.getAllBpOs().length);
+    cluster.addNameNode(conf,nnPort3);
+    assertEquals(3,dn.getAllBpOs().length);
+    cluster.addNameNode(conf,nnPort4);
+    BPOfferService[] bpoList=dn.getAllBpOs();
+    for (int i=0; i < 4; i++) {
+      InetSocketAddress addr=cluster.getNameNode(i).getNameNodeAddress();
+      boolean found=false;
+      for (int j=0; j < bpoList.length; j++) {
+        if (bpoList[j] != null && addr.equals(bpoList[j].nnAddr)) {
+          found=true;
+          bpoList[j]=null;
+          break;
+        }
+      }
+      assertTrue("NameNode address " + addr + " is not found.",found);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestBlockUnderConstruction </h4><pre class="type-16 type-10 type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test NameNode.getBlockLocations(..) on reading un-closed files.
+ */
+@Test public void testGetBlockLocations() throws IOException {
+  final NameNode namenode=cluster.getNameNode();
+  final Path p=new Path(BASE_DIR,"file2.dat");
+  final String src=p.toString();
+  final FSDataOutputStream out=TestFileCreation.createFile(hdfs,p,3);
+  int len=BLOCK_SIZE >>> 1;
+  writeFile(p,out,len);
+  for (int i=1; i < NUM_BLOCKS; ) {
+    final LocatedBlocks lb=namenode.getBlockLocations(src,0,len);
+    final List<LocatedBlock> blocks=lb.getLocatedBlocks();
+    assertEquals(i,blocks.size());
+    final Block b=blocks.get(blocks.size() - 1).getBlock().getLocalBlock();
+    assertTrue(b instanceof BlockInfoUnderConstruction);
+    if (++i < NUM_BLOCKS) {
+      writeFile(p,out,BLOCK_SIZE);
+      len+=BLOCK_SIZE;
+    }
+  }
+  out.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestBlocksWithNotEnoughRacks </h4><pre class="type-16 type-10 type-12 type-8 type-9 type-6 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCorruptBlockRereplicatedAcrossRacks() throws Exception {
+  Configuration conf=getConf();
+  short REPLICATION_FACTOR=2;
+  int fileLen=512;
+  final Path filePath=new Path("/testFile");
+  String racks[]={"/rack1","/rack1","/rack2","/rack2"};
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks).build();
+  final FSNamesystem ns=cluster.getNameNode().getNamesystem();
+  try {
+    final FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,filePath,fileLen,REPLICATION_FACTOR,1L);
+    final String fileContent=DFSTestUtil.readFile(fs,filePath);
+    ExtendedBlock b=DFSTestUtil.getFirstBlock(fs,filePath);
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+    int dnToCorrupt=DFSTestUtil.firstDnWithBlock(cluster,b);
+    assertTrue(MiniDFSCluster.corruptReplica(dnToCorrupt,b));
+    cluster.restartDataNode(dnToCorrupt);
+    DFSTestUtil.waitCorruptReplicas(fs,ns,filePath,b,1);
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+    for (int i=0; i < racks.length; i++) {
+      String blockContent=cluster.readBlockOnDataNode(i,b);
+      if (blockContent != null && i != dnToCorrupt) {
+        assertEquals("Corrupt replica",fileContent,blockContent);
+      }
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestCorruptFilesJsp </h4><pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testCorruptFilesJsp() throws Exception {
+  MiniDFSCluster cluster=null;
+  try {
+    final int FILE_SIZE=512;
+    Path[] filepaths={new Path("/audiobook"),new Path("/audio/audio1"),new Path("/audio/audio2"),new Path("/audio/audio")};
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    FileSystem fs=cluster.getFileSystem();
+    for (    Path filepath : filepaths) {
+      DFSTestUtil.createFile(fs,filepath,FILE_SIZE,(short)1,0L);
+      DFSTestUtil.waitReplication(fs,filepath,(short)1);
+    }
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("There are " + badFiles.size() + " corrupt files, but expecting none",badFiles.size() == 0);
+    URL url=new URL("http://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY) + "/corrupt_files.jsp");
+    String corruptFilesPage=DFSTestUtil.urlGet(url);
+    assertTrue("Corrupt files page is not showing a healthy filesystem",corruptFilesPage.contains("No missing blocks found at the moment."));
+    for (int idx=0; idx < filepaths.length - 1; idx++) {
+      ExtendedBlock blk=DFSTestUtil.getFirstBlock(fs,filepaths[idx]);
+      assertTrue(TestDatanodeBlockScanner.corruptReplica(blk,0));
+      FSDataInputStream in=fs.open(filepaths[idx]);
+      try {
+        in.readFully(new byte[FILE_SIZE]);
+      }
+ catch (      ChecksumException ignored) {
+      }
+      in.close();
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Expecting 3 corrupt files, but got " + badFiles.size(),badFiles.size() == 3);
+    url=new URL("http://" + conf.get(DFSConfigKeys.DFS_NAMENODE_HTTP_ADDRESS_KEY) + "/corrupt_files.jsp");
+    corruptFilesPage=DFSTestUtil.urlGet(url);
+    assertTrue("'/audiobook' should be corrupt",corruptFilesPage.contains("/audiobook"));
+    assertTrue("'/audio/audio1' should be corrupt",corruptFilesPage.contains("/audio/audio1"));
+    assertTrue("'/audio/audio2' should be corrupt",corruptFilesPage.contains("/audio/audio2"));
+    assertTrue("Summary message shall report 3 corrupt files",corruptFilesPage.contains("At least 3 corrupt file(s)"));
+    for (    Path filepath : filepaths) {
+      fs.delete(filepath,false);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestDecommissioningStatus </h4><pre class="type-16 type-12 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests Decommissioning Status in DFS.
+ */
+@Test public void testDecommissionStatus() throws IOException, InterruptedException {
+  InetSocketAddress addr=new InetSocketAddress("localhost",cluster.getNameNodePort());
+  DFSClient client=new DFSClient(addr,conf);
+  DatanodeInfo[] info=client.datanodeReport(DatanodeReportType.LIVE);
+  assertEquals("Number of Datanodes ",2,info.length);
+  FileSystem fileSys=cluster.getFileSystem();
+  short replicas=2;
+  Path file1=new Path("decommission.dat");
+  writeFile(fileSys,file1,replicas);
+  Path file2=new Path("decommission1.dat");
+  FSDataOutputStream st1=writeIncompleteFile(fileSys,file2,replicas);
+  Thread.sleep(5000);
+  FSNamesystem fsn=cluster.getNamesystem();
+  for (int iteration=0; iteration < numDatanodes; iteration++) {
+    String downnode=decommissionNode(fsn,conf,client,localFileSys,iteration);
+    decommissionedNodes.add(downnode);
+    Thread.sleep(5000);
+    ArrayList<DatanodeDescriptor> decommissioningNodes=fsn.getDecommissioningNodes();
+    if (iteration == 0) {
+      assertEquals(decommissioningNodes.size(),1);
+      DatanodeDescriptor decommNode=decommissioningNodes.get(0);
+      checkDecommissionStatus(decommNode,4,0,2);
+    }
+ else {
+      assertEquals(decommissioningNodes.size(),2);
+      DatanodeDescriptor decommNode1=decommissioningNodes.get(0);
+      DatanodeDescriptor decommNode2=decommissioningNodes.get(1);
+      checkDecommissionStatus(decommNode1,4,4,2);
+      checkDecommissionStatus(decommNode2,4,4,2);
+    }
+  }
+  writeConfigFile(localFileSys,excludeFile,null);
+  fsn.refreshNodes(conf);
+  st1.close();
+  cleanupFile(fileSys,file1);
+  cleanupFile(fileSys,file2);
+  cleanupFile(localFileSys,dir);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestHDFSConcat </h4><pre class="type-16 type-3 type-9 type-6 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Concatenates 10 files into one
+ * Verifies the final size, deletion of the file, number of blocks
+ * @throws IOException
+ */
+@Test public void testConcat() throws IOException, InterruptedException {
+  final int numFiles=10;
+  long fileLen=blockSize * 3;
+  HdfsFileStatus fStatus;
+  FSDataInputStream stm;
+  String trg=new String("/trg");
+  Path trgPath=new Path(trg);
+  DFSTestUtil.createFile(dfs,trgPath,fileLen,REPL_FACTOR,1);
+  fStatus=nn.getFileInfo(trg);
+  long trgLen=fStatus.getLen();
+  long trgBlocks=nn.getBlockLocations(trg,0,trgLen).locatedBlockCount();
+  Path[] files=new Path[numFiles];
+  byte[][] bytes=new byte[numFiles][(int)fileLen];
+  LocatedBlocks[] lblocks=new LocatedBlocks[numFiles];
+  long[] lens=new long[numFiles];
+  int i=0;
+  for (i=0; i < files.length; i++) {
+    files[i]=new Path("/file" + i);
+    Path path=files[i];
+    System.out.println("Creating file " + path);
+    DFSTestUtil.createFile(dfs,path,fileLen,REPL_FACTOR,1);
+    fStatus=nn.getFileInfo(path.toUri().getPath());
+    lens[i]=fStatus.getLen();
+    assertEquals(trgLen,lens[i]);
+    lblocks[i]=nn.getBlockLocations(path.toUri().getPath(),0,lens[i]);
+    stm=dfs.open(path);
+    stm.readFully(0,bytes[i]);
+    stm.close();
+  }
+  final UserGroupInformation user1=UserGroupInformation.createUserForTesting("theDoctor",new String[]{"tardis"});
+  DistributedFileSystem hdfs=(DistributedFileSystem)DFSTestUtil.getFileSystemAs(user1,conf);
+  try {
+    hdfs.concat(trgPath,files);
+    fail("Permission exception expected");
+  }
+ catch (  IOException ie) {
+    System.out.println("Got expected exception for permissions:" + ie.getLocalizedMessage());
+  }
+  ContentSummary cBefore=dfs.getContentSummary(trgPath.getParent());
+  dfs.concat(trgPath,files);
+  ContentSummary cAfter=dfs.getContentSummary(trgPath.getParent());
+  assertEquals(cBefore.getFileCount(),cAfter.getFileCount() + files.length);
+  long totalLen=trgLen;
+  long totalBlocks=trgBlocks;
+  for (i=0; i < files.length; i++) {
+    totalLen+=lens[i];
+    totalBlocks+=lblocks[i].locatedBlockCount();
+  }
+  System.out.println("total len=" + totalLen + "; totalBlocks="+ totalBlocks);
+  fStatus=nn.getFileInfo(trg);
+  trgLen=fStatus.getLen();
+  stm=dfs.open(trgPath);
+  byte[] byteFileConcat=new byte[(int)trgLen];
+  stm.readFully(0,byteFileConcat);
+  stm.close();
+  trgBlocks=nn.getBlockLocations(trg,0,trgLen).locatedBlockCount();
+  assertEquals(trgBlocks,totalBlocks);
+  assertEquals(trgLen,totalLen);
+  for (  Path p : files) {
+    fStatus=nn.getFileInfo(p.toUri().getPath());
+    assertNull("File " + p + " still exists",fStatus);
+    DFSTestUtil.createFile(dfs,p,fileLen,REPL_FACTOR,1);
+  }
+  checkFileContent(byteFileConcat,bytes);
+  Path smallFile=new Path("/sfile");
+  int sFileLen=10;
+  DFSTestUtil.createFile(dfs,smallFile,sFileLen,REPL_FACTOR,1);
+  dfs.concat(trgPath,new Path[]{smallFile});
+  fStatus=nn.getFileInfo(trg);
+  trgLen=fStatus.getLen();
+  trgBlocks=nn.getBlockLocations(trg,0,trgLen).locatedBlockCount();
+  assertEquals(trgBlocks,totalBlocks + 1);
+  assertEquals(trgLen,totalLen + sFileLen);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestListCorruptFileBlocks </h4><pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testlistCorruptFileBlocks() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+  FileSystem fs=null;
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil("testGetCorruptFiles",3,1,1024);
+    util.createFiles(fs,"/corruptData");
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+    int numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 4; i++) {
+      for (int j=0; j <= 1; j++) {
+        File storageDir=MiniDFSCluster.getStorageDir(i,j);
+        File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+        File[] blocks=data_dir.listFiles();
+        if (blocks == null)         continue;
+        for (int idx=0; idx < blocks.length; idx++) {
+          if (!blocks[idx].getName().startsWith("blk_")) {
+            continue;
+          }
+          LOG.info("Deliberately removing file " + blocks[idx].getName());
+          assertTrue("Cannot remove file.",blocks[idx].delete());
+        }
+      }
+    }
+    int count=0;
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+    numCorrupt=corruptFileBlocks.size();
+    while (numCorrupt < 3) {
+      Thread.sleep(1000);
+      corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+      numCorrupt=corruptFileBlocks.size();
+      count++;
+      if (count > 30)       break;
+    }
+    LOG.info("Namenode has bad files. " + numCorrupt);
+    assertTrue(numCorrupt == 3);
+    FSNamesystem.CorruptFileBlockInfo[] cfb=corruptFileBlocks.toArray(new FSNamesystem.CorruptFileBlockInfo[0]);
+    Collection<FSNamesystem.CorruptFileBlockInfo> nextCorruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",cfb[0].block.getBlockName());
+    FSNamesystem.CorruptFileBlockInfo[] ncfb=nextCorruptFileBlocks.toArray(new FSNamesystem.CorruptFileBlockInfo[0]);
+    numCorrupt=nextCorruptFileBlocks.size();
+    assertTrue(numCorrupt == 2);
+    assertTrue(ncfb[0].block.getBlockName().equalsIgnoreCase(cfb[1].block.getBlockName()));
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",ncfb[1].block.getBlockName());
+    numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    util.createFiles(fs,"/goodData");
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/goodData",null);
+    numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    util.cleanup(fs,"/corruptData");
+    util.cleanup(fs,"/goodData");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test if NN.listCorruptFiles() returns the right number of results.
+ * Also, test that DFS.listCorruptFileBlocks can make multiple successive
+ * calls.
+ */
+@Test public void testMaxCorruptFiles() throws Exception {
+  MiniDFSCluster cluster=null;
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,15);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    FileSystem fs=cluster.getFileSystem();
+    final int maxCorruptFileBlocks=FSNamesystem.DEFAULT_MAX_CORRUPT_FILEBLOCKS_RETURNED;
+    DFSTestUtil util=new DFSTestUtil("testMaxCorruptFiles",maxCorruptFileBlocks * 3,1,512);
+    util.createFiles(fs,"/srcdat2",(short)1);
+    util.waitReplication(fs,"/srcdat2",(short)1);
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting none.",badFiles.size() == 0);
+    final String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 4; i++) {
+      for (int j=0; j <= 1; j++) {
+        File storageDir=MiniDFSCluster.getStorageDir(i,j);
+        File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+        LOG.info("Removing files from " + data_dir);
+        File[] blocks=data_dir.listFiles();
+        if (blocks == null)         continue;
+        for (int idx=0; idx < blocks.length; idx++) {
+          if (!blocks[idx].getName().startsWith("blk_")) {
+            continue;
+          }
+          assertTrue("Cannot remove file.",blocks[idx].delete());
+        }
+      }
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    while (badFiles.size() < maxCorruptFileBlocks) {
+      LOG.info("# of corrupt files is: " + badFiles.size());
+      Thread.sleep(10000);
+      badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting "+ maxCorruptFileBlocks+ ".",badFiles.size() == maxCorruptFileBlocks);
+    CorruptFileBlockIterator iter=(CorruptFileBlockIterator)fs.listCorruptFileBlocks(new Path("/srcdat2"));
+    int corruptPaths=countPaths(iter);
+    assertTrue("Expected more than " + maxCorruptFileBlocks + " corrupt file blocks but got "+ corruptPaths,corruptPaths > maxCorruptFileBlocks);
+    assertTrue("Iterator should have made more than 1 call but made " + iter.getCallsMade(),iter.getCallsMade() > 1);
+    util.cleanup(fs,"/srcdat2");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-16 type-10 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * test listCorruptFileBlocks in DistributedFileSystem
+ */
+@Test public void testlistCorruptFileBlocksDFS() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+  FileSystem fs=null;
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DistributedFileSystem dfs=(DistributedFileSystem)fs;
+    DFSTestUtil util=new DFSTestUtil("testGetCorruptFiles",3,1,1024);
+    util.createFiles(fs,"/corruptData");
+    RemoteIterator<Path> corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+    int numCorrupt=countPaths(corruptFileBlocks);
+    assertTrue(numCorrupt == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 2; i++) {
+      File storageDir=MiniDFSCluster.getStorageDir(0,i);
+      File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+      File[] blocks=data_dir.listFiles();
+      if (blocks == null)       continue;
+      for (int idx=0; idx < blocks.length; idx++) {
+        if (!blocks[idx].getName().startsWith("blk_")) {
+          continue;
+        }
+        LOG.info("Deliberately removing file " + blocks[idx].getName());
+        assertTrue("Cannot remove file.",blocks[idx].delete());
+      }
+    }
+    int count=0;
+    corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+    numCorrupt=countPaths(corruptFileBlocks);
+    while (numCorrupt < 3) {
+      Thread.sleep(1000);
+      corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+      numCorrupt=countPaths(corruptFileBlocks);
+      count++;
+      if (count > 30)       break;
+    }
+    LOG.info("Namenode has bad files. " + numCorrupt);
+    assertTrue(numCorrupt == 3);
+    util.cleanup(fs,"/corruptData");
+    util.cleanup(fs,"/goodData");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-16 type-10 type-12 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * check if nn.getCorruptFiles() returns a file that has corrupted blocks 
+ */
+@Test public void testListCorruptFilesCorruptedBlock() throws Exception {
+  MiniDFSCluster cluster=null;
+  Random random=new Random();
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil("testCorruptFilesCorruptedBlock",2,1,512);
+    util.createFiles(fs,"/srcdat10");
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting None.",badFiles.size() == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    File storageDir=MiniDFSCluster.getStorageDir(0,1);
+    File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+    assertTrue("data directory does not exist",data_dir.exists());
+    File[] blocks=data_dir.listFiles();
+    assertTrue("Blocks do not exist in data-dir",(blocks != null) && (blocks.length > 0));
+    for (int idx=0; idx < blocks.length; idx++) {
+      if (blocks[idx].getName().startsWith("blk_") && blocks[idx].getName().endsWith(".meta")) {
+        RandomAccessFile file=new RandomAccessFile(blocks[idx],"rw");
+        FileChannel channel=file.getChannel();
+        long position=channel.size() - 2;
+        int length=2;
+        byte[] buffer=new byte[length];
+        random.nextBytes(buffer);
+        channel.write(ByteBuffer.wrap(buffer),position);
+        file.close();
+        LOG.info("Deliberately corrupting file " + blocks[idx].getName() + " at offset "+ position+ " length "+ length);
+        try {
+          util.checkFiles(fs,"/srcdat10");
+        }
+ catch (        BlockMissingException e) {
+          System.out.println("Received BlockMissingException as expected.");
+        }
+catch (        IOException e) {
+          assertTrue("Corrupted replicas not handled properly. Expecting BlockMissingException " + " but received IOException " + e,false);
+        }
+        break;
+      }
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    util.cleanup(fs,"/srcdat10");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-16 type-10 type-12 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Check that listCorruptFileBlocks works while the namenode is still in safemode.
+ */
+@Test public void testListCorruptFileBlocksInSafeMode() throws Exception {
+  MiniDFSCluster cluster=null;
+  Random random=new Random();
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    conf.setFloat(DFSConfigKeys.DFS_NAMENODE_SAFEMODE_THRESHOLD_PCT_KEY,1.5f);
+    conf.setFloat(DFSConfigKeys.DFS_NAMENODE_REPL_QUEUE_THRESHOLD_PCT_KEY,0f);
+    cluster=new MiniDFSCluster.Builder(conf).waitSafeMode(false).build();
+    cluster.getNameNode().setSafeMode(FSConstants.SafeModeAction.SAFEMODE_LEAVE);
+    FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil("testListCorruptFileBlocksInSafeMode",2,1,512);
+    util.createFiles(fs,"/srcdat10");
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting None.",badFiles.size() == 0);
+    File storageDir=MiniDFSCluster.getStorageDir(0,0);
+    File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,cluster.getNamesystem().getBlockPoolId());
+    assertTrue("data directory does not exist",data_dir.exists());
+    File[] blocks=data_dir.listFiles();
+    assertTrue("Blocks do not exist in data-dir",(blocks != null) && (blocks.length > 0));
+    for (int idx=0; idx < blocks.length; idx++) {
+      if (blocks[idx].getName().startsWith("blk_") && blocks[idx].getName().endsWith(".meta")) {
+        RandomAccessFile file=new RandomAccessFile(blocks[idx],"rw");
+        FileChannel channel=file.getChannel();
+        long position=channel.size() - 2;
+        int length=2;
+        byte[] buffer=new byte[length];
+        random.nextBytes(buffer);
+        channel.write(ByteBuffer.wrap(buffer),position);
+        file.close();
+        LOG.info("Deliberately corrupting file " + blocks[idx].getName() + " at offset "+ position+ " length "+ length);
+        try {
+          util.checkFiles(fs,"/srcdat10");
+        }
+ catch (        BlockMissingException e) {
+          System.out.println("Received BlockMissingException as expected.");
+        }
+catch (        IOException e) {
+          assertTrue("Corrupted replicas not handled properly. " + "Expecting BlockMissingException " + " but received IOException "+ e,false);
+        }
+        break;
+      }
+    }
+    badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    cluster.restartNameNode(0);
+    fs=cluster.getFileSystem();
+    while (!cluster.getNameNode().namesystem.isPopulatingReplQueues()) {
+      try {
+        LOG.info("waiting for replication queues");
+        Thread.sleep(1000);
+      }
+ catch (      InterruptedException ignore) {
+      }
+    }
+    try {
+      util.checkFiles(fs,"/srcdat10");
+    }
+ catch (    BlockMissingException e) {
+      System.out.println("Received BlockMissingException as expected.");
+    }
+catch (    IOException e) {
+      assertTrue("Corrupted replicas not handled properly. " + "Expecting BlockMissingException " + " but received IOException "+ e,false);
+    }
+    badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    assertTrue("Namenode is not in safe mode",cluster.getNameNode().isInSafeMode());
+    cluster.getNameNode().setSafeMode(FSConstants.SafeModeAction.SAFEMODE_LEAVE);
+    util.cleanup(fs,"/srcdat10");
+  }
+ catch (  Exception e) {
+    LOG.error(StringUtils.stringifyException(e));
+    throw e;
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.util.TestGSet </h4><pre class="type-16 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testExceptionCases(){
+{
+    final LightWeightGSet<Integer,Integer> gset=new LightWeightGSet<Integer,Integer>(16);
+    try {
+      gset.contains(null);
+      Assert.fail();
+    }
+ catch (    NullPointerException e) {
+      LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+    }
+  }
+{
+    final LightWeightGSet<Integer,Integer> gset=new LightWeightGSet<Integer,Integer>(16);
+    try {
+      gset.get(null);
+      Assert.fail();
+    }
+ catch (    NullPointerException e) {
+      LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+    }
+  }
+{
+    final LightWeightGSet<Integer,Integer> gset=new LightWeightGSet<Integer,Integer>(16);
+    try {
+      gset.put(null);
+      Assert.fail();
+    }
+ catch (    NullPointerException e) {
+      LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+    }
+    try {
+      gset.put(1);
+      Assert.fail();
+    }
+ catch (    IllegalArgumentException e) {
+      LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+    }
+  }
+{
+    final IntElement[] data=new IntElement[5];
+    for (int i=0; i < data.length; i++) {
+      data[i]=new IntElement(i,i);
+    }
+    for (int v=1; v < data.length - 1; v++) {
+{
+        final GSet<IntElement,IntElement> gset=createGSet(data);
+        for (        IntElement i : gset) {
+          if (i.value == v) {
+            gset.remove(data[0]);
+          }
+        }
+        try {
+          for (          IntElement i : gset) {
+            if (i.value == v) {
+              gset.remove(data[1]);
+            }
+          }
+          Assert.fail();
+        }
+ catch (        ConcurrentModificationException e) {
+          LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+        }
+      }
+{
+        final GSet<IntElement,IntElement> gset=createGSet(data);
+        try {
+          for (          IntElement i : gset) {
+            if (i.value == v) {
+              gset.put(data[0]);
+            }
+          }
+          Assert.fail();
+        }
+ catch (        ConcurrentModificationException e) {
+          LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+        }
+      }
+{
+        final GSet<IntElement,IntElement> gset=createGSet(data);
+        try {
+          for (          IntElement i : gset) {
+            if (i.value == v) {
+              gset.put(data[3]);
+            }
+          }
+          Assert.fail();
+        }
+ catch (        ConcurrentModificationException e) {
+          LightWeightGSet.LOG.info("GOOD: getting " + e,e);
+        }
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.security.TestRefreshUserMappings </h4><pre class="type-16 type-10 type-8 type-9 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGroupMappingRefresh() throws Exception {
+  DFSAdmin admin=new DFSAdmin(config);
+  String[] args=new String[]{"-refreshUserToGroupsMappings"};
+  Groups groups=Groups.getUserToGroupsMappingService(config);
+  String user=UserGroupInformation.getCurrentUser().getUserName();
+  System.out.println("first attempt:");
+  List<String> g1=groups.getGroups(user);
+  String[] str_groups=new String[g1.size()];
+  g1.toArray(str_groups);
+  System.out.println(Arrays.toString(str_groups));
+  System.out.println("second attempt, should be same:");
+  List<String> g2=groups.getGroups(user);
+  g2.toArray(str_groups);
+  System.out.println(Arrays.toString(str_groups));
+  for (int i=0; i < g2.size(); i++) {
+    assertEquals("Should be same group ",g1.get(i),g2.get(i));
+  }
+  admin.run(args);
+  System.out.println("third attempt(after refresh command), should be different:");
+  List<String> g3=groups.getGroups(user);
+  g3.toArray(str_groups);
+  System.out.println(Arrays.toString(str_groups));
+  for (int i=0; i < g3.size(); i++) {
+    assertFalse("Should be different group: " + g1.get(i) + " and "+ g3.get(i),g1.get(i).equals(g3.get(i)));
+  }
+  Thread.sleep(groupRefreshTimeoutSec * 1100);
+  System.out.println("fourth attempt(after timeout), should be different:");
+  List<String> g4=groups.getGroups(user);
+  g4.toArray(str_groups);
+  System.out.println(Arrays.toString(str_groups));
+  for (int i=0; i < g4.size(); i++) {
+    assertFalse("Should be different group ",g3.get(i).equals(g4.get(i)));
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,172 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.io.sstable.CQLSSTableWriterTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDown() throws Exception {
+  Config.setClientMode(false);
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testUnsortedWriter() throws Exception {
+  try (AutoCloseable switcher=Util.switchPartitioner(ByteOrderedPartitioner.instance)){
+    String KS="cql_keyspace";
+    String TABLE="table1";
+    File tempdir=Files.createTempDir();
+    File dataDir=new File(tempdir.getAbsolutePath() + File.separator + KS+ File.separator+ TABLE);
+    assert dataDir.mkdirs();
+    String schema="CREATE TABLE cql_keyspace.table1 (" + "  k int PRIMARY KEY," + "  v1 text,"+ "  v2 int"+ ")";
+    String insert="INSERT INTO cql_keyspace.table1 (k, v1, v2) VALUES (?, ?, ?)";
+    CQLSSTableWriter writer=CQLSSTableWriter.builder().inDirectory(dataDir).forTable(schema).using(insert).build();
+    writer.addRow(0,"test1",24);
+    writer.addRow(1,"test2",44);
+    writer.addRow(2,"test3",42);
+    writer.addRow(ImmutableMap.<String,Object>of("k",3,"v2",12));
+    writer.close();
+    SSTableLoader loader=new SSTableLoader(dataDir,new SSTableLoader.Client(){
+      private String keyspace;
+      public void init(      String keyspace){
+        this.keyspace=keyspace;
+        for (        Range<Token> range : StorageService.instance.getLocalRanges("cql_keyspace"))         addRangeForEndpoint(range,FBUtilities.getBroadcastAddress());
+      }
+      public CFMetaData getTableMetadata(      String cfName){
+        return Schema.instance.getCFMetaData(keyspace,cfName);
+      }
+    }
+,new OutputHandler.SystemOutput(false,false));
+    loader.stream().get();
+    UntypedResultSet rs=QueryProcessor.executeInternal("SELECT * FROM cql_keyspace.table1;");
+    assertEquals(4,rs.size());
+    Iterator<UntypedResultSet.Row> iter=rs.iterator();
+    UntypedResultSet.Row row;
+    row=iter.next();
+    assertEquals(0,row.getInt("k"));
+    assertEquals("test1",row.getString("v1"));
+    assertEquals(24,row.getInt("v2"));
+    row=iter.next();
+    assertEquals(1,row.getInt("k"));
+    assertEquals("test2",row.getString("v1"));
+    assertEquals(44,row.getInt("v2"));
+    row=iter.next();
+    assertEquals(2,row.getInt("k"));
+    assertEquals("test3",row.getString("v1"));
+    assertEquals(42,row.getInt("v2"));
+    row=iter.next();
+    assertEquals(3,row.getInt("k"));
+    assertEquals(null,row.getBytes("v1"));
+    assertEquals(12,row.getInt("v2"));
+  }
+ }
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testConcurrentWriters() throws Exception {
+  final String KS="cql_keyspace2";
+  final String TABLE="table2";
+  File tempdir=Files.createTempDir();
+  File dataDir=new File(tempdir.getAbsolutePath() + File.separator + KS+ File.separator+ TABLE);
+  assert dataDir.mkdirs();
+  WriterThread[] threads=new WriterThread[5];
+  for (int i=0; i < threads.length; i++) {
+    WriterThread thread=new WriterThread(dataDir,i);
+    threads[i]=thread;
+    thread.start();
+  }
+  for (  WriterThread thread : threads) {
+    thread.join();
+    assert !thread.isAlive() : "Thread should be dead by now";
+    if (thread.exception != null) {
+      throw thread.exception;
+    }
+  }
+  SSTableLoader loader=new SSTableLoader(dataDir,new SSTableLoader.Client(){
+    private String keyspace;
+    public void init(    String keyspace){
+      this.keyspace=keyspace;
+      for (      Range<Token> range : StorageService.instance.getLocalRanges(KS))       addRangeForEndpoint(range,FBUtilities.getBroadcastAddress());
+    }
+    public CFMetaData getTableMetadata(    String cfName){
+      return Schema.instance.getCFMetaData(keyspace,cfName);
+    }
+  }
+,new OutputHandler.SystemOutput(false,false));
+  loader.stream().get();
+  UntypedResultSet rs=QueryProcessor.executeInternal("SELECT * FROM cql_keyspace2.table2;");
+  assertEquals(threads.length * NUMBER_WRITES_IN_RUNNABLE,rs.size());
+}
+
+</code></pre>
+
+<pre class="type-16 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies that exceptions are thrown during the test case execution
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(expected=IllegalArgumentException.class) public void testForbidCounterUpdates() throws Exception {
+  String KS="cql_keyspace";
+  String TABLE="counter1";
+  File tempdir=Files.createTempDir();
+  File dataDir=new File(tempdir.getAbsolutePath() + File.separator + KS+ File.separator+ TABLE);
+  assert dataDir.mkdirs();
+  String schema="CREATE TABLE cql_keyspace.counter1 (" + "  my_id int, " + "  my_counter counter, "+ "  PRIMARY KEY (my_id)"+ ")";
+  String insert=String.format("UPDATE cql_keyspace.counter1 SET my_counter = my_counter - ? WHERE my_id = ?");
+  CQLSSTableWriter.builder().inDirectory(dataDir).forTable(schema).withPartitioner(Murmur3Partitioner.instance).using(insert).build();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSyncNoEmptyRows() throws Exception {
+  File tempdir=Files.createTempDir();
+  String schema="CREATE TABLE ks.test2 (" + "  k UUID," + "  c int,"+ "  PRIMARY KEY (k)"+ ")";
+  String insert="INSERT INTO ks.test2 (k, c) VALUES (?, ?)";
+  CQLSSTableWriter writer=CQLSSTableWriter.builder().inDirectory(tempdir).forTable(schema).using(insert).withBufferSizeInMB(1).build();
+  for (int i=0; i < 50000; i++) {
+    writer.addRow(UUID.randomUUID(),0);
+  }
+  writer.close();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSyncWithinPartition() throws Exception {
+  String KS="ks";
+  String TABLE="test";
+  File tempdir=Files.createTempDir();
+  File dataDir=new File(tempdir.getAbsolutePath() + File.separator + KS+ File.separator+ TABLE);
+  assert dataDir.mkdirs();
+  String schema="CREATE TABLE ks.test (" + "  k int PRIMARY KEY," + "  v blob"+ ")";
+  String insert="INSERT INTO ks.test (k, v) VALUES (?, ?)";
+  CQLSSTableWriter writer=CQLSSTableWriter.builder().inDirectory(dataDir).forTable(schema).using(insert).withBufferSizeInMB(1).build();
+  ByteBuffer val=ByteBuffer.allocate(1024 * 1050);
+  writer.addRow(0,val);
+  writer.addRow(1,val);
+  writer.close();
+  FilenameFilter filterDataFiles=new FilenameFilter(){
+    public boolean accept(    File dir,    String name){
+      return name.endsWith("-Data.db");
+    }
+  }
+;
+  assert dataDir.list(filterDataFiles).length > 1 : Arrays.toString(dataDir.list(filterDataFiles));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,494 @@
+<h3 style="margin:0px">Class: org.apache.kafka.streams.state.internals.RocksDBWindowStoreTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-7 type-3 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPutAndFetch() throws IOException {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    try {
+      long startTime=segmentSize - 4L;
+      context.setTime(startTime + 0L);
+      store.put(0,"zero");
+      context.setTime(startTime + 1L);
+      store.put(1,"one");
+      context.setTime(startTime + 2L);
+      store.put(2,"two");
+      context.setTime(startTime + 3L);
+      context.setTime(startTime + 4L);
+      store.put(4,"four");
+      context.setTime(startTime + 5L);
+      store.put(5,"five");
+      assertEquals(Utils.mkList("zero"),toList(store.fetch(0,startTime + 0L - windowSize,startTime + 0L + windowSize)));
+      assertEquals(Utils.mkList("one"),toList(store.fetch(1,startTime + 1L - windowSize,startTime + 1L + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + 2L - windowSize,startTime + 2L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + 3L - windowSize,startTime + 3L + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + 4L - windowSize,startTime + 4L + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + 5L - windowSize,startTime + 5L + windowSize)));
+      context.setTime(startTime + 3L);
+      store.put(2,"two+1");
+      context.setTime(startTime + 4L);
+      store.put(2,"two+2");
+      context.setTime(startTime + 5L);
+      store.put(2,"two+3");
+      context.setTime(startTime + 6L);
+      store.put(2,"two+4");
+      context.setTime(startTime + 7L);
+      store.put(2,"two+5");
+      context.setTime(startTime + 8L);
+      store.put(2,"two+6");
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime - 2L - windowSize,startTime - 2L + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime - 1L - windowSize,startTime - 1L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1"),toList(store.fetch(2,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2"),toList(store.fetch(2,startTime + 1L - windowSize,startTime + 1L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3"),toList(store.fetch(2,startTime + 2L - windowSize,startTime + 2L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3","two+4"),toList(store.fetch(2,startTime + 3L - windowSize,startTime + 3L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3","two+4","two+5"),toList(store.fetch(2,startTime + 4L - windowSize,startTime + 4L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 5L - windowSize,startTime + 5L + windowSize)));
+      assertEquals(Utils.mkList("two+1","two+2","two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 6L - windowSize,startTime + 6L + windowSize)));
+      assertEquals(Utils.mkList("two+2","two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 7L - windowSize,startTime + 7L + windowSize)));
+      assertEquals(Utils.mkList("two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 8L - windowSize,startTime + 8L + windowSize)));
+      assertEquals(Utils.mkList("two+4","two+5","two+6"),toList(store.fetch(2,startTime + 9L - windowSize,startTime + 9L + windowSize)));
+      assertEquals(Utils.mkList("two+5","two+6"),toList(store.fetch(2,startTime + 10L - windowSize,startTime + 10L + windowSize)));
+      assertEquals(Utils.mkList("two+6"),toList(store.fetch(2,startTime + 11L - windowSize,startTime + 11L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 12L - windowSize,startTime + 12L + windowSize)));
+      store.flush();
+      Map<Integer,Set<String>> entriesByKey=entriesByKey(changeLog,startTime);
+      assertEquals(Utils.mkSet("zero@0"),entriesByKey.get(0));
+      assertEquals(Utils.mkSet("one@1"),entriesByKey.get(1));
+      assertEquals(Utils.mkSet("two@2","two+1@3","two+2@4","two+3@5","two+4@6","two+5@7","two+6@8"),entriesByKey.get(2));
+      assertNull(entriesByKey.get(3));
+      assertEquals(Utils.mkSet("four@4"),entriesByKey.get(4));
+      assertEquals(Utils.mkSet("five@5"),entriesByKey.get(5));
+      assertNull(entriesByKey.get(6));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPutAndFetchBefore() throws IOException {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    try {
+      long startTime=segmentSize - 4L;
+      context.setTime(startTime + 0L);
+      store.put(0,"zero");
+      context.setTime(startTime + 1L);
+      store.put(1,"one");
+      context.setTime(startTime + 2L);
+      store.put(2,"two");
+      context.setTime(startTime + 3L);
+      context.setTime(startTime + 4L);
+      store.put(4,"four");
+      context.setTime(startTime + 5L);
+      store.put(5,"five");
+      assertEquals(Utils.mkList("zero"),toList(store.fetch(0,startTime + 0L - windowSize,startTime + 0L)));
+      assertEquals(Utils.mkList("one"),toList(store.fetch(1,startTime + 1L - windowSize,startTime + 1L)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + 2L - windowSize,startTime + 2L)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + 3L - windowSize,startTime + 3L)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + 4L - windowSize,startTime + 4L)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + 5L - windowSize,startTime + 5L)));
+      context.setTime(startTime + 3L);
+      store.put(2,"two+1");
+      context.setTime(startTime + 4L);
+      store.put(2,"two+2");
+      context.setTime(startTime + 5L);
+      store.put(2,"two+3");
+      context.setTime(startTime + 6L);
+      store.put(2,"two+4");
+      context.setTime(startTime + 7L);
+      store.put(2,"two+5");
+      context.setTime(startTime + 8L);
+      store.put(2,"two+6");
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime - 1L - windowSize,startTime - 1L)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 0L - windowSize,startTime + 0L)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 1L - windowSize,startTime + 1L)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + 2L - windowSize,startTime + 2L)));
+      assertEquals(Utils.mkList("two","two+1"),toList(store.fetch(2,startTime + 3L - windowSize,startTime + 3L)));
+      assertEquals(Utils.mkList("two","two+1","two+2"),toList(store.fetch(2,startTime + 4L - windowSize,startTime + 4L)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3"),toList(store.fetch(2,startTime + 5L - windowSize,startTime + 5L)));
+      assertEquals(Utils.mkList("two+1","two+2","two+3","two+4"),toList(store.fetch(2,startTime + 6L - windowSize,startTime + 6L)));
+      assertEquals(Utils.mkList("two+2","two+3","two+4","two+5"),toList(store.fetch(2,startTime + 7L - windowSize,startTime + 7L)));
+      assertEquals(Utils.mkList("two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 8L - windowSize,startTime + 8L)));
+      assertEquals(Utils.mkList("two+4","two+5","two+6"),toList(store.fetch(2,startTime + 9L - windowSize,startTime + 9L)));
+      assertEquals(Utils.mkList("two+5","two+6"),toList(store.fetch(2,startTime + 10L - windowSize,startTime + 10L)));
+      assertEquals(Utils.mkList("two+6"),toList(store.fetch(2,startTime + 11L - windowSize,startTime + 11L)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 12L - windowSize,startTime + 12L)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 13L - windowSize,startTime + 13L)));
+      store.flush();
+      Map<Integer,Set<String>> entriesByKey=entriesByKey(changeLog,startTime);
+      assertEquals(Utils.mkSet("zero@0"),entriesByKey.get(0));
+      assertEquals(Utils.mkSet("one@1"),entriesByKey.get(1));
+      assertEquals(Utils.mkSet("two@2","two+1@3","two+2@4","two+3@5","two+4@6","two+5@7","two+6@8"),entriesByKey.get(2));
+      assertNull(entriesByKey.get(3));
+      assertEquals(Utils.mkSet("four@4"),entriesByKey.get(4));
+      assertEquals(Utils.mkSet("five@5"),entriesByKey.get(5));
+      assertNull(entriesByKey.get(6));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPutSameKeyTimestamp() throws IOException {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    try {
+      long startTime=segmentSize - 4L;
+      context.setTime(startTime);
+      store.put(0,"zero");
+      assertEquals(Utils.mkList("zero"),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      context.setTime(startTime);
+      store.put(0,"zero");
+      context.setTime(startTime);
+      store.put(0,"zero+");
+      context.setTime(startTime);
+      store.put(0,"zero++");
+      assertEquals(Utils.mkList("zero","zero","zero+","zero++"),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList("zero","zero","zero+","zero++"),toList(store.fetch(0,startTime + 1L - windowSize,startTime + 1L + windowSize)));
+      assertEquals(Utils.mkList("zero","zero","zero+","zero++"),toList(store.fetch(0,startTime + 2L - windowSize,startTime + 2L + windowSize)));
+      assertEquals(Utils.mkList("zero","zero","zero+","zero++"),toList(store.fetch(0,startTime + 3L - windowSize,startTime + 3L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(0,startTime + 4L - windowSize,startTime + 4L + windowSize)));
+      store.flush();
+      Map<Integer,Set<String>> entriesByKey=entriesByKey(changeLog,startTime);
+      assertEquals(Utils.mkSet("zero@0","zero@0","zero+@0","zero++@0"),entriesByKey.get(0));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRestore() throws IOException {
+  final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+  long startTime=segmentSize * 2;
+  long incr=segmentSize / 2;
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    try {
+      context.setTime(startTime);
+      store.put(0,"zero");
+      context.setTime(startTime + incr);
+      store.put(1,"one");
+      context.setTime(startTime + incr * 2);
+      store.put(2,"two");
+      context.setTime(startTime + incr * 3);
+      store.put(3,"three");
+      context.setTime(startTime + incr * 4);
+      store.put(4,"four");
+      context.setTime(startTime + incr * 5);
+      store.put(5,"five");
+      context.setTime(startTime + incr * 6);
+      store.put(6,"six");
+      context.setTime(startTime + incr * 7);
+      store.put(7,"seven");
+      context.setTime(startTime + incr * 8);
+      store.put(8,"eight");
+      store.flush();
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+  File baseDir2=Files.createTempDirectory("test").toFile();
+  try {
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    RocksDBWindowStore<Integer,String> inner=(RocksDBWindowStore<Integer,String>)((MeteredWindowStore<Integer,String>)store).inner();
+    try {
+      context.restore("window",changeLog);
+      assertEquals(Utils.mkSet(4L,5L,6L),inner.segmentIds());
+      assertEquals(Utils.mkList(),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(1,startTime + incr - windowSize,startTime + incr + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + incr * 2 - windowSize,startTime + incr * 2 + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + incr * 3 - windowSize,startTime + incr * 3 + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + incr * 4 - windowSize,startTime + incr * 4 + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + incr * 5 - windowSize,startTime + incr * 5 + windowSize)));
+      assertEquals(Utils.mkList("six"),toList(store.fetch(6,startTime + incr * 6 - windowSize,startTime + incr * 6 + windowSize)));
+      assertEquals(Utils.mkList("seven"),toList(store.fetch(7,startTime + incr * 7 - windowSize,startTime + incr * 7 + windowSize)));
+      assertEquals(Utils.mkList("eight"),toList(store.fetch(8,startTime + incr * 8 - windowSize,startTime + incr * 8 + windowSize)));
+      store.flush();
+      assertEquals(Utils.mkSet(inner.directorySuffix(4L),inner.directorySuffix(5L),inner.directorySuffix(6L)),segmentDirs(baseDir));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir2);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRolling() throws IOException {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    RocksDBWindowStore<Integer,String> inner=(RocksDBWindowStore<Integer,String>)((MeteredWindowStore<Integer,String>)store).inner();
+    try {
+      long startTime=segmentSize * 2;
+      long incr=segmentSize / 2;
+      context.setTime(startTime);
+      store.put(0,"zero");
+      assertEquals(Utils.mkSet(2L),inner.segmentIds());
+      context.setTime(startTime + incr);
+      store.put(1,"one");
+      assertEquals(Utils.mkSet(2L),inner.segmentIds());
+      context.setTime(startTime + incr * 2);
+      store.put(2,"two");
+      assertEquals(Utils.mkSet(2L,3L),inner.segmentIds());
+      context.setTime(startTime + incr * 3);
+      assertEquals(Utils.mkSet(2L,3L),inner.segmentIds());
+      context.setTime(startTime + incr * 4);
+      store.put(4,"four");
+      assertEquals(Utils.mkSet(2L,3L,4L),inner.segmentIds());
+      context.setTime(startTime + incr * 5);
+      store.put(5,"five");
+      assertEquals(Utils.mkSet(2L,3L,4L),inner.segmentIds());
+      assertEquals(Utils.mkList("zero"),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList("one"),toList(store.fetch(1,startTime + incr - windowSize,startTime + incr + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + incr * 2 - windowSize,startTime + incr * 2 + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + incr * 3 - windowSize,startTime + incr * 3 + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + incr * 4 - windowSize,startTime + incr * 4 + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + incr * 5 - windowSize,startTime + incr * 5 + windowSize)));
+      context.setTime(startTime + incr * 6);
+      store.put(6,"six");
+      assertEquals(Utils.mkSet(3L,4L,5L),inner.segmentIds());
+      assertEquals(Utils.mkList(),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(1,startTime + incr - windowSize,startTime + incr + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + incr * 2 - windowSize,startTime + incr * 2 + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + incr * 3 - windowSize,startTime + incr * 3 + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + incr * 4 - windowSize,startTime + incr * 4 + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + incr * 5 - windowSize,startTime + incr * 5 + windowSize)));
+      assertEquals(Utils.mkList("six"),toList(store.fetch(6,startTime + incr * 6 - windowSize,startTime + incr * 6 + windowSize)));
+      context.setTime(startTime + incr * 7);
+      store.put(7,"seven");
+      assertEquals(Utils.mkSet(3L,4L,5L),inner.segmentIds());
+      assertEquals(Utils.mkList(),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(1,startTime + incr - windowSize,startTime + incr + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + incr * 2 - windowSize,startTime + incr * 2 + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + incr * 3 - windowSize,startTime + incr * 3 + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + incr * 4 - windowSize,startTime + incr * 4 + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + incr * 5 - windowSize,startTime + incr * 5 + windowSize)));
+      assertEquals(Utils.mkList("six"),toList(store.fetch(6,startTime + incr * 6 - windowSize,startTime + incr * 6 + windowSize)));
+      assertEquals(Utils.mkList("seven"),toList(store.fetch(7,startTime + incr * 7 - windowSize,startTime + incr * 7 + windowSize)));
+      context.setTime(startTime + incr * 8);
+      store.put(8,"eight");
+      assertEquals(Utils.mkSet(4L,5L,6L),inner.segmentIds());
+      assertEquals(Utils.mkList(),toList(store.fetch(0,startTime - windowSize,startTime + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(1,startTime + incr - windowSize,startTime + incr + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + incr * 2 - windowSize,startTime + incr * 2 + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + incr * 3 - windowSize,startTime + incr * 3 + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + incr * 4 - windowSize,startTime + incr * 4 + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + incr * 5 - windowSize,startTime + incr * 5 + windowSize)));
+      assertEquals(Utils.mkList("six"),toList(store.fetch(6,startTime + incr * 6 - windowSize,startTime + incr * 6 + windowSize)));
+      assertEquals(Utils.mkList("seven"),toList(store.fetch(7,startTime + incr * 7 - windowSize,startTime + incr * 7 + windowSize)));
+      assertEquals(Utils.mkList("eight"),toList(store.fetch(8,startTime + incr * 8 - windowSize,startTime + incr * 8 + windowSize)));
+      store.flush();
+      assertEquals(Utils.mkSet(inner.directorySuffix(4L),inner.directorySuffix(5L),inner.directorySuffix(6L)),segmentDirs(baseDir));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPutAndFetchAfter() throws IOException {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final List<KeyValue<byte[],byte[]>> changeLog=new ArrayList<>();
+    Producer<byte[],byte[]> producer=new MockProducer<>(true,byteArraySerializer,byteArraySerializer);
+    RecordCollector recordCollector=new RecordCollector(producer){
+      @Override public <K1,V1>void send(      ProducerRecord<K1,V1> record,      Serializer<K1> keySerializer,      Serializer<V1> valueSerializer){
+        changeLog.add(new KeyValue<>(keySerializer.serialize(record.topic(),record.key()),valueSerializer.serialize(record.topic(),record.value())));
+      }
+    }
+;
+    MockProcessorContext context=new MockProcessorContext(null,baseDir,byteArraySerializer,byteArrayDeserializer,byteArraySerializer,byteArrayDeserializer,recordCollector);
+    WindowStore<Integer,String> store=createWindowStore(context,serdes);
+    try {
+      long startTime=segmentSize - 4L;
+      context.setTime(startTime + 0L);
+      store.put(0,"zero");
+      context.setTime(startTime + 1L);
+      store.put(1,"one");
+      context.setTime(startTime + 2L);
+      store.put(2,"two");
+      context.setTime(startTime + 3L);
+      context.setTime(startTime + 4L);
+      store.put(4,"four");
+      context.setTime(startTime + 5L);
+      store.put(5,"five");
+      assertEquals(Utils.mkList("zero"),toList(store.fetch(0,startTime + 0L,startTime + 0L + windowSize)));
+      assertEquals(Utils.mkList("one"),toList(store.fetch(1,startTime + 1L,startTime + 1L + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime + 2L,startTime + 2L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(3,startTime + 3L,startTime + 3L + windowSize)));
+      assertEquals(Utils.mkList("four"),toList(store.fetch(4,startTime + 4L,startTime + 4L + windowSize)));
+      assertEquals(Utils.mkList("five"),toList(store.fetch(5,startTime + 5L,startTime + 5L + windowSize)));
+      context.setTime(startTime + 3L);
+      store.put(2,"two+1");
+      context.setTime(startTime + 4L);
+      store.put(2,"two+2");
+      context.setTime(startTime + 5L);
+      store.put(2,"two+3");
+      context.setTime(startTime + 6L);
+      store.put(2,"two+4");
+      context.setTime(startTime + 7L);
+      store.put(2,"two+5");
+      context.setTime(startTime + 8L);
+      store.put(2,"two+6");
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime - 2L,startTime - 2L + windowSize)));
+      assertEquals(Utils.mkList("two"),toList(store.fetch(2,startTime - 1L,startTime - 1L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1"),toList(store.fetch(2,startTime,startTime + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2"),toList(store.fetch(2,startTime + 1L,startTime + 1L + windowSize)));
+      assertEquals(Utils.mkList("two","two+1","two+2","two+3"),toList(store.fetch(2,startTime + 2L,startTime + 2L + windowSize)));
+      assertEquals(Utils.mkList("two+1","two+2","two+3","two+4"),toList(store.fetch(2,startTime + 3L,startTime + 3L + windowSize)));
+      assertEquals(Utils.mkList("two+2","two+3","two+4","two+5"),toList(store.fetch(2,startTime + 4L,startTime + 4L + windowSize)));
+      assertEquals(Utils.mkList("two+3","two+4","two+5","two+6"),toList(store.fetch(2,startTime + 5L,startTime + 5L + windowSize)));
+      assertEquals(Utils.mkList("two+4","two+5","two+6"),toList(store.fetch(2,startTime + 6L,startTime + 6L + windowSize)));
+      assertEquals(Utils.mkList("two+5","two+6"),toList(store.fetch(2,startTime + 7L,startTime + 7L + windowSize)));
+      assertEquals(Utils.mkList("two+6"),toList(store.fetch(2,startTime + 8L,startTime + 8L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 9L,startTime + 9L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 10L,startTime + 10L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 11L,startTime + 11L + windowSize)));
+      assertEquals(Utils.mkList(),toList(store.fetch(2,startTime + 12L,startTime + 12L + windowSize)));
+      store.flush();
+      Map<Integer,Set<String>> entriesByKey=entriesByKey(changeLog,startTime);
+      assertEquals(Utils.mkSet("zero@0"),entriesByKey.get(0));
+      assertEquals(Utils.mkSet("one@1"),entriesByKey.get(1));
+      assertEquals(Utils.mkSet("two@2","two+1@3","two+2@4","two+3@5","two+4@6","two+5@7","two+6@8"),entriesByKey.get(2));
+      assertNull(entriesByKey.get(3));
+      assertEquals(Utils.mkSet("four@4"),entriesByKey.get(4));
+      assertEquals(Utils.mkSet("five@5"),entriesByKey.get(5));
+      assertNull(entriesByKey.get(6));
+    }
+  finally {
+      store.close();
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

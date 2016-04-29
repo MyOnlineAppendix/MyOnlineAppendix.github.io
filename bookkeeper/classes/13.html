@@ -1,0 +1,219 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.bookie.TestSyncThread (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that if the ledger storage throws
+ * a disk full exception, the owner of the sync
+ * thread will be notified.
+ */
+@Test(timeout=60000) public void testSyncThreadDisksFull() throws Exception {
+  int flushInterval=100;
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration();
+  CheckpointSource checkpointSource=new DummyCheckpointSource();
+  final CountDownLatch diskFullLatch=new CountDownLatch(1);
+  LedgerDirsListener listener=new DummyLedgerDirsListener(){
+    @Override public void allDisksFull(){
+      diskFullLatch.countDown();
+    }
+  }
+;
+  LedgerStorage storage=new DummyLedgerStorage(){
+    @Override public Checkpoint checkpoint(    Checkpoint checkpoint) throws IOException {
+      throw new NoWritableLedgerDirException("Disk full error in sync thread");
+    }
+  }
+;
+  final SyncThread t=new SyncThread(conf,listener,storage,checkpointSource);
+  t.start();
+  assertTrue("Should have disk full error",diskFullLatch.await(10,TimeUnit.SECONDS));
+  t.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-2 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that if a flush is taking a long time,
+ * the sync thread will not shutdown until it
+ * has finished.
+ */
+@Test(timeout=60000) public void testSyncThreadLongShutdown() throws Exception {
+  int flushInterval=100;
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration();
+  CheckpointSource checkpointSource=new DummyCheckpointSource();
+  LedgerDirsListener listener=new DummyLedgerDirsListener();
+  final CountDownLatch checkpointCalledLatch=new CountDownLatch(1);
+  final CountDownLatch checkpointLatch=new CountDownLatch(1);
+  final CountDownLatch flushCalledLatch=new CountDownLatch(1);
+  final CountDownLatch flushLatch=new CountDownLatch(1);
+  final AtomicBoolean failedSomewhere=new AtomicBoolean(false);
+  LedgerStorage storage=new DummyLedgerStorage(){
+    @Override public void flush() throws IOException {
+      flushCalledLatch.countDown();
+      try {
+        flushLatch.await();
+      }
+ catch (      InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        LOG.error("Interrupted in flush thread",ie);
+        failedSomewhere.set(true);
+      }
+    }
+    @Override public Checkpoint checkpoint(    Checkpoint checkpoint) throws IOException {
+      checkpointCalledLatch.countDown();
+      try {
+        checkpointLatch.await();
+      }
+ catch (      InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        LOG.error("Interrupted in checkpoint thread",ie);
+        failedSomewhere.set(true);
+      }
+      return checkpoint;
+    }
+  }
+;
+  final SyncThread t=new SyncThread(conf,listener,storage,checkpointSource);
+  t.start();
+  assertTrue("Checkpoint should have been called",checkpointCalledLatch.await(10,TimeUnit.SECONDS));
+  Future<Boolean> done=executor.submit(new Callable<Boolean>(){
+    public Boolean call(){
+      try {
+        t.shutdown();
+      }
+ catch (      InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        LOG.error("Interrupted shutting down sync thread",ie);
+        failedSomewhere.set(true);
+        return false;
+      }
+      return true;
+    }
+  }
+);
+  checkpointLatch.countDown();
+  assertFalse("Shutdown shouldn't have finished",done.isDone());
+  assertTrue("Flush should have been called",flushCalledLatch.await(10,TimeUnit.SECONDS));
+  assertFalse("Shutdown shouldn't have finished",done.isDone());
+  flushLatch.countDown();
+  assertTrue("Shutdown should have finished successfully",done.get(10,TimeUnit.SECONDS));
+  assertFalse("Shouldn't have failed anywhere",failedSomewhere.get());
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setupExecutor(){
+  executor=Executors.newSingleThreadExecutor();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardownExecutor(){
+  if (executor != null) {
+    executor.shutdownNow();
+    executor=null;
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that if the ledger storage throws a
+ * runtime exception, the bookie will be told
+ * to shutdown.
+ */
+@Test(timeout=60000) public void testSyncThreadShutdownOnError() throws Exception {
+  int flushInterval=100;
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration();
+  CheckpointSource checkpointSource=new DummyCheckpointSource();
+  final CountDownLatch fatalLatch=new CountDownLatch(1);
+  LedgerDirsListener listener=new DummyLedgerDirsListener(){
+    @Override public void fatalError(){
+      fatalLatch.countDown();
+    }
+  }
+;
+  LedgerStorage storage=new DummyLedgerStorage(){
+    @Override public Checkpoint checkpoint(    Checkpoint checkpoint) throws IOException {
+      throw new RuntimeException("Fatal error in sync thread");
+    }
+  }
+;
+  final SyncThread t=new SyncThread(conf,listener,storage,checkpointSource);
+  t.start();
+  assertTrue("Should have called fatal error",fatalLatch.await(10,TimeUnit.SECONDS));
+  t.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-2 type-11 type-6 type-8 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that sync thread suspension works.
+ * i.e. when we suspend the syncthread, nothing
+ * will be synced.
+ */
+@Test(timeout=60000) public void testSyncThreadSuspension() throws Exception {
+  int flushInterval=100;
+  ServerConfiguration conf=TestBKConfiguration.newServerConfiguration();
+  CheckpointSource checkpointSource=new DummyCheckpointSource();
+  LedgerDirsListener listener=new DummyLedgerDirsListener();
+  final AtomicInteger checkpointCount=new AtomicInteger(0);
+  LedgerStorage storage=new DummyLedgerStorage(){
+    @Override public Checkpoint checkpoint(    Checkpoint checkpoint) throws IOException {
+      checkpointCount.incrementAndGet();
+      return checkpoint;
+    }
+  }
+;
+  final SyncThread t=new SyncThread(conf,listener,storage,checkpointSource);
+  t.start();
+  while (checkpointCount.get() == 0) {
+    Thread.sleep(flushInterval);
+  }
+  t.suspendSync();
+  Thread.sleep(flushInterval);
+  int count=checkpointCount.get();
+  for (int i=0; i < 10; i++) {
+    assertEquals("Checkpoint count shouldn't change",count,checkpointCount.get());
+  }
+  t.resumeSync();
+  int i=0;
+  while (checkpointCount.get() == count) {
+    Thread.sleep(flushInterval);
+    i++;
+    if (i > 100) {
+      fail("Checkpointing never resumed");
+    }
+  }
+  t.shutdown();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

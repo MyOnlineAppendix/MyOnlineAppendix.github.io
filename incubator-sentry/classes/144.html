@@ -1,0 +1,307 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hive.TestMetadataObjectRetrieval (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(6)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  LOGGER.info("TestMetadataObjectRetrieval setup");
+  policyFile=super.setupPolicy();
+  super.setup();
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests to ensure that a user is able to view metadata
+ * with all on db
+ * Test positive:
+ * describe table
+ * describe table column
+ * show columns from table
+ * show create table table
+ * show tblproperties table
+ * Positive tests are run twice:
+ * all@server
+ * all@db
+ */
+@Test public void testAllOnServerAndAllOnDb() throws Exception {
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  positiveDescribeShowTests(ADMIN1,DB1,TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=" + DB1).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  positiveDescribeShowTests(USER1_1,DB1,TBL1);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that users without privileges cannot execute show indexes
+ * and that users with all on table can execute show indexes
+ */
+@Test public void testShowIndexes1() throws Exception {
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  createTable(ADMIN1,DB1,dataFile,TBL2);
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  statement.execute("DROP INDEX IF EXISTS " + INDEX1 + " ON "+ TBL1);
+  statement.execute("CREATE INDEX " + INDEX1 + " ON TABLE "+ TBL1+ "(value) AS 'org.apache.hadoop.hive.ql.index.compact.CompactIndexHandler' WITH DEFERRED REBUILD");
+  statement.execute("DROP VIEW IF EXISTS " + VIEW1);
+  statement.execute("CREATE VIEW " + VIEW1 + " (value) AS SELECT value from "+ TBL1+ " LIMIT 10");
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_TBL2).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  context.assertAuthzException(statement,"SHOW INDEX ON " + TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_VIEW1);
+  writePolicyFile(policyFile);
+  context.assertAuthzException(statement,"SHOW INDEX ON " + TBL1);
+  policyFile.removePermissionsFromRole(GROUP1_ROLE,SELECT_DB1_VIEW1).addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  verifyIndex(statement,DB1,TBL1,INDEX1);
+  policyFile.removePermissionsFromRole(GROUP1_ROLE,SELECT_DB1_TBL1).addPermissionsToRole(GROUP1_ROLE,INSERT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  verifyIndex(statement,DB1,TBL1,INDEX1);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that users without privileges cannot execute show partitions
+ * and that users with select on table can execute show partitions
+ */
+@Test public void testShowPartitions1() throws Exception {
+  createDb(ADMIN1,DB1);
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  statement.execute("DROP TABLE IF EXISTS " + TBL2);
+  statement.execute("create table " + TBL2 + " (under_col int, value string) PARTITIONED BY (dt INT)");
+  statement.execute("DROP TABLE IF EXISTS " + TBL1);
+  statement.execute("create table " + TBL1 + " (under_col int, value string) PARTITIONED BY (dt INT)");
+  statement.execute("load data local inpath '" + dataFile.getPath() + "' into table "+ TBL1+ " PARTITION (dt=3)");
+  statement.execute("DROP VIEW IF EXISTS " + VIEW1);
+  statement.execute("CREATE VIEW " + VIEW1 + " (value) AS SELECT value from "+ TBL1+ " LIMIT 10");
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_TBL2).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  context.assertAuthzException(statement,"SHOW PARTITIONS " + TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_VIEW1);
+  writePolicyFile(policyFile);
+  context.assertAuthzException(statement,"SHOW PARTITIONS " + TBL1);
+  policyFile.removePermissionsFromRole(GROUP1_ROLE,SELECT_DB1_VIEW1).addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  verifyParition(statement,TBL1);
+  policyFile.removePermissionsFromRole(GROUP1_ROLE,SELECT_DB1_TBL1).addPermissionsToRole(GROUP1_ROLE,INSERT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  verifyParition(statement,TBL1);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-12 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that admin and all@db can describe database
+ * and describe database extended. Also tests that a user
+ * with no privileges on a db cannot describe database.
+ */
+@Test public void testDescribeDatabasesWithAllOnServerAndAllOnDb() throws Exception {
+  dropDb(ADMIN1,DB1,DB2);
+  createDb(ADMIN1,DB1,DB2);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  createTable(ADMIN1,DB2,dataFile,TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=" + DB1).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE " + DB1).next());
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE EXTENDED " + DB1).next());
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE " + DB1).next());
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE EXTENDED " + DB1).next());
+  context.assertAuthzException(statement,"DESCRIBE DATABASE " + DB2);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE EXTENDED " + DB2);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,INSERT_DB2_TBL1);
+  writePolicyFile(policyFile);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE " + DB2);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE EXTENDED " + DB2);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests to ensure a user with all on server,
+ * insert|select on table can view metadata while
+ * a user with all on a different table cannot
+ * view the metadata.
+ * Test both positive and negative of:
+ * describe table
+ * describe table column
+ * show columns from table
+ * show create table table
+ * show tblproperties table
+ * Positive tests are run with:
+ * all@server
+ * select@table
+ * insert@table
+ * Negative tests are run three times:
+ * none
+ * insert@different table
+ */
+@Test public void testAllOnServerSelectInsertNegativeNoneAllOnDifferentTable() throws Exception {
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  createTable(ADMIN1,DB1,dataFile,TBL2);
+  positiveDescribeShowTests(ADMIN1,DB1,TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=" + DB1 + "->table="+ TBL2).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  negativeDescribeShowTests(USER1_1,DB1,TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,SELECT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  positiveDescribeShowTests(USER1_1,DB1,TBL1);
+  policyFile.removePermissionsFromRole(GROUP1_ROLE,SELECT_DB1_TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,INSERT_DB1_TBL1);
+  writePolicyFile(policyFile);
+  positiveDescribeShowTests(USER1_1,DB1,TBL1);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests to ensure that a user is able to view metadata
+ * with all on table
+ * Test positive:
+ * describe table
+ * describe table column
+ * show columns from table
+ * show create table table
+ * show tblproperties table
+ * Positive tests are run twice:
+ * all@server
+ * all@table
+ */
+@Test public void testAllOnServerAndAllOnTable() throws Exception {
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  positiveDescribeShowTests(ADMIN1,DB1,TBL1);
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=" + DB1 + "->table="+ TBL1).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  positiveDescribeShowTests(USER1_1,DB1,TBL1);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test to ensure that all on view do not result in
+ * metadata privileges on the underlying table
+ * Test both positive and negative of:
+ * describe table
+ * describe table column
+ * show columns from table
+ * show create table table
+ * show tblproperties table
+ * Positive tests are run with all@server
+ * Negative tests are run three times:
+ * none
+ * all@view
+ */
+@Test public void testAllOnServerNegativeAllOnView() throws Exception {
+  createDb(ADMIN1,DB1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  statement.execute("DROP VIEW IF EXISTS " + VIEW1);
+  statement.execute("CREATE VIEW " + VIEW1 + " (value) AS SELECT value from "+ TBL1+ " LIMIT 10");
+  positiveDescribeShowTests(ADMIN1,DB1,TBL1);
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=" + DB1 + "->table="+ VIEW1).addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  negativeDescribeShowTests(USER1_1,DB1,TBL1);
+}
+
+</code></pre>
+
+<pre class="type-12 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that a user without db level privileges cannot describe default
+ */
+@Test public void testDescribeDefaultDatabase() throws Exception {
+  createDb(ADMIN1,DB1,DB2);
+  createTable(ADMIN1,"default",dataFile,TBL1);
+  createTable(ADMIN1,DB1,dataFile,TBL1);
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE default").next());
+  statement.execute("USE " + DB1);
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE default").next());
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE " + DB1).next());
+  assertTrue(statement.executeQuery("DESCRIBE DATABASE " + DB2).next());
+  statement.close();
+  connection.close();
+  policyFile.addPermissionsToRole(GROUP1_ROLE,"server=server1->db=default->table=" + TBL1 + "->action=select","server=server1->db=" + DB1 + "->table="+ TBL1+ "->action=select").addRolesToGroup(USERGROUP1,GROUP1_ROLE).setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE default");
+  context.assertAuthzException(statement,"DESCRIBE DATABASE " + DB1);
+  statement.execute("USE " + DB1);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE " + DB1);
+  context.assertAuthzException(statement,"DESCRIBE DATABASE " + DB2);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

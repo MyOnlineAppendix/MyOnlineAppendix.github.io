@@ -1,0 +1,102 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.harness.AccumuloClusterHarness (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="21"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('21')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-21"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownKdc() throws Exception {
+  if (null != krb) {
+    krb.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-21 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setupCluster() throws Exception {
+  Assume.assumeTrue(canRunTest(type));
+switch (type) {
+case MINI:
+    MiniClusterHarness miniClusterHarness=new MiniClusterHarness();
+  MiniAccumuloClusterImpl impl=miniClusterHarness.create(this,getAdminToken(),krb);
+cluster=impl;
+((AccumuloMiniClusterConfiguration)clusterConf).setClientConf(impl.getClientConfig());
+if (null != krb) {
+ClusterUser rootUser=krb.getRootUser();
+UserGroupInformation.loginUserFromKeytab(rootUser.getPrincipal(),rootUser.getKeytab().getAbsolutePath());
+}
+break;
+case STANDALONE:
+StandaloneAccumuloClusterConfiguration conf=(StandaloneAccumuloClusterConfiguration)clusterConf;
+ClientConfiguration clientConf=conf.getClientConf();
+StandaloneAccumuloCluster standaloneCluster=new StandaloneAccumuloCluster(conf.getInstance(),clientConf,conf.getTmpDirectory(),conf.getUsers(),conf.getAccumuloServerUser());
+standaloneCluster.setAccumuloHome(conf.getAccumuloHome());
+standaloneCluster.setClientAccumuloConfDir(conf.getClientAccumuloConfDir());
+standaloneCluster.setServerAccumuloConfDir(conf.getServerAccumuloConfDir());
+standaloneCluster.setHadoopConfDir(conf.getHadoopConfDir());
+Configuration hadoopConfiguration=standaloneCluster.getHadoopConfiguration();
+if (clientConf.getBoolean(ClientProperty.INSTANCE_RPC_SASL_ENABLED.getKey(),false)) {
+UserGroupInformation.setConfiguration(hadoopConfiguration);
+UserGroupInformation.loginUserFromKeytab(conf.getAdminPrincipal(),conf.getAdminKeytab().getAbsolutePath());
+}
+cluster=standaloneCluster;
+break;
+default :
+throw new RuntimeException("Unhandled type");
+}
+if (type.isDynamic()) {
+cluster.start();
+}
+ else {
+log.info("Removing tables which appear to be from a previous test run");
+cleanupTables();
+log.info("Removing users which appear to be from a previous test run");
+cleanupUsers();
+}
+switch (type) {
+case MINI:
+if (null != krb) {
+final String traceTable=Property.TRACE_TABLE.getDefaultValue();
+final ClusterUser systemUser=krb.getAccumuloServerUser(), rootUser=krb.getRootUser();
+UserGroupInformation.loginUserFromKeytab(systemUser.getPrincipal(),systemUser.getKeytab().getAbsolutePath());
+Connector conn=cluster.getConnector(systemUser.getPrincipal(),new KerberosToken(systemUser.getPrincipal(),systemUser.getKeytab(),true));
+UserGroupInformation.loginUserFromKeytab(rootUser.getPrincipal(),rootUser.getKeytab().getAbsolutePath());
+conn=getConnector();
+conn.tableOperations().create(traceTable);
+conn.securityOperations().grantTablePermission(systemUser.getPrincipal(),traceTable,TablePermission.READ);
+conn.securityOperations().grantTablePermission(systemUser.getPrincipal(),traceTable,TablePermission.WRITE);
+conn.securityOperations().grantTablePermission(systemUser.getPrincipal(),traceTable,TablePermission.ALTER_TABLE);
+}
+break;
+default :
+}
+}
+
+</code></pre>
+
+<pre class="type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardownCluster() throws Exception {
+  if (null != cluster) {
+    if (type.isDynamic()) {
+      cluster.stop();
+    }
+ else {
+      log.info("Removing tables which appear to be from the current test");
+      cleanupTables();
+      log.info("Removing users which appear to be from the current test");
+      cleanupUsers();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,60 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.ipc.TestMRCJCSocketFactory (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Check that we can reach a NameNode or Resource Manager using a specific
+ * socket factory
+ */
+@Test public void testSocketFactory() throws IOException {
+  Configuration sconf=new Configuration();
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(sconf).numDataNodes(1).build();
+  final int nameNodePort=cluster.getNameNodePort();
+  FileSystem fs=cluster.getFileSystem();
+  Assert.assertTrue(fs instanceof DistributedFileSystem);
+  DistributedFileSystem directDfs=(DistributedFileSystem)fs;
+  Configuration cconf=getCustomSocketConfigs(nameNodePort);
+  fs=FileSystem.get(cconf);
+  Assert.assertTrue(fs instanceof DistributedFileSystem);
+  DistributedFileSystem dfs=(DistributedFileSystem)fs;
+  JobClient client=null;
+  MiniMRYarnCluster miniMRYarnCluster=null;
+  try {
+    Path filePath=new Path("/dir");
+    Assert.assertFalse(directDfs.exists(filePath));
+    Assert.assertFalse(dfs.exists(filePath));
+    directDfs.mkdirs(filePath);
+    Assert.assertTrue(directDfs.exists(filePath));
+    Assert.assertTrue(dfs.exists(filePath));
+    fs=FileSystem.get(sconf);
+    JobConf jobConf=new JobConf();
+    FileSystem.setDefaultUri(jobConf,fs.getUri().toString());
+    miniMRYarnCluster=initAndStartMiniMRYarnCluster(jobConf);
+    JobConf jconf=new JobConf(miniMRYarnCluster.getConfig());
+    jconf.set("hadoop.rpc.socket.factory.class.default","org.apache.hadoop.ipc.DummySocketFactory");
+    jconf.set(MRConfig.FRAMEWORK_NAME,MRConfig.YARN_FRAMEWORK_NAME);
+    String rmAddress=jconf.get("yarn.resourcemanager.address");
+    String[] split=rmAddress.split(":");
+    jconf.set("yarn.resourcemanager.address",split[0] + ':' + (Integer.parseInt(split[1]) + 10));
+    client=new JobClient(jconf);
+    JobStatus[] jobs=client.jobsToComplete();
+    Assert.assertTrue(jobs.length == 0);
+  }
+  finally {
+    closeClient(client);
+    closeDfs(dfs);
+    closeDfs(directDfs);
+    stopMiniMRYarnCluster(miniMRYarnCluster);
+    shutdownDFSCluster(cluster);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

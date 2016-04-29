@@ -1,0 +1,540 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestStoreFile (15 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-10 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that our mechanism of writing store files in one region to reference
+ * store files in other regions works.
+ * @throws IOException
+ */
+@Test public void testReference() throws IOException {
+  final HRegionInfo hri=new HRegionInfo(TableName.valueOf("testReferenceTb"));
+  HRegionFileSystem regionFs=HRegionFileSystem.createRegionOnFileSystem(conf,fs,new Path(testDir,hri.getTable().getNameAsString()),hri);
+  HFileContext meta=new HFileContextBuilder().withBlockSize(8 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(regionFs.createTempName()).withFileContext(meta).build();
+  writeStoreFile(writer);
+  Path hsfPath=regionFs.commitStoreFile(TEST_FAMILY,writer.getPath());
+  StoreFile hsf=new StoreFile(this.fs,hsfPath,conf,cacheConf,BloomType.NONE);
+  StoreFile.Reader reader=hsf.createReader();
+  Cell kv=reader.midkey();
+  byte[] midRow=CellUtil.cloneRow(kv);
+  kv=reader.getLastKey();
+  byte[] finalRow=CellUtil.cloneRow(kv);
+  hsf.closeReader(true);
+  HRegionInfo splitHri=new HRegionInfo(hri.getTable(),null,midRow);
+  Path refPath=splitStoreFile(regionFs,splitHri,TEST_FAMILY,hsf,midRow,true);
+  StoreFile refHsf=new StoreFile(this.fs,refPath,conf,cacheConf,BloomType.NONE);
+  HFileScanner s=refHsf.createReader().getScanner(false,false);
+  for (boolean first=true; (!s.isSeeked() && s.seekTo()) || s.next(); ) {
+    ByteBuffer bb=ByteBuffer.wrap(((KeyValue)s.getKey()).getKey());
+    kv=KeyValueUtil.createKeyValueFromKey(bb);
+    if (first) {
+      assertTrue(Bytes.equals(kv.getRowArray(),kv.getRowOffset(),kv.getRowLength(),midRow,0,midRow.length));
+      first=false;
+    }
+  }
+  assertTrue(Bytes.equals(kv.getRowArray(),kv.getRowOffset(),kv.getRowLength(),finalRow,0,finalRow.length));
+}
+
+</code></pre>
+
+<pre class="type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+/** 
+ * Test for HBASE-8012
+ */
+@Test public void testReseek() throws Exception {
+  Path f=new Path(ROOT_DIR,getName());
+  HFileContext meta=new HFileContextBuilder().withBlockSize(8 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(f).withFileContext(meta).build();
+  writeStoreFile(writer);
+  writer.close();
+  StoreFile.Reader reader=new StoreFile.Reader(fs,f,cacheConf,conf);
+  KeyValue k=KeyValueUtil.createFirstOnRow(HConstants.EMPTY_BYTE_ARRAY);
+  StoreFileScanner s=reader.getStoreFileScanner(false,false);
+  s.reseek(k);
+  assertNotNull("Intial reseek should position at the beginning of the file",s.peek());
+}
+
+</code></pre>
+
+<pre class="type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test creates an hfile and then the dir structures and files to verify that references
+ * to hfilelinks (created by snapshot clones) can be properly interpreted.
+ */
+@Test public void testReferenceToHFileLink() throws IOException {
+  Configuration testConf=new Configuration(this.conf);
+  FSUtils.setRootDir(testConf,testDir);
+  HRegionInfo hri=new HRegionInfo(TableName.valueOf("_original-evil-name"));
+  HRegionFileSystem regionFs=HRegionFileSystem.createRegionOnFileSystem(testConf,fs,FSUtils.getTableDir(testDir,hri.getTable()),hri);
+  HFileContext meta=new HFileContextBuilder().withBlockSize(8 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(testConf,cacheConf,this.fs).withFilePath(regionFs.createTempName()).withFileContext(meta).build();
+  writeStoreFile(writer);
+  Path storeFilePath=regionFs.commitStoreFile(TEST_FAMILY,writer.getPath());
+  HRegionInfo hriClone=new HRegionInfo(TableName.valueOf("clone"));
+  HRegionFileSystem cloneRegionFs=HRegionFileSystem.createRegionOnFileSystem(testConf,fs,FSUtils.getTableDir(testDir,hri.getTable()),hriClone);
+  Path dstPath=cloneRegionFs.getStoreDir(TEST_FAMILY);
+  HFileLink.create(testConf,this.fs,dstPath,hri,storeFilePath.getName());
+  Path linkFilePath=new Path(dstPath,HFileLink.createHFileLinkName(hri,storeFilePath.getName()));
+  HRegionInfo splitHriA=new HRegionInfo(hri.getTable(),null,SPLITKEY);
+  HRegionInfo splitHriB=new HRegionInfo(hri.getTable(),SPLITKEY,null);
+  StoreFile f=new StoreFile(fs,linkFilePath,testConf,cacheConf,BloomType.NONE);
+  f.createReader();
+  Path pathA=splitStoreFile(cloneRegionFs,splitHriA,TEST_FAMILY,f,SPLITKEY,true);
+  Path pathB=splitStoreFile(cloneRegionFs,splitHriB,TEST_FAMILY,f,SPLITKEY,false);
+  f.closeReader(true);
+  FSUtils.logFileSystemState(fs,testDir,LOG);
+  StoreFile hsfA=new StoreFile(this.fs,pathA,testConf,cacheConf,BloomType.NONE);
+  int count=1;
+  HFileScanner s=hsfA.createReader().getScanner(false,false);
+  s.seekTo();
+  while (s.next()) {
+    count++;
+  }
+  assertTrue(count > 0);
+  StoreFile hsfB=new StoreFile(this.fs,pathB,testConf,cacheConf,BloomType.NONE);
+  HFileScanner sB=hsfB.createReader().getScanner(false,false);
+  sB.seekTo();
+  count++;
+  while (sB.next()) {
+    count++;
+  }
+  assertEquals((LAST_CHAR - FIRST_CHAR + 1) * (LAST_CHAR - FIRST_CHAR + 1),count);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Check if data block encoding information is saved correctly in HFile's
+ * file info.
+ */
+@Test public void testDataBlockEncodingMetaData() throws IOException {
+  Path dir=new Path(new Path(testDir,"7e0102"),"familyname");
+  Path path=new Path(dir,"1234567890");
+  DataBlockEncoding dataBlockEncoderAlgo=DataBlockEncoding.FAST_DIFF;
+  HFileDataBlockEncoder dataBlockEncoder=new HFileDataBlockEncoderImpl(dataBlockEncoderAlgo);
+  cacheConf=new CacheConfig(conf);
+  HFileContext meta=new HFileContextBuilder().withBlockSize(BLOCKSIZE_SMALL).withChecksumType(CKTYPE).withBytesPerCheckSum(CKBYTES).withDataBlockEncoding(dataBlockEncoderAlgo).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(path).withMaxKeyCount(2000).withFileContext(meta).build();
+  writer.close();
+  StoreFile storeFile=new StoreFile(fs,writer.getPath(),conf,cacheConf,BloomType.NONE);
+  StoreFile.Reader reader=storeFile.createReader();
+  Map<byte[],byte[]> fileInfo=reader.loadFileInfo();
+  byte[] value=fileInfo.get(HFileDataBlockEncoder.DATA_BLOCK_ENCODING);
+  assertEquals(dataBlockEncoderAlgo.getNameInBytes(),value);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHFileLink() throws IOException {
+  final HRegionInfo hri=new HRegionInfo(TableName.valueOf("testHFileLinkTb"));
+  Configuration testConf=new Configuration(this.conf);
+  FSUtils.setRootDir(testConf,testDir);
+  HRegionFileSystem regionFs=HRegionFileSystem.createRegionOnFileSystem(testConf,fs,FSUtils.getTableDir(testDir,hri.getTable()),hri);
+  HFileContext meta=new HFileContextBuilder().withBlockSize(8 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(regionFs.createTempName()).withFileContext(meta).build();
+  writeStoreFile(writer);
+  Path storeFilePath=regionFs.commitStoreFile(TEST_FAMILY,writer.getPath());
+  Path dstPath=new Path(regionFs.getTableDir(),new Path("test-region",TEST_FAMILY));
+  HFileLink.create(testConf,this.fs,dstPath,hri,storeFilePath.getName());
+  Path linkFilePath=new Path(dstPath,HFileLink.createHFileLinkName(hri,storeFilePath.getName()));
+  StoreFileInfo storeFileInfo=new StoreFileInfo(testConf,this.fs,linkFilePath);
+  StoreFile hsf=new StoreFile(this.fs,storeFileInfo,testConf,cacheConf,BloomType.NONE);
+  assertTrue(storeFileInfo.isLink());
+  int count=1;
+  HFileScanner s=hsf.createReader().getScanner(false,false);
+  s.seekTo();
+  while (s.next()) {
+    count++;
+  }
+  assertEquals((LAST_CHAR - FIRST_CHAR + 1) * (LAST_CHAR - FIRST_CHAR + 1),count);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Write a file and then assert that we can read from top and bottom halves
+ * using two HalfMapFiles.
+ * @throws Exception
+ */
+@Test public void testBasicHalfMapFile() throws Exception {
+  final HRegionInfo hri=new HRegionInfo(TableName.valueOf("testBasicHalfMapFileTb"));
+  HRegionFileSystem regionFs=HRegionFileSystem.createRegionOnFileSystem(conf,fs,new Path(testDir,hri.getTable().getNameAsString()),hri);
+  HFileContext meta=new HFileContextBuilder().withBlockSize(2 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(regionFs.createTempName()).withFileContext(meta).build();
+  writeStoreFile(writer);
+  Path sfPath=regionFs.commitStoreFile(TEST_FAMILY,writer.getPath());
+  StoreFile sf=new StoreFile(this.fs,sfPath,conf,cacheConf,BloomType.NONE);
+  checkHalfHFile(regionFs,sf);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testBloomFilter() throws Exception {
+  FileSystem fs=FileSystem.getLocal(conf);
+  conf.setFloat(BloomFilterFactory.IO_STOREFILE_BLOOM_ERROR_RATE,(float)0.01);
+  conf.setBoolean(BloomFilterFactory.IO_STOREFILE_BLOOM_ENABLED,true);
+  Path f=new Path(ROOT_DIR,getName());
+  HFileContext meta=new HFileContextBuilder().withBlockSize(BLOCKSIZE_SMALL).withChecksumType(CKTYPE).withBytesPerCheckSum(CKBYTES).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(f).withBloomType(BloomType.ROW).withMaxKeyCount(2000).withFileContext(meta).build();
+  bloomWriteRead(writer,fs);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSeqIdComparator(){
+  assertOrdering(StoreFile.Comparators.SEQ_ID,mockStoreFile(true,100,1000,-1,"/foo/123"),mockStoreFile(true,100,1000,-1,"/foo/124"),mockStoreFile(true,99,1000,-1,"/foo/126"),mockStoreFile(true,98,2000,-1,"/foo/126"),mockStoreFile(false,3453,-1,1,"/foo/1"),mockStoreFile(false,2,-1,3,"/foo/2"),mockStoreFile(false,1000,-1,5,"/foo/2"),mockStoreFile(false,76,-1,5,"/foo/3"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBloomTypes() throws Exception {
+  float err=(float)0.01;
+  FileSystem fs=FileSystem.getLocal(conf);
+  conf.setFloat(BloomFilterFactory.IO_STOREFILE_BLOOM_ERROR_RATE,err);
+  conf.setBoolean(BloomFilterFactory.IO_STOREFILE_BLOOM_ENABLED,true);
+  int rowCount=50;
+  int colCount=10;
+  int versions=2;
+  BloomType[] bt={BloomType.ROWCOL,BloomType.ROW};
+  int[] expKeys={rowCount * colCount,rowCount};
+  float[] expErr={2 * rowCount * colCount* err,2 * rowCount * 2* colCount* err};
+  for (  int x : new int[]{0,1}) {
+    Path f=new Path(ROOT_DIR,getName() + x);
+    HFileContext meta=new HFileContextBuilder().withBlockSize(BLOCKSIZE_SMALL).withChecksumType(CKTYPE).withBytesPerCheckSum(CKBYTES).build();
+    StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(f).withBloomType(bt[x]).withMaxKeyCount(expKeys[x]).withFileContext(meta).build();
+    long now=System.currentTimeMillis();
+    for (int i=0; i < rowCount * 2; i+=2) {
+      for (int j=0; j < colCount * 2; j+=2) {
+        String row=String.format(localFormatter,i);
+        String col=String.format(localFormatter,j);
+        for (int k=0; k < versions; ++k) {
+          KeyValue kv=new KeyValue(row.getBytes(),"family".getBytes(),("col" + col).getBytes(),now - k,Bytes.toBytes((long)-1));
+          writer.append(kv);
+        }
+      }
+    }
+    writer.close();
+    StoreFile.Reader reader=new StoreFile.Reader(fs,f,cacheConf,conf);
+    reader.loadFileInfo();
+    reader.loadBloomfilter();
+    StoreFileScanner scanner=reader.getStoreFileScanner(false,false);
+    assertEquals(expKeys[x],reader.generalBloomFilter.getKeyCount());
+    Store store=mock(Store.class);
+    HColumnDescriptor hcd=mock(HColumnDescriptor.class);
+    when(hcd.getName()).thenReturn(Bytes.toBytes("family"));
+    when(store.getFamily()).thenReturn(hcd);
+    int falsePos=0;
+    int falseNeg=0;
+    for (int i=0; i < rowCount * 2; ++i) {
+      for (int j=0; j < colCount * 2; ++j) {
+        String row=String.format(localFormatter,i);
+        String col=String.format(localFormatter,j);
+        TreeSet<byte[]> columns=new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+        columns.add(("col" + col).getBytes());
+        Scan scan=new Scan(row.getBytes(),row.getBytes());
+        scan.addColumn("family".getBytes(),("col" + col).getBytes());
+        boolean exists=scanner.shouldUseScanner(scan,store,Long.MIN_VALUE);
+        boolean shouldRowExist=i % 2 == 0;
+        boolean shouldColExist=j % 2 == 0;
+        shouldColExist=shouldColExist || bt[x] == BloomType.ROW;
+        if (shouldRowExist && shouldColExist) {
+          if (!exists)           falseNeg++;
+        }
+ else {
+          if (exists)           falsePos++;
+        }
+      }
+    }
+    reader.close(true);
+    fs.delete(f,true);
+    System.out.println(bt[x].toString());
+    System.out.println("  False negatives: " + falseNeg);
+    System.out.println("  False positives: " + falsePos);
+    assertEquals(0,falseNeg);
+    assertTrue(falsePos < 2 * expErr[x]);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  super.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test to ensure correctness when using StoreFile with multiple timestamps
+ * @throws IOException
+ */
+@Test public void testMultipleTimestamps() throws IOException {
+  byte[] family=Bytes.toBytes("familyname");
+  byte[] qualifier=Bytes.toBytes("qualifier");
+  int numRows=10;
+  long[] timestamps=new long[]{20,10,5,1};
+  Scan scan=new Scan();
+  Path storedir=new Path(new Path(testDir,"7e0102"),Bytes.toString(family));
+  Path dir=new Path(storedir,"1234567890");
+  HFileContext meta=new HFileContextBuilder().withBlockSize(8 * 1024).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withOutputDir(dir).withFileContext(meta).build();
+  List<KeyValue> kvList=getKeyValueSet(timestamps,numRows,qualifier,family);
+  for (  KeyValue kv : kvList) {
+    writer.append(kv);
+  }
+  writer.appendMetadata(0,false);
+  writer.close();
+  StoreFile hsf=new StoreFile(this.fs,writer.getPath(),conf,cacheConf,BloomType.NONE);
+  Store store=mock(Store.class);
+  HColumnDescriptor hcd=mock(HColumnDescriptor.class);
+  when(hcd.getName()).thenReturn(family);
+  when(store.getFamily()).thenReturn(hcd);
+  StoreFile.Reader reader=hsf.createReader();
+  StoreFileScanner scanner=reader.getStoreFileScanner(false,false);
+  TreeSet<byte[]> columns=new TreeSet<byte[]>(Bytes.BYTES_COMPARATOR);
+  columns.add(qualifier);
+  scan.setTimeRange(20,100);
+  assertTrue(scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+  scan.setTimeRange(1,2);
+  assertTrue(scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+  scan.setTimeRange(8,10);
+  assertTrue(scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+  scan.setColumnFamilyTimeRange(family,7,50);
+  assertTrue(scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+  scan=new Scan();
+  scan.setTimeRange(27,50);
+  assertTrue(!scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+  scan=new Scan();
+  scan.setTimeRange(27,50);
+  scan.setColumnFamilyTimeRange(family,7,50);
+  assertTrue(scanner.shouldUseScanner(scan,store,Long.MIN_VALUE));
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCacheOnWriteEvictOnClose() throws Exception {
+  Configuration conf=this.conf;
+  Path baseDir=new Path(new Path(testDir,"7e0102"),"twoCOWEOC");
+  BlockCache bc=new CacheConfig(conf).getBlockCache();
+  assertNotNull(bc);
+  CacheStats cs=bc.getStats();
+  long startHit=cs.getHitCount();
+  long startMiss=cs.getMissCount();
+  long startEvicted=cs.getEvictedCount();
+  conf.setBoolean(CacheConfig.CACHE_BLOCKS_ON_WRITE_KEY,false);
+  CacheConfig cacheConf=new CacheConfig(conf);
+  Path pathCowOff=new Path(baseDir,"123456789");
+  StoreFile.Writer writer=writeStoreFile(conf,cacheConf,pathCowOff,3);
+  StoreFile hsf=new StoreFile(this.fs,writer.getPath(),conf,cacheConf,BloomType.NONE);
+  LOG.debug(hsf.getPath().toString());
+  StoreFile.Reader reader=hsf.createReader();
+  reader.loadFileInfo();
+  StoreFileScanner scanner=reader.getStoreFileScanner(true,true);
+  scanner.seek(KeyValue.LOWESTKEY);
+  while (scanner.next() != null)   ;
+  assertEquals(startHit,cs.getHitCount());
+  assertEquals(startMiss + 3,cs.getMissCount());
+  assertEquals(startEvicted,cs.getEvictedCount());
+  startMiss+=3;
+  scanner.close();
+  reader.close(cacheConf.shouldEvictOnClose());
+  conf.setBoolean(CacheConfig.CACHE_BLOCKS_ON_WRITE_KEY,true);
+  cacheConf=new CacheConfig(conf);
+  Path pathCowOn=new Path(baseDir,"123456788");
+  writer=writeStoreFile(conf,cacheConf,pathCowOn,3);
+  hsf=new StoreFile(this.fs,writer.getPath(),conf,cacheConf,BloomType.NONE);
+  reader=hsf.createReader();
+  scanner=reader.getStoreFileScanner(true,true);
+  scanner.seek(KeyValue.LOWESTKEY);
+  while (scanner.next() != null)   ;
+  assertEquals(startHit + 3,cs.getHitCount());
+  assertEquals(startMiss,cs.getMissCount());
+  assertEquals(startEvicted,cs.getEvictedCount());
+  startHit+=3;
+  scanner.close();
+  reader.close(cacheConf.shouldEvictOnClose());
+  hsf=new StoreFile(this.fs,pathCowOff,conf,cacheConf,BloomType.NONE);
+  StoreFile.Reader readerOne=hsf.createReader();
+  readerOne.loadFileInfo();
+  StoreFileScanner scannerOne=readerOne.getStoreFileScanner(true,true);
+  scannerOne.seek(KeyValue.LOWESTKEY);
+  hsf=new StoreFile(this.fs,pathCowOn,conf,cacheConf,BloomType.NONE);
+  StoreFile.Reader readerTwo=hsf.createReader();
+  readerTwo.loadFileInfo();
+  StoreFileScanner scannerTwo=readerTwo.getStoreFileScanner(true,true);
+  scannerTwo.seek(KeyValue.LOWESTKEY);
+  Cell kv1=null;
+  Cell kv2=null;
+  while ((kv1=scannerOne.next()) != null) {
+    kv2=scannerTwo.next();
+    assertTrue(kv1.equals(kv2));
+    KeyValue keyv1=KeyValueUtil.ensureKeyValue(kv1);
+    KeyValue keyv2=KeyValueUtil.ensureKeyValue(kv2);
+    assertTrue(Bytes.compareTo(keyv1.getBuffer(),keyv1.getKeyOffset(),keyv1.getKeyLength(),keyv2.getBuffer(),keyv2.getKeyOffset(),keyv2.getKeyLength()) == 0);
+    assertTrue(Bytes.compareTo(kv1.getValueArray(),kv1.getValueOffset(),kv1.getValueLength(),kv2.getValueArray(),kv2.getValueOffset(),kv2.getValueLength()) == 0);
+  }
+  assertNull(scannerTwo.next());
+  assertEquals(startHit + 6,cs.getHitCount());
+  assertEquals(startMiss,cs.getMissCount());
+  assertEquals(startEvicted,cs.getEvictedCount());
+  startHit+=6;
+  scannerOne.close();
+  readerOne.close(cacheConf.shouldEvictOnClose());
+  scannerTwo.close();
+  readerTwo.close(cacheConf.shouldEvictOnClose());
+  conf.setBoolean("hbase.rs.evictblocksonclose",true);
+  cacheConf=new CacheConfig(conf);
+  hsf=new StoreFile(this.fs,pathCowOff,conf,cacheConf,BloomType.NONE);
+  reader=hsf.createReader();
+  reader.close(cacheConf.shouldEvictOnClose());
+  assertEquals(startHit,cs.getHitCount());
+  assertEquals(startMiss,cs.getMissCount());
+  assertEquals(startEvicted + 3,cs.getEvictedCount());
+  startEvicted+=3;
+  conf.setBoolean("hbase.rs.evictblocksonclose",false);
+  cacheConf=new CacheConfig(conf);
+  hsf=new StoreFile(this.fs,pathCowOn,conf,cacheConf,BloomType.NONE);
+  reader=hsf.createReader();
+  reader.close(cacheConf.shouldEvictOnClose());
+  assertEquals(startHit,cs.getHitCount());
+  assertEquals(startMiss,cs.getMissCount());
+  assertEquals(startEvicted,cs.getEvictedCount());
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDeleteFamilyBloomFilter() throws Exception {
+  FileSystem fs=FileSystem.getLocal(conf);
+  conf.setFloat(BloomFilterFactory.IO_STOREFILE_BLOOM_ERROR_RATE,(float)0.01);
+  conf.setBoolean(BloomFilterFactory.IO_STOREFILE_BLOOM_ENABLED,true);
+  float err=conf.getFloat(BloomFilterFactory.IO_STOREFILE_BLOOM_ERROR_RATE,0);
+  Path f=new Path(ROOT_DIR,getName());
+  HFileContext meta=new HFileContextBuilder().withBlockSize(BLOCKSIZE_SMALL).withChecksumType(CKTYPE).withBytesPerCheckSum(CKBYTES).build();
+  StoreFile.Writer writer=new StoreFile.WriterBuilder(conf,cacheConf,this.fs).withFilePath(f).withMaxKeyCount(2000).withFileContext(meta).build();
+  long now=System.currentTimeMillis();
+  for (int i=0; i < 2000; i+=2) {
+    String row=String.format(localFormatter,i);
+    KeyValue kv=new KeyValue(row.getBytes(),"family".getBytes(),"col".getBytes(),now,KeyValue.Type.DeleteFamily,"value".getBytes());
+    writer.append(kv);
+  }
+  writer.close();
+  StoreFile.Reader reader=new StoreFile.Reader(fs,f,cacheConf,conf);
+  reader.loadFileInfo();
+  reader.loadBloomfilter();
+  int falsePos=0;
+  int falseNeg=0;
+  for (int i=0; i < 2000; i++) {
+    String row=String.format(localFormatter,i);
+    byte[] rowKey=Bytes.toBytes(row);
+    boolean exists=reader.passesDeleteFamilyBloomFilter(rowKey,0,rowKey.length);
+    if (i % 2 == 0) {
+      if (!exists)       falseNeg++;
+    }
+ else {
+      if (exists)       falsePos++;
+    }
+  }
+  assertEquals(1000,reader.getDeleteFamilyCnt());
+  reader.close(true);
+  fs.delete(f,true);
+  assertEquals("False negatives: " + falseNeg,0,falseNeg);
+  int maxFalsePos=(int)(2 * 2000 * err);
+  assertTrue("Too many false positives: " + falsePos + " (err="+ err+ ", expected no more than "+ maxFalsePos,falsePos <= maxFalsePos);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  super.setUp();
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testEmptyStoreFileRestrictKeyRanges() throws Exception {
+  StoreFile.Reader reader=mock(StoreFile.Reader.class);
+  Store store=mock(Store.class);
+  HColumnDescriptor hcd=mock(HColumnDescriptor.class);
+  byte[] cf=Bytes.toBytes("ty");
+  when(hcd.getName()).thenReturn(cf);
+  when(store.getFamily()).thenReturn(hcd);
+  StoreFileScanner scanner=new StoreFileScanner(reader,mock(HFileScanner.class),false,false,0);
+  Scan scan=new Scan();
+  scan.setColumnFamilyTimeRange(cf,0,1);
+  assertFalse(scanner.shouldUseScanner(scan,store,0));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

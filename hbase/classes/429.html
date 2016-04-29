@@ -1,0 +1,141 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.procedure.TestProcedure (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testMultipleMember() throws Exception {
+  List<String> members=new ArrayList<String>();
+  members.add("member1");
+  members.add("member2");
+  LatchedProcedure proc=new LatchedProcedure(coord,new ForeignExceptionDispatcher(),100,Integer.MAX_VALUE,"op",null,members);
+  final LatchedProcedure procspy=spy(proc);
+  new Thread(){
+    public void run(){
+      procspy.call();
+    }
+  }
+.start();
+  procspy.startedAcquireBarrier.await();
+  verify(procspy).sendGlobalBarrierStart();
+  verify(procspy,never()).sendGlobalBarrierReached();
+  verify(procspy,never()).sendGlobalBarrierComplete();
+  verify(procspy,never()).barrierAcquiredByMember(anyString());
+  procspy.barrierAcquiredByMember(members.get(0));
+  verify(procspy).sendGlobalBarrierStart();
+  verify(procspy,never()).sendGlobalBarrierReached();
+  verify(procspy,never()).sendGlobalBarrierComplete();
+  procspy.barrierAcquiredByMember(members.get(1));
+  procspy.startedDuringBarrier.await();
+  verify(procspy).sendGlobalBarrierStart();
+  procspy.barrierReleasedByMember(members.get(0),new byte[0]);
+  procspy.barrierReleasedByMember(members.get(1),new byte[0]);
+  procspy.completedProcedure.await();
+  verify(procspy).sendGlobalBarrierReached();
+  verify(procspy).sendGlobalBarrierComplete();
+  verify(procspy,never()).receive(any(ForeignException.class));
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup(){
+  coord=mock(ProcedureCoordinator.class);
+  final ProcedureCoordinatorRpcs comms=mock(ProcedureCoordinatorRpcs.class);
+  when(coord.getRpcs()).thenReturn(comms);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * With a single member, verify ordered execution.  The Coordinator side is run in a separate
+ * thread so we can only trigger from members and wait for particular state latches.
+ */
+@Test(timeout=60000) public void testSingleMember() throws Exception {
+  List<String> members=new ArrayList<String>();
+  members.add("member");
+  LatchedProcedure proc=new LatchedProcedure(coord,new ForeignExceptionDispatcher(),100,Integer.MAX_VALUE,"op",null,members);
+  final LatchedProcedure procspy=spy(proc);
+  new Thread(){
+    public void run(){
+      procspy.call();
+    }
+  }
+.start();
+  proc.startedAcquireBarrier.await();
+  verify(procspy).sendGlobalBarrierStart();
+  verify(procspy,never()).sendGlobalBarrierReached();
+  verify(procspy,never()).sendGlobalBarrierComplete();
+  verify(procspy,never()).barrierAcquiredByMember(anyString());
+  proc.barrierAcquiredByMember(members.get(0));
+  proc.acquiredBarrierLatch.await();
+  verify(procspy).sendGlobalBarrierStart();
+  proc.barrierReleasedByMember(members.get(0),new byte[0]);
+  proc.completedProcedure.await();
+  verify(procspy).sendGlobalBarrierReached();
+  verify(procspy).sendGlobalBarrierComplete();
+  verify(procspy,never()).receive(any(ForeignException.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testBarrieredErrorPropagation() throws Exception {
+  List<String> members=new ArrayList<String>();
+  members.add("member");
+  LatchedProcedure proc=new LatchedProcedure(coord,new ForeignExceptionDispatcher(),100,Integer.MAX_VALUE,"op",null,members);
+  final LatchedProcedure procspy=spy(proc);
+  Thread t=new Thread(){
+    public void run(){
+      procspy.call();
+    }
+  }
+;
+  t.start();
+  procspy.startedAcquireBarrier.await();
+  ForeignException cause=new ForeignException("SRC","External Exception");
+  procspy.receive(cause);
+  procspy.barrierAcquiredByMember(members.get(0));
+  t.join();
+  verify(procspy).sendGlobalBarrierStart();
+  verify(procspy).sendGlobalBarrierComplete();
+  verify(procspy,never()).sendGlobalBarrierReached();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testErrorPropagation() throws Exception {
+  List<String> members=new ArrayList<String>();
+  members.add("member");
+  Procedure proc=new Procedure(coord,new ForeignExceptionDispatcher(),100,Integer.MAX_VALUE,"op",null,members);
+  final Procedure procspy=spy(proc);
+  ForeignException cause=new ForeignException("SRC","External Exception");
+  proc.receive(cause);
+  Thread t=new Thread(){
+    public void run(){
+      procspy.call();
+    }
+  }
+;
+  t.start();
+  t.join();
+  verify(procspy,never()).sendGlobalBarrierStart();
+  verify(procspy,never()).sendGlobalBarrierReached();
+  verify(procspy).sendGlobalBarrierComplete();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

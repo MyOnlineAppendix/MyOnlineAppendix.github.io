@@ -1,0 +1,533 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.qjournal.client.TestQuorumJournalManager (23 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(12)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the case where the NN crashes after starting a new segment
+ * on all nodes, but before writing the first transaction to it.
+ */
+@Test public void testCrashAtBeginningOfSegment() throws Exception {
+  writeSegment(cluster,qjm,1,3,true);
+  waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  EditLogOutputStream stm=qjm.startLogSegment(4,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+  try {
+    waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  }
+  finally {
+    stm.abort();
+  }
+  qjm=closeLater(new QuorumJournalManager(conf,cluster.getQuorumJournalURI(JID),FAKE_NSINFO));
+  qjm.recoverUnfinalizedSegments();
+  checkRecovery(cluster,1,3);
+  writeSegment(cluster,qjm,4,3,true);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * edit lengths [3,4,5]
+ * first recovery:
+ * - sees [3,4,x]
+ * - picks length 4 for recoveryEndTxId
+ * - calls acceptRecovery()
+ * - crashes before finalizing
+ * second recovery:
+ * - sees [x, 4, 5]
+ * - should pick recovery length 4, even though it saw
+ * a larger txid, because a previous recovery accepted it
+ */
+@Test public void testRecoverAfterIncompleteRecovery() throws Exception {
+  setupLoggers345();
+  cluster.getJournalNode(2).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  spies=qjm.getLoggerSetForTests().getLoggersForTests();
+  for (  AsyncLogger spy : spies) {
+    TestQuorumJournalManagerUnit.futureThrows(new IOException("injected")).when(spy).finalizeLogSegment(Mockito.eq(1L),Mockito.eq(4L));
+  }
+  try {
+    qjm.recoverUnfinalizedSegments();
+    fail("Should have failed recovery since no finalization occurred");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("injected",ioe);
+  }
+  cluster.getJournalNode(0).stopAndJoin(0);
+  cluster.restartJournalNode(2);
+  qjm=createSpyingQJM();
+  spies=qjm.getLoggerSetForTests().getLoggersForTests();
+  qjm.recoverUnfinalizedSegments();
+  checkRecovery(cluster,1,4);
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setup() throws Exception {
+  conf=new Configuration();
+  conf.setInt(CommonConfigurationKeysPublic.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,0);
+  cluster=new MiniJournalCluster.Builder(conf).build();
+  qjm=createSpyingQJM();
+  spies=qjm.getLoggerSetForTests().getLoggersForTests();
+  qjm.format(QJMTestUtil.FAKE_NSINFO);
+  qjm.recoverUnfinalizedSegments();
+  assertEquals(1,qjm.getLoggerSetForTests().getEpoch());
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void shutdown() throws IOException {
+  IOUtils.cleanup(LOG,toClose.toArray(new Closeable[0]));
+  GenericTestUtils.assertNoThreadsMatching(".*IPC Client.*");
+  if (cluster != null) {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testToString() throws Exception {
+  GenericTestUtils.assertMatches(qjm.toString(),"QJM to \\[127.0.0.1:\\d+, 127.0.0.1:\\d+, 127.0.0.1:\\d+\\]");
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test another edge case discovered by randomized testing.
+ * Starts with the edge case state set up by{@link #setupEdgeCaseOneJnHasSegmentWithAcceptedRecovery()}Recovery 2:
+ * - New NN starts recovery and only talks to JN1 and JN2. JN0 has
+ * crashed. Since they have no logs open, they say they don't need
+ * recovery.
+ * - Before writing any transactions, JN0 comes back to life and
+ * JN1 crashes.
+ * - Starts writing segment 101, and writes 50 transactions before crashing.
+ * Recovery 3:
+ * - JN1 has come back to life. JN2 crashes.
+ * - New NN starts recovery and talks to all three. All three have
+ * segments open from txid 101, so it calls prepareRecovery(101)
+ * - JN0 has an already-accepted value for segment 101, so it replies
+ * "you should recover 101-101"
+ * - Former incorrect behavior: NN truncates logs to txid 101 even though
+ * it should have recovered through 150.
+ * In this case, even though there is an accepted recovery decision,
+ * the newer log segments should take precedence, since they were written
+ * in a newer epoch than the recorded decision.
+ */
+@Test public void testNewerVersionOfSegmentWins2() throws Exception {
+  setupEdgeCaseOneJnHasSegmentWithAcceptedRecovery();
+  cluster.getJournalNode(0).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  try {
+    assertEquals(100,QJMTestUtil.recoverAndReturnLastTxn(qjm));
+    cluster.restartJournalNode(0);
+    cluster.getJournalNode(1).stopAndJoin(0);
+    writeSegment(cluster,qjm,101,50,false);
+  }
+  finally {
+    qjm.close();
+  }
+  cluster.restartJournalNode(1);
+  cluster.getJournalNode(2).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  try {
+    assertEquals(150,QJMTestUtil.recoverAndReturnLastTxn(qjm));
+  }
+  finally {
+    qjm.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test case where a new writer picks up from an old one which crashed
+ * with the three loggers at different txnids
+ */
+@Test public void testChangeWritersLogsOutOfSync1() throws Exception {
+  doOutOfSyncTest(0,5L);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testChangeWritersLogsOutOfSync2() throws Exception {
+  doOutOfSyncTest(1,5L);
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testPurgeLogs() throws Exception {
+  for (int txid=1; txid <= 5; txid++) {
+    writeSegment(cluster,qjm,txid,1,true);
+  }
+  File curDir=cluster.getCurrentDir(0,JID);
+  GenericTestUtils.assertGlobEquals(curDir,"edits_.*",NNStorage.getFinalizedEditsFileName(1,1),NNStorage.getFinalizedEditsFileName(2,2),NNStorage.getFinalizedEditsFileName(3,3),NNStorage.getFinalizedEditsFileName(4,4),NNStorage.getFinalizedEditsFileName(5,5));
+  File paxosDir=new File(curDir,"paxos");
+  GenericTestUtils.assertExists(paxosDir);
+  assertTrue(new File(paxosDir,"1").createNewFile());
+  assertTrue(new File(paxosDir,"3").createNewFile());
+  GenericTestUtils.assertGlobEquals(paxosDir,"\\d+","1","3");
+  assertTrue(new File(curDir,"edits_inprogress_0000000000000000001.epoch=140").createNewFile());
+  assertTrue(new File(curDir,"edits_inprogress_0000000000000000002.empty").createNewFile());
+  qjm.purgeLogsOlderThan(3);
+  waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  GenericTestUtils.assertGlobEquals(curDir,"edits_.*",NNStorage.getFinalizedEditsFileName(3,3),NNStorage.getFinalizedEditsFileName(4,4),NNStorage.getFinalizedEditsFileName(5,5));
+  GenericTestUtils.assertGlobEquals(paxosDir,"\\d+","3");
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testChangeWritersLogsOutOfSync3() throws Exception {
+  doOutOfSyncTest(2,4L);
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test an edge case discovered by randomized testing.
+ * Starts with the edge case state set up by{@link #setupEdgeCaseOneJnHasSegmentWithAcceptedRecovery()}Recovery 2:
+ * - New NN starts recovery and only talks to JN1 and JN2. JN0 has
+ * crashed. Since they have no logs open, they say they don't need
+ * recovery.
+ * - Starts writing segment 101, and writes 50 transactions before crashing.
+ * Recovery 3:
+ * - JN0 has come back to life.
+ * - New NN starts recovery and talks to all three. All three have
+ * segments open from txid 101, so it calls prepareRecovery(101)
+ * - JN0 has an already-accepted value for segment 101, so it replies
+ * "you should recover 101-101"
+ * - Former incorrect behavior: NN truncates logs to txid 101 even though
+ * it should have recovered through 150.
+ * In this case, even though there is an accepted recovery decision,
+ * the newer log segments should take precedence, since they were written
+ * in a newer epoch than the recorded decision.
+ */
+@Test public void testNewerVersionOfSegmentWins() throws Exception {
+  setupEdgeCaseOneJnHasSegmentWithAcceptedRecovery();
+  cluster.getJournalNode(0).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  try {
+    assertEquals(100,QJMTestUtil.recoverAndReturnLastTxn(qjm));
+    writeSegment(cluster,qjm,101,50,false);
+  }
+  finally {
+    qjm.close();
+  }
+  cluster.restartJournalNode(0);
+  qjm=createSpyingQJM();
+  try {
+    assertEquals(150,QJMTestUtil.recoverAndReturnLastTxn(qjm));
+  }
+  finally {
+    qjm.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSelectInputStreamsNotOnBoundary() throws Exception {
+  final int txIdsPerSegment=10;
+  for (int txid=1; txid <= 5 * txIdsPerSegment; txid+=txIdsPerSegment) {
+    writeSegment(cluster,qjm,txid,txIdsPerSegment,true);
+  }
+  File curDir=cluster.getCurrentDir(0,JID);
+  GenericTestUtils.assertGlobEquals(curDir,"edits_.*",NNStorage.getFinalizedEditsFileName(1,10),NNStorage.getFinalizedEditsFileName(11,20),NNStorage.getFinalizedEditsFileName(21,30),NNStorage.getFinalizedEditsFileName(31,40),NNStorage.getFinalizedEditsFileName(41,50));
+  ArrayList<EditLogInputStream> streams=new ArrayList<EditLogInputStream>();
+  qjm.selectInputStreams(streams,25,false);
+  verifyEdits(streams,25,50);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOutOfSyncAtBeginningOfSegment1() throws Exception {
+  doTestOutOfSyncAtBeginningOfSegment(1);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test case where a new writer picks up from an old one with no failures
+ * and the previous unfinalized segment entirely consistent -- i.e. all
+ * the JournalNodes end at the same transaction ID.
+ */
+@Test public void testChangeWritersLogsInSync() throws Exception {
+  writeSegment(cluster,qjm,1,3,false);
+  QJMTestUtil.assertExistsInQuorum(cluster,NNStorage.getInProgressEditsFileName(1));
+  qjm=closeLater(new QuorumJournalManager(conf,cluster.getQuorumJournalURI(JID),FAKE_NSINFO));
+  qjm.recoverUnfinalizedSegments();
+  checkRecovery(cluster,1,3);
+}
+
+</code></pre>
+
+<pre class="type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Regression test for HDFS-3891: selectInputStreams should throw
+ * an exception when a majority of journalnodes have crashed.
+ */
+@Test public void testSelectInputStreamsMajorityDown() throws Exception {
+  cluster.shutdown();
+  List<EditLogInputStream> streams=Lists.newArrayList();
+  try {
+    qjm.selectInputStreams(streams,0,false);
+    fail("Did not throw IOE");
+  }
+ catch (  QuorumException ioe) {
+    GenericTestUtils.assertExceptionContains("Got too many exceptions",ioe);
+    assertTrue(streams.isEmpty());
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOutOfSyncAtBeginningOfSegment0() throws Exception {
+  doTestOutOfSyncAtBeginningOfSegment(0);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReaderWhileAnotherWrites() throws Exception {
+  QuorumJournalManager readerQjm=closeLater(createSpyingQJM());
+  List<EditLogInputStream> streams=Lists.newArrayList();
+  readerQjm.selectInputStreams(streams,0,false);
+  assertEquals(0,streams.size());
+  writeSegment(cluster,qjm,1,3,true);
+  readerQjm.selectInputStreams(streams,0,false);
+  try {
+    assertEquals(1,streams.size());
+    EditLogInputStream stream=streams.get(0);
+    assertEquals(1,stream.getFirstTxId());
+    assertEquals(3,stream.getLastTxId());
+    verifyEdits(streams,1,3);
+    assertNull(stream.readOp());
+  }
+  finally {
+    IOUtils.cleanup(LOG,streams.toArray(new Closeable[0]));
+    streams.clear();
+  }
+  writeSegment(cluster,qjm,4,3,false);
+  readerQjm.selectInputStreams(streams,0,false);
+  try {
+    assertEquals(1,streams.size());
+    EditLogInputStream stream=streams.get(0);
+    assertEquals(1,stream.getFirstTxId());
+    assertEquals(3,stream.getLastTxId());
+    verifyEdits(streams,1,3);
+  }
+  finally {
+    IOUtils.cleanup(LOG,streams.toArray(new Closeable[0]));
+    streams.clear();
+  }
+  qjm.finalizeLogSegment(4,6);
+  readerQjm.selectInputStreams(streams,0,false);
+  try {
+    assertEquals(2,streams.size());
+    assertEquals(4,streams.get(1).getFirstTxId());
+    assertEquals(6,streams.get(1).getLastTxId());
+    verifyEdits(streams,1,6);
+  }
+  finally {
+    IOUtils.cleanup(LOG,streams.toArray(new Closeable[0]));
+    streams.clear();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testFormat() throws Exception {
+  QuorumJournalManager qjm=closeLater(new QuorumJournalManager(conf,cluster.getQuorumJournalURI("testFormat-jid"),FAKE_NSINFO));
+  assertFalse(qjm.hasSomeData());
+  qjm.format(FAKE_NSINFO);
+  assertTrue(qjm.hasSomeData());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOutOfSyncAtBeginningOfSegment2() throws Exception {
+  doTestOutOfSyncAtBeginningOfSegment(2);
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=20000) public void testCrashBetweenSyncLogAndPersistPaxosData() throws Exception {
+  JournalFaultInjector faultInjector=JournalFaultInjector.instance=Mockito.mock(JournalFaultInjector.class);
+  setupLoggers345();
+  qjm=createSpyingQJM();
+  spies=qjm.getLoggerSetForTests().getLoggersForTests();
+  cluster.getJournalNode(2).stopAndJoin(0);
+  injectIOE().when(spies.get(1)).acceptRecovery(Mockito.<SegmentStateProto>any(),Mockito.<URL>any());
+  tryRecoveryExpectingFailure();
+  cluster.restartJournalNode(2);
+  qjm=createSpyingQJM();
+  spies=qjm.getLoggerSetForTests().getLoggersForTests();
+  injectIOE().when(spies.get(0)).prepareRecovery(Mockito.eq(1L));
+  Mockito.doThrow(new IOException("Injected")).when(faultInjector).beforePersistPaxosData();
+  tryRecoveryExpectingFailure();
+  Mockito.reset(faultInjector);
+  cluster.getJournalNode(2).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  try {
+    long recovered=QJMTestUtil.recoverAndReturnLastTxn(qjm);
+    assertTrue(recovered >= 4);
+  }
+  finally {
+    qjm.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Regression test for HDFS-3725. One of the journal nodes is down
+ * during the writing of one segment, then comes back up later to
+ * take part in a later segment. Thus, its local edits are
+ * not a contiguous sequence. This should be handled correctly.
+ */
+@Test public void testOneJNMissingSegments() throws Exception {
+  writeSegment(cluster,qjm,1,3,true);
+  waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  cluster.getJournalNode(0).stopAndJoin(0);
+  writeSegment(cluster,qjm,4,3,true);
+  waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  cluster.restartJournalNode(0);
+  writeSegment(cluster,qjm,7,3,true);
+  waitForAllPendingCalls(qjm.getLoggerSetForTests());
+  cluster.getJournalNode(1).stopAndJoin(0);
+  QuorumJournalManager readerQjm=createSpyingQJM();
+  List<EditLogInputStream> streams=Lists.newArrayList();
+  try {
+    readerQjm.selectInputStreams(streams,1,false);
+    verifyEdits(streams,1,9);
+  }
+  finally {
+    IOUtils.cleanup(LOG,streams.toArray(new Closeable[0]));
+    readerQjm.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSingleWriter() throws Exception {
+  writeSegment(cluster,qjm,1,3,true);
+  checkRecovery(cluster,1,3);
+  writeSegment(cluster,qjm,4,1,true);
+  checkRecovery(cluster,4,4);
+}
+
+</code></pre>
+
+<pre class="type-9 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the case where one of the loggers misses a finalizeLogSegment()
+ * call, and then misses the next startLogSegment() call before coming
+ * back to life.
+ * Previously, this caused it to keep on writing to the old log segment,
+ * such that one logger had eg edits_1-10 while the others had edits_1-5 and
+ * edits_6-10. This caused recovery to fail in certain cases.
+ */
+@Test public void testMissFinalizeAndNextStart() throws Exception {
+  futureThrows(new IOException("injected")).when(spies.get(0)).finalizeLogSegment(Mockito.eq(1L),Mockito.eq(3L));
+  futureThrows(new IOException("injected")).when(spies.get(0)).startLogSegment(Mockito.eq(4L),Mockito.eq(NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION));
+  failLoggerAtTxn(spies.get(1),4L);
+  writeSegment(cluster,qjm,1,3,true);
+  EditLogOutputStream stm=qjm.startLogSegment(4,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION);
+  try {
+    writeTxns(stm,4,1);
+    fail("Did not fail to write");
+  }
+ catch (  QuorumException qe) {
+    GenericTestUtils.assertExceptionContains("Writer out of sync",qe);
+  }
+ finally {
+    stm.abort();
+    qjm.close();
+  }
+  cluster.getJournalNode(2).stopAndJoin(0);
+  qjm=createSpyingQJM();
+  long recovered=QJMTestUtil.recoverAndReturnLastTxn(qjm);
+  assertEquals(3L,recovered);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

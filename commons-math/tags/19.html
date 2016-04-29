@@ -1,0 +1,86 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspLogger</h3><kbd>Invokes logging operations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.commons.math4.fitting.leastsquares.EvaluationTestValidation </h4><pre class="type-19 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Invokes logging operations">Logger</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Invokes logging operations
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * In this test, the set of observations is fixed.
+ * Using a Monte-Carlo procedure, it generates sets of parameters,
+ * and determine the parameter change that will result in the
+ * normalized chi-square becoming larger by one than the value from
+ * the best fit solution.
+ * <br/>
+ * The optimization problem solved is defined in class{@link StraightLineProblem}.
+ * <br/>
+ * The output (on stdout) will be a list of lines containing:
+ * <ul>
+ * <li>slope of the straight line,</li>
+ * <li>intercept of the straight line,</li>
+ * <li>chi-square of the solution defined by the above two values.</li>
+ * </ul>
+ * The output is separated into two blocks (with a blank line between
+ * them); the first block will contain all parameter sets for which{@code chi2 < chi2_b + 1}and the second block, all sets for which{@code chi2 >= chi2_b + 1}where {@code chi2_b} is the lowest chi-square (corresponding to the
+ * best solution).
+ */
+@Test public void testParametersErrorMonteCarloParameters(){
+  final double yError=15;
+  final double slope=123.456;
+  final double offset=-98.765;
+  final RandomStraightLinePointGenerator lineGenerator=new RandomStraightLinePointGenerator(slope,offset,yError,-1e3,1e4,13839013L);
+  final int numObs=10;
+  final Point2D.Double[] obs=lineGenerator.generate(numObs);
+  final StraightLineProblem problem=new StraightLineProblem(yError);
+  for (int i=0; i < numObs; i++) {
+    final Point2D.Double p=obs[i];
+    problem.addPoint(p.x,p.y);
+  }
+  final RealVector regress=new ArrayRealVector(problem.solve(),false);
+  final LeastSquaresProblem lsp=builder(problem).build();
+  final double bestChi2N=getChi2N(lsp,regress);
+  final RealVector sigma=lsp.evaluate(regress).getSigma(1e-14);
+  final int mcRepeat=MONTE_CARLO_RUNS;
+  final int gridSize=(int)FastMath.sqrt(mcRepeat);
+  final List<double[]> paramsAndChi2=new ArrayList<double[]>(gridSize * gridSize);
+  final double slopeRange=10 * sigma.getEntry(0);
+  final double offsetRange=10 * sigma.getEntry(1);
+  final double minSlope=slope - 0.5 * slopeRange;
+  final double minOffset=offset - 0.5 * offsetRange;
+  final double deltaSlope=slopeRange / gridSize;
+  final double deltaOffset=offsetRange / gridSize;
+  for (int i=0; i < gridSize; i++) {
+    final double s=minSlope + i * deltaSlope;
+    for (int j=0; j < gridSize; j++) {
+      final double o=minOffset + j * deltaOffset;
+      final double chi2N=getChi2N(lsp,new ArrayRealVector(new double[]{s,o},false));
+      paramsAndChi2.add(new double[]{s,o,chi2N});
+    }
+  }
+  final double chi2NPlusOne=bestChi2N + 1;
+  int numLarger=0;
+  final String lineFmt="%+.10e %+.10e   %.8e\n";
+  System.out.printf(lineFmt,regress.getEntry(0),regress.getEntry(1),bestChi2N);
+  System.out.println();
+  for (  double[] d : paramsAndChi2) {
+    if (d[2] <= chi2NPlusOne) {
+      System.out.printf(lineFmt,d[0],d[1],d[2]);
+    }
+  }
+  System.out.println();
+  for (  double[] d : paramsAndChi2) {
+    if (d[2] > chi2NPlusOne) {
+      ++numLarger;
+      System.out.printf(lineFmt,d[0],d[1],d[2]);
+    }
+  }
+  System.out.println();
+  System.out.println("# sigma=" + sigma.toString());
+  System.out.println("# " + numLarger + " sets filtered out");
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

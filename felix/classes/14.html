@@ -1,0 +1,393 @@
+<h3 style="margin:0px">Class: org.apache.felix.das.DeviceManagerTest (16 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(6)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition
+ * @throws Exception 
+ */
+@Test public void DriverAdded() throws Exception {
+  Driver driver=tstCreateDriver("org.apache.felix.driver-1.0",1);
+  m_manager.driverAdded(m_osgi.getReference(driver),driver);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 type-16 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Is not executed with the test suite
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test verified correct behavior when after a driver
+ * attach led to a referral, this referral leads to an exception.
+ * @throws Exception
+ */
+@Ignore public void DriverReferral_ReferralFails() throws Exception {
+  final String referredDriver="org.apache.felix.driver-2.0";
+  String[] driverIds=new String[]{"org.apache.felix.driver-1.0","org.apache.felix.driver-1.1"};
+  int[] driverMatches=new int[]{1,Device.MATCH_NONE};
+  DriverLocator locator=Mockito.mock(DriverLocator.class,"locator for v1.x");
+  Map<String,Driver> drivers=tstExpectDriverLocatorFor(locator,driverIds,driverMatches);
+  DriverLocator locatorv2=Mockito.mock(DriverLocator.class,"locator for v2.x (fails always)");
+  Mockito.when(locatorv2.findDrivers(Mockito.isA(Dictionary.class))).thenReturn(null);
+  Mockito.when(locatorv2.loadDriver(Mockito.startsWith("org.apache.felix.driver-1"))).thenReturn(null);
+  InputStream referredInputStream=Mockito.mock(InputStream.class);
+  Mockito.when(locatorv2.loadDriver(referredDriver)).thenReturn(referredInputStream);
+  Mockito.when(m_context.installBundle(Mockito.anyString(),Mockito.isA(InputStream.class))).thenThrow(new BundleException("test exception"));
+  Driver matched=drivers.get("org.apache.felix.driver-1.0");
+  final CountDownLatch latch=new CountDownLatch(1);
+  Answer<String> driver10_attach=new Answer<String>(){
+    public String answer(    InvocationOnMock invocation) throws Throwable {
+      System.out.println("driver10_attach()");
+      latch.countDown();
+      return referredDriver;
+    }
+  }
+;
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  Mockito.when(matched.match(m_osgi.getReference(device))).thenReturn(10);
+  Mockito.when(matched.attach(Mockito.isA(ServiceReference.class))).thenAnswer(driver10_attach);
+  m_manager.locatorAdded(locator);
+  m_manager.locatorAdded(locatorv2);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!latch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an attach to: " + driverIds[0]);
+  }
+  Mockito.verify(device).noDriverFound();
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void DeviceAddedWithADriverLocatorUnloadFails() throws Exception {
+  final String driverId1="org.apache.felix.driver-1.0";
+  final String driverId2="org.apache.felix.driver-1.1";
+  final String notMatchingButLoadedDriverId="dotorg.apache.felix.driver-1.0";
+  DriverLocator locator=Mockito.mock(DriverLocator.class);
+  Map<String,Driver> drivers=tstExpectDriverLocatorFor(locator,new String[]{driverId1,driverId2},new int[]{30,3});
+  Driver noMatcher=tstCreateDriver(notMatchingButLoadedDriverId,100);
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  final CountDownLatch attachLatch=tstExpectAttach(drivers.get(driverId1),device);
+  final CountDownLatch unloadDriverLatch=new CountDownLatch(1);
+  ServiceReference driver2Ref=m_osgi.getReference(drivers.get(driverId2));
+  Bundle driver2Bundle=m_osgi.getBundle(driver2Ref);
+  Answer answer=new Answer(){
+    public Object answer(    InvocationOnMock invocation) throws Throwable {
+      try {
+        throw new BundleException("test driverBundle uninstall failed");
+      }
+  finally {
+        unloadDriverLatch.countDown();
+      }
+    }
+  }
+;
+  Mockito.doAnswer(answer).when(driver2Bundle).uninstall();
+  m_manager.locatorAdded(locator);
+  m_manager.driverAdded(m_osgi.getReference(noMatcher),noMatcher);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!attachLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an attach");
+  }
+  if (!unloadDriverLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an unload");
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition/ removal
+ */
+@Test public void LocatorRemoved(){
+  DriverLocator locator=Mockito.mock(DriverLocator.class);
+  m_manager.locatorAdded(locator);
+  m_manager.locatorRemoved(locator);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  Utils.invoke(m_manager,"stop");
+  Utils.invoke(m_manager,"destroy");
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition/ removal
+ * @throws Exception 
+ */
+@Test public void DeviceModified() throws Exception {
+  Properties p=new Properties();
+  p.put(Constants.DEVICE_CATEGORY,new String[]{"dummy"});
+  ServiceReference ref=OSGiMock.createReference(p);
+  Object device=new Object();
+  m_manager.deviceAdded(ref,new Object());
+  m_manager.deviceModified(ref,device);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * We add a device, but there are no driver locators, however, there is a driver
+ * that matches. Thus an attach must follow.
+ * @throws Exception 
+ */
+@Test public void DeviceAddedNoDriverLocatorSuccessfulAttach() throws Exception {
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  Driver driver=tstCreateDriver("org.apache.felix.driver-1.0",1);
+  CountDownLatch attachLatch=tstExpectAttach(driver,device);
+  m_manager.driverAdded(m_osgi.getReference(driver),driver);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!attachLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected attach");
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * We add a device while there's one driverlocator that will successfully
+ * locate and load two driver bundles. We expect a <code>Driver.attach()</code> for 
+ * the best matching driver. There's already a driver loaded that should not match.
+ * @throws Exception
+ */
+@Test public void DeviceAddedWithADriverLocator() throws Exception {
+  final String driverId1="org.apache.felix.driver-1.0";
+  final String driverId2="org.apache.felix.driver-1.1";
+  final String notMatchingButLoadedDriverId="dotorg.apache.felix.driver-1.0";
+  DriverLocator locator=Mockito.mock(DriverLocator.class);
+  Map<String,Driver> drivers=tstExpectDriverLocatorFor(locator,new String[]{driverId1,driverId2},new int[]{30,3});
+  Driver noMatcher=tstCreateDriver(notMatchingButLoadedDriverId,100);
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  final CountDownLatch attachLatch=tstExpectAttach(drivers.get(driverId1),device);
+  final CountDownLatch unloadDriverLatch=tstExpectUnloadDriverBundle(drivers.get(driverId2));
+  m_manager.locatorAdded(locator);
+  m_manager.driverAdded(m_osgi.getReference(noMatcher),noMatcher);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!attachLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an attach");
+  }
+  if (!unloadDriverLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an unload");
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition/ removal
+ * @throws Exception 
+ */
+@Test public void DeviceRemoved() throws Exception {
+  Properties p=new Properties();
+  p.put(Constants.DEVICE_CATEGORY,new String[]{"dummy"});
+  ServiceReference ref=OSGiMock.createReference(p);
+  Object device=new Object();
+  m_manager.deviceAdded(ref,device);
+  m_manager.deviceRemoved(ref);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * We add a device, but there are no driver locators, however, there is a driver
+ * but it sadly doesn't match. Thus a <code>noDriverFound()</code> is called.
+ * @throws Exception 
+ */
+@Test public void DeviceAddedNoDriverLocatorAttachFails() throws Exception {
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  Driver driver=tstCreateDriver("org.apache.felix.driver-1.0",Device.MATCH_NONE);
+  CountDownLatch attachLatch=tstExpectNoDriverFound(device);
+  m_manager.driverAdded(m_osgi.getReference(driver),driver);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!attachLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected attach");
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Two drivers equally match the device. There is a driver selector
+ * that comes to the rescue that selects driver2. 
+ * @throws Exception
+ */
+@Test public void EqualMatchWithDriverSelector() throws Exception {
+  final String driverId1="org.apache.felix.driver-1.0";
+  final String driverId2="org.apache.felix.driver-1.1";
+  DriverLocator locator=Mockito.mock(DriverLocator.class);
+  Map<String,Driver> drivers=tstExpectDriverLocatorFor(locator,new String[]{driverId1,driverId2},new int[]{20,20});
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  DriverSelector selector=Mockito.mock(DriverSelector.class);
+  SelectorMatcher matcher=new SelectorMatcher(driverId2);
+  Mockito.when(selector.select(Mockito.eq(m_osgi.getReference(device)),Mockito.isA(Match[].class))).thenAnswer(matcher);
+  final CountDownLatch attachLatch=tstExpectAttach(drivers.get(driverId2),device);
+  Utils.inject(m_manager,DriverSelector.class,selector);
+  m_manager.locatorAdded(locator);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!attachLatch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected an attach");
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  m_osgi=new OSGiMock();
+  MockitoAnnotations.initMocks(this);
+  m_context=m_osgi.getBundleContext();
+  m_manager=new DeviceManager(m_context);
+  Utils.invoke(m_manager,"init");
+  Utils.inject(m_manager,LogService.class,m_log);
+  Mockito.when(m_context.getBundle(0)).thenReturn(m_systemBundle);
+  final CountDownLatch latch=new CountDownLatch(1);
+  Answer<Integer> answer=new Answer<Integer>(){
+    public Integer answer(    InvocationOnMock invocation) throws Throwable {
+      latch.countDown();
+      return Bundle.ACTIVE;
+    }
+  }
+;
+  Mockito.when(m_systemBundle.getState()).thenAnswer(answer);
+  Utils.invoke(m_manager,"start");
+  latch.await(5,TimeUnit.SECONDS);
+  Mockito.when(m_context.installBundle(Mockito.isA(String.class),(InputStream)Mockito.isNull())).thenThrow(new NullPointerException("inputstream is null exception"));
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition
+ */
+@Test public void LocatorAdded(){
+  DriverLocator locator=Mockito.mock(DriverLocator.class);
+  m_manager.locatorAdded(locator);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * We add a device, but there are no driver locators, so
+ * the noDriverFound method must be called
+ * @throws InterruptedException 
+ */
+@Test public void DeviceAddedNoDriverLocator() throws InterruptedException {
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  CountDownLatch latch=tstExpectNoDriverFound(device);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!latch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected call noDriverFound");
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * does not really test anything special, but ensures that the internal
+ * structure is able to parse the addition/ removal
+ * @throws Exception 
+ */
+@Test public void DriverRemoved() throws Exception {
+  Driver driver=tstCreateDriver("org.apache.felix.driver-1.0",1);
+  ServiceReference ref=m_osgi.getReference(driver);
+  m_manager.driverAdded(ref,driver);
+  m_manager.driverRemoved(ref);
+}
+
+</code></pre>
+
+<pre class="type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void DriverLocator_findDriverFails() throws Exception {
+  final CountDownLatch latch=new CountDownLatch(1);
+  Answer<String[]> answer=new Answer<String[]>(){
+    public String[] answer(    InvocationOnMock invocation) throws Throwable {
+      latch.countDown();
+      throw new RuntimeException("test exception");
+    }
+  }
+;
+  DriverLocator locator=Mockito.mock(DriverLocator.class,"locator");
+  Mockito.when(locator.findDrivers(Mockito.isA(Dictionary.class))).thenAnswer(answer);
+  Device device=tstCreateDevice(new String[]{"org.apache.felix"});
+  final CountDownLatch latch2=new CountDownLatch(1);
+  Answer answer2=new Answer(){
+    public Object answer(    InvocationOnMock invocation) throws Throwable {
+      latch2.countDown();
+      return null;
+    }
+  }
+;
+  Mockito.doAnswer(answer2).when(device).noDriverFound();
+  m_manager.locatorAdded(locator);
+  m_manager.deviceAdded(m_osgi.getReference(device),device);
+  if (!latch.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected a call to DriverLocator.findDrivers");
+  }
+  if (!latch2.await(5,TimeUnit.SECONDS)) {
+    Assert.fail("expected a call to Driver.noDriverFound");
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

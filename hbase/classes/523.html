@@ -1,0 +1,106 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestRowTooBig (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-17 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies that exceptions are thrown during the test case execution
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Usecase:
+ * - create a row with 5 large  cells (5 Mb each)
+ * - flush memstore but don't compact storefiles.
+ * - try to Get whole row.
+ * OOME happened before we actually get to reading results, but
+ * during seeking, as each StoreFile gets it's own scanner,
+ * and each scanner seeks after the first KV.
+ * @throws IOException
+ */
+@Test(expected=RowTooBigException.class) public void testScannersSeekOnFewLargeCells() throws IOException {
+  byte[] row1=Bytes.toBytes("row1");
+  byte[] fam1=Bytes.toBytes("fam1");
+  HTableDescriptor htd=TEST_HTD;
+  HColumnDescriptor hcd=new HColumnDescriptor(fam1);
+  if (htd.hasFamily(hcd.getName())) {
+    htd.modifyFamily(hcd);
+  }
+ else {
+    htd.addFamily(hcd);
+  }
+  final HRegionInfo hri=new HRegionInfo(htd.getTableName(),HConstants.EMPTY_END_ROW,HConstants.EMPTY_END_ROW);
+  Region region=HBaseTestingUtility.createRegionAndWAL(hri,rootRegionDir,HTU.getConfiguration(),htd);
+  try {
+    for (int i=0; i < 5; i++) {
+      Put put=new Put(row1);
+      byte[] value=new byte[5 * 1024 * 1024];
+      put.addColumn(fam1,Bytes.toBytes("col_" + i),value);
+      region.put(put);
+      region.flush(true);
+    }
+    Get get=new Get(row1);
+    region.get(get);
+  }
+  finally {
+    HBaseTestingUtility.closeRegionAndWAL(region);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void after() throws Exception {
+  HTU.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-17 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies that exceptions are thrown during the test case execution
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Usecase:
+ * - create a row with 1M cells, 10 bytes in each
+ * - flush & run major compaction
+ * - try to Get whole row.
+ * OOME happened in StoreScanner.next(..).
+ * @throws IOException
+ */
+@Test(expected=RowTooBigException.class) public void testScanAcrossManySmallColumns() throws IOException {
+  byte[] row1=Bytes.toBytes("row1");
+  byte[] fam1=Bytes.toBytes("fam1");
+  HTableDescriptor htd=TEST_HTD;
+  HColumnDescriptor hcd=new HColumnDescriptor(fam1);
+  if (htd.hasFamily(hcd.getName())) {
+    htd.modifyFamily(hcd);
+  }
+ else {
+    htd.addFamily(hcd);
+  }
+  final HRegionInfo hri=new HRegionInfo(htd.getTableName(),HConstants.EMPTY_END_ROW,HConstants.EMPTY_END_ROW);
+  Region region=HBaseTestingUtility.createRegionAndWAL(hri,rootRegionDir,HTU.getConfiguration(),htd);
+  try {
+    for (int i=0; i < 10; i++) {
+      Put put=new Put(row1);
+      for (int j=0; j < 10 * 10000; j++) {
+        byte[] value=new byte[10];
+        put.addColumn(fam1,Bytes.toBytes("col_" + i + "_"+ j),value);
+      }
+      region.put(put);
+      region.flush(true);
+    }
+    region.compact(true);
+    Get get=new Get(row1);
+    region.get(get);
+  }
+  finally {
+    HBaseTestingUtility.closeRegionAndWAL(region);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

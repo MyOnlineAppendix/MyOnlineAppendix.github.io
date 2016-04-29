@@ -1,0 +1,187 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestFileAppend2 (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that appends to files at random offsets.
+ * @throws IOException an exception might be thrown
+ */
+@Test public void testComplexAppend() throws IOException {
+  fileContents=AppendTestUtil.initBuffer(AppendTestUtil.FILE_SIZE);
+  Configuration conf=new HdfsConfiguration();
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,2000);
+  conf.setInt(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,2);
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,2);
+  conf.setInt(DFSConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY,30000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY,30000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_KEY,50);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDatanodes).build();
+  cluster.waitActive();
+  FileSystem fs=cluster.getFileSystem();
+  try {
+    for (int i=0; i < numberOfFiles; i++) {
+      final int replication=AppendTestUtil.nextInt(numDatanodes - 2) + 1;
+      Path testFile=new Path("/" + i + ".dat");
+      FSDataOutputStream stm=AppendTestUtil.createFile(fs,testFile,replication);
+      stm.close();
+      testFiles.add(testFile);
+    }
+    workload=new Workload[numThreads];
+    for (int i=0; i < numThreads; i++) {
+      workload[i]=new Workload(cluster,i);
+      workload[i].start();
+    }
+    for (int i=0; i < numThreads; i++) {
+      try {
+        System.out.println("Waiting for thread " + i + " to complete...");
+        workload[i].join();
+        System.out.println("Waiting for thread " + i + " complete.");
+      }
+ catch (      InterruptedException e) {
+        i--;
+      }
+    }
+  }
+  finally {
+    fs.close();
+    cluster.shutdown();
+  }
+  assertTrue("testComplexAppend Worker encountered exceptions.",globalStatus);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Creates one file, writes a few bytes to it and then closed it.
+ * Reopens the same file for appending, write all blocks and then close.
+ * Verify that all data exists in file.
+ * @throws IOException an exception might be thrown
+ */
+@Test public void testSimpleAppend() throws IOException {
+  final Configuration conf=new HdfsConfiguration();
+  if (simulatedStorage) {
+    SimulatedFSDataset.setFactory(conf);
+  }
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_HANDLER_COUNT_KEY,50);
+  fileContents=AppendTestUtil.initBuffer(AppendTestUtil.FILE_SIZE);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).build();
+  FileSystem fs=cluster.getFileSystem();
+  try {
+{
+      Path file1=new Path("/simpleAppend.dat");
+      FSDataOutputStream stm=AppendTestUtil.createFile(fs,file1,1);
+      System.out.println("Created file simpleAppend.dat");
+      int mid=186;
+      System.out.println("Writing " + mid + " bytes to file "+ file1);
+      stm.write(fileContents,0,mid);
+      stm.close();
+      System.out.println("Wrote and Closed first part of file.");
+      int mid2=607;
+      System.out.println("Writing " + mid + " bytes to file "+ file1);
+      stm=fs.append(file1);
+      stm.write(fileContents,mid,mid2 - mid);
+      stm.close();
+      System.out.println("Wrote and Closed second part of file.");
+      stm=fs.append(file1);
+      assertTrue(stm.getPos() > 0);
+      System.out.println("Writing " + (AppendTestUtil.FILE_SIZE - mid2) + " bytes to file "+ file1);
+      stm.write(fileContents,mid2,AppendTestUtil.FILE_SIZE - mid2);
+      System.out.println("Written second part of file");
+      stm.close();
+      System.out.println("Wrote and Closed second part of file.");
+      AppendTestUtil.checkFullFile(fs,file1,AppendTestUtil.FILE_SIZE,fileContents,"Read 2");
+    }
+{
+      FSDataOutputStream out=null;
+      try {
+        out=fs.append(new Path("/non-existing.dat"));
+        fail("Expected to have FileNotFoundException");
+      }
+ catch (      java.io.FileNotFoundException fnfe) {
+        System.out.println("Good: got " + fnfe);
+        fnfe.printStackTrace(System.out);
+      }
+ finally {
+        IOUtils.closeStream(out);
+      }
+    }
+{
+      Path root=new Path("/");
+      fs.setPermission(root,new FsPermission((short)0777));
+      fs.close();
+      final UserGroupInformation superuser=UserGroupInformation.getCurrentUser();
+      String username="testappenduser";
+      String group="testappendgroup";
+      assertFalse(superuser.getShortUserName().equals(username));
+      assertFalse(Arrays.asList(superuser.getGroupNames()).contains(group));
+      UserGroupInformation appenduser=UserGroupInformation.createUserForTesting(username,new String[]{group});
+      fs=DFSTestUtil.getFileSystemAs(appenduser,conf);
+      Path dir=new Path(root,getClass().getSimpleName());
+      Path foo=new Path(dir,"foo.dat");
+      FSDataOutputStream out=null;
+      int offset=0;
+      try {
+        out=fs.create(foo);
+        int len=10 + AppendTestUtil.nextInt(100);
+        out.write(fileContents,offset,len);
+        offset+=len;
+      }
+  finally {
+        IOUtils.closeStream(out);
+      }
+      fs.setPermission(dir,new FsPermission((short)0100));
+      fs.setPermission(foo,new FsPermission((short)0200));
+      out=null;
+      try {
+        out=fs.append(foo);
+        int len=10 + AppendTestUtil.nextInt(100);
+        out.write(fileContents,offset,len);
+        offset+=len;
+      }
+  finally {
+        IOUtils.closeStream(out);
+      }
+      fs.setPermission(foo,new FsPermission((short)0577));
+      fs.setPermission(dir,new FsPermission((short)0777));
+      out=null;
+      try {
+        out=fs.append(foo);
+        fail("Expected to have AccessControlException");
+      }
+ catch (      AccessControlException ace) {
+        System.out.println("Good: got " + ace);
+        ace.printStackTrace(System.out);
+      }
+ finally {
+        IOUtils.closeStream(out);
+      }
+    }
+  }
+ catch (  IOException e) {
+    System.out.println("Exception :" + e);
+    throw e;
+  }
+catch (  Throwable e) {
+    System.out.println("Throwable :" + e);
+    e.printStackTrace();
+    throw new IOException("Throwable : " + e);
+  }
+ finally {
+    fs.close();
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

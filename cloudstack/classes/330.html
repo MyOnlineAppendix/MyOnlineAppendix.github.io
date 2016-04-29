@@ -1,0 +1,116 @@
+<h3 style="margin:0px">Class: org.apache.cloudstack.storage.test.SnapshotTestWithFakeData (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-13 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testConcurrentSnapshot() throws URISyntaxException, InterruptedException, ExecutionException {
+  DataStore store=createDataStore();
+  final FakePrimaryDataStoreDriver dataStoreDriver=(FakePrimaryDataStoreDriver)store.getDriver();
+  dataStoreDriver.makeTakeSnapshotSucceed(true);
+  final VolumeInfo volumeInfo=createVolume(1L,store);
+  Assert.assertTrue(volumeInfo.getState() == Volume.State.Ready);
+  vol=volumeInfo;
+  ExecutorService pool=Executors.newFixedThreadPool(2);
+  boolean result=false;
+  List<Future<Boolean>> future=new ArrayList<Future<Boolean>>();
+  for (int i=0; i < 12; i++) {
+    final int cnt=i;
+    Future<Boolean> task=pool.submit(new Callable<Boolean>(){
+      @Override public Boolean call() throws Exception {
+        boolean r=true;
+        try {
+          SnapshotVO snapshotVO=createSnapshotInDb(vol.getId());
+          VolumeObject volumeObject=(VolumeObject)vol;
+          Account account=mock(Account.class);
+          when(account.getId()).thenReturn(1L);
+          CreateSnapshotPayload createSnapshotPayload=mock(CreateSnapshotPayload.class);
+          when(createSnapshotPayload.getAccount()).thenReturn(account);
+          when(createSnapshotPayload.getSnapshotId()).thenReturn(snapshotVO.getId());
+          when(createSnapshotPayload.getSnapshotPolicyId()).thenReturn(0L);
+          volumeObject.addPayload(createSnapshotPayload);
+          if (cnt > 8) {
+            mockStorageMotionStrategy.makeBackupSnapshotSucceed(false);
+          }
+          SnapshotInfo newSnapshot=volumeService.takeSnapshot(vol);
+          if (newSnapshot == null) {
+            r=false;
+          }
+        }
+ catch (        Exception e) {
+          r=false;
+        }
+        return r;
+      }
+    }
+);
+    Assert.assertTrue(task.get());
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  DataCenterVO dc=new DataCenterVO(UUID.randomUUID().toString(),"test","8.8.8.8",null,"10.0.0.1",null,"10.0.0.1/24",null,null,DataCenter.NetworkType.Basic,null,null,true,true,null,null);
+  dc=dcDao.persist(dc);
+  dcId=dc.getId();
+  HostPodVO pod=new HostPodVO(UUID.randomUUID().toString(),dc.getId(),"10.223.0.1","10.233.2.2/25",8,"test");
+  pod=podDao.persist(pod);
+  podId=pod.getId();
+  ClusterVO cluster=new ClusterVO(dc.getId(),pod.getId(),"devcloud cluster");
+  cluster.setHypervisorType(Hypervisor.HypervisorType.XenServer.toString());
+  cluster.setClusterType(Cluster.ClusterType.CloudManaged);
+  cluster.setManagedState(Managed.ManagedState.Managed);
+  cluster=clusterDao.persist(cluster);
+  clusterId=cluster.getId();
+  imageStore=new ImageStoreVO();
+  imageStore.setName(UUID.randomUUID().toString());
+  imageStore.setDataCenterId(dcId);
+  imageStore.setProviderName(DataStoreProvider.NFS_IMAGE);
+  imageStore.setRole(DataStoreRole.Image);
+  imageStore.setUrl(UUID.randomUUID().toString());
+  imageStore.setUuid(UUID.randomUUID().toString());
+  imageStore.setProtocol("nfs");
+  imageStore=imageStoreDao.persist(imageStore);
+  when(primaryDataStoreProvider.configure(Matchers.anyMap())).thenReturn(true);
+  Set<DataStoreProvider.DataStoreProviderType> types=new HashSet<DataStoreProvider.DataStoreProviderType>();
+  types.add(DataStoreProvider.DataStoreProviderType.PRIMARY);
+  when(primaryDataStoreProvider.getTypes()).thenReturn(types);
+  when(primaryDataStoreProvider.getName()).thenReturn(DataStoreProvider.DEFAULT_PRIMARY);
+  when(primaryDataStoreProvider.getDataStoreDriver()).thenReturn(driver);
+  User user=mock(User.class);
+  when(user.getId()).thenReturn(1L);
+  Account account=mock(Account.class);
+  when(account.getId()).thenReturn(1L);
+  when(accountManager.getSystemAccount()).thenReturn(account);
+  when(accountManager.getSystemUser()).thenReturn(user);
+  if (Merovingian2.getLockMaster() == null) {
+    _lockMaster=Merovingian2.createLockMaster(1234);
+  }
+ else {
+    _lockMaster=Merovingian2.getLockMaster();
+  }
+  _lockMaster.cleanupThisServer();
+  ComponentContext.initComponentsLifeCycle();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  _lockMaster.cleanupThisServer();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

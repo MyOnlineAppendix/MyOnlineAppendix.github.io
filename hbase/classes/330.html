@@ -1,0 +1,129 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.mapreduce.TestWALRecordReader (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  mvcc=new MultiVersionConcurrencyControl();
+  FileStatus[] entries=fs.listStatus(hbaseDir);
+  for (  FileStatus dir : entries) {
+    fs.delete(dir.getPath(),true);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test partial reads from the log based on passed time range
+ * @throws Exception
+ */
+@Test public void testPartialRead() throws Exception {
+  final WALFactory walfactory=new WALFactory(conf,null,getName());
+  WAL log=walfactory.getWAL(info.getEncodedNameAsBytes(),info.getTable().getNamespace());
+  long ts=System.currentTimeMillis();
+  WALEdit edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("1"),ts,value));
+  log.append(htd,info,getWalKey(ts),edit,true);
+  edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("2"),ts + 1,value));
+  log.append(htd,info,getWalKey(ts + 1),edit,true);
+  log.sync();
+  LOG.info("Before 1st WAL roll " + log.toString());
+  log.rollWriter();
+  LOG.info("Past 1st WAL roll " + log.toString());
+  Thread.sleep(1);
+  long ts1=System.currentTimeMillis();
+  edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("3"),ts1 + 1,value));
+  log.append(htd,info,getWalKey(ts1 + 1),edit,true);
+  edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("4"),ts1 + 2,value));
+  log.append(htd,info,getWalKey(ts1 + 2),edit,true);
+  log.sync();
+  log.shutdown();
+  walfactory.shutdown();
+  LOG.info("Closed WAL " + log.toString());
+  WALInputFormat input=new WALInputFormat();
+  Configuration jobConf=new Configuration(conf);
+  jobConf.set("mapreduce.input.fileinputformat.inputdir",logDir.toString());
+  jobConf.setLong(WALInputFormat.END_TIME_KEY,ts);
+  List<InputSplit> splits=input.getSplits(MapreduceTestingShim.createJobContext(jobConf));
+  assertEquals(1,splits.size());
+  testSplit(splits.get(0),Bytes.toBytes("1"));
+  jobConf.setLong(WALInputFormat.START_TIME_KEY,ts + 1);
+  jobConf.setLong(WALInputFormat.END_TIME_KEY,ts1 + 1);
+  splits=input.getSplits(MapreduceTestingShim.createJobContext(jobConf));
+  assertEquals(2,splits.size());
+  testSplit(splits.get(0),Bytes.toBytes("2"));
+  testSplit(splits.get(1),Bytes.toBytes("3"));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test basic functionality
+ * @throws Exception
+ */
+@Test public void testWALRecordReader() throws Exception {
+  final WALFactory walfactory=new WALFactory(conf,null,getName());
+  WAL log=walfactory.getWAL(info.getEncodedNameAsBytes(),info.getTable().getNamespace());
+  byte[] value=Bytes.toBytes("value");
+  final AtomicLong sequenceId=new AtomicLong(0);
+  WALEdit edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("1"),System.currentTimeMillis(),value));
+  long txid=log.append(htd,info,getWalKey(System.currentTimeMillis()),edit,true);
+  log.sync(txid);
+  Thread.sleep(1);
+  long secondTs=System.currentTimeMillis();
+  log.rollWriter();
+  edit=new WALEdit();
+  edit.add(new KeyValue(rowName,family,Bytes.toBytes("2"),System.currentTimeMillis(),value));
+  txid=log.append(htd,info,getWalKey(System.currentTimeMillis()),edit,true);
+  log.sync(txid);
+  log.shutdown();
+  walfactory.shutdown();
+  long thirdTs=System.currentTimeMillis();
+  WALInputFormat input=new WALInputFormat();
+  Configuration jobConf=new Configuration(conf);
+  jobConf.set("mapreduce.input.fileinputformat.inputdir",logDir.toString());
+  List<InputSplit> splits=input.getSplits(MapreduceTestingShim.createJobContext(jobConf));
+  assertEquals(2,splits.size());
+  testSplit(splits.get(0),Bytes.toBytes("1"));
+  testSplit(splits.get(1),Bytes.toBytes("2"));
+  jobConf.setLong(WALInputFormat.END_TIME_KEY,secondTs - 1);
+  splits=input.getSplits(MapreduceTestingShim.createJobContext(jobConf));
+  assertEquals(1,splits.size());
+  testSplit(splits.get(0),Bytes.toBytes("1"));
+  jobConf.setLong(WALInputFormat.END_TIME_KEY,Long.MAX_VALUE);
+  jobConf.setLong(WALInputFormat.START_TIME_KEY,thirdTs);
+  splits=input.getSplits(MapreduceTestingShim.createJobContext(jobConf));
+  assertEquals(2,splits.size());
+  testSplit(splits.get(0));
+  testSplit(splits.get(1));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

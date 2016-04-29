@@ -1,0 +1,77 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.nodemanager.TestEventFlow (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testSuccessfulContainerLaunch() throws InterruptedException, IOException, YarnException {
+  FileContext localFS=FileContext.getLocalFSFileContext();
+  localFS.delete(new Path(localDir.getAbsolutePath()),true);
+  localFS.delete(new Path(localLogDir.getAbsolutePath()),true);
+  localFS.delete(new Path(remoteLogDir.getAbsolutePath()),true);
+  localDir.mkdir();
+  localLogDir.mkdir();
+  remoteLogDir.mkdir();
+  YarnConfiguration conf=new YarnConfiguration();
+  Context context=new NMContext(new NMContainerTokenSecretManager(conf),new NMTokenSecretManagerInNM(),null,null,new NMNullStateStoreService()){
+    @Override public int getHttpPort(){
+      return 1234;
+    }
+  }
+;
+  conf.set(YarnConfiguration.NM_LOCAL_DIRS,localDir.getAbsolutePath());
+  conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,remoteLogDir.getAbsolutePath());
+  ContainerExecutor exec=new DefaultContainerExecutor();
+  exec.setConf(conf);
+  DeletionService del=new DeletionService(exec);
+  Dispatcher dispatcher=new AsyncDispatcher();
+  NodeHealthCheckerService healthChecker=new NodeHealthCheckerService();
+  healthChecker.init(conf);
+  LocalDirsHandlerService dirsHandler=healthChecker.getDiskHandler();
+  NodeManagerMetrics metrics=NodeManagerMetrics.create();
+  NodeStatusUpdater nodeStatusUpdater=new NodeStatusUpdaterImpl(context,dispatcher,healthChecker,metrics){
+    @Override protected ResourceTracker getRMClient(){
+      return new LocalRMInterface();
+    }
+    @Override protected void stopRMProxy(){
+      return;
+    }
+    @Override protected void startStatusUpdater(){
+      return;
+    }
+    @Override public long getRMIdentifier(){
+      return SIMULATED_RM_IDENTIFIER;
+    }
+  }
+;
+  DummyContainerManager containerManager=new DummyContainerManager(context,exec,del,nodeStatusUpdater,metrics,new ApplicationACLsManager(conf),dirsHandler);
+  nodeStatusUpdater.init(conf);
+  ((NMContext)context).setContainerManager(containerManager);
+  nodeStatusUpdater.start();
+  containerManager.init(conf);
+  containerManager.start();
+  ContainerLaunchContext launchContext=recordFactory.newRecordInstance(ContainerLaunchContext.class);
+  ApplicationId applicationId=ApplicationId.newInstance(0,0);
+  ApplicationAttemptId applicationAttemptId=ApplicationAttemptId.newInstance(applicationId,0);
+  ContainerId cID=ContainerId.newInstance(applicationAttemptId,0);
+  String user="testing";
+  StartContainerRequest scRequest=StartContainerRequest.newInstance(launchContext,TestContainerManager.createContainerToken(cID,SIMULATED_RM_IDENTIFIER,context.getNodeId(),user,context.getContainerTokenSecretManager()));
+  List<StartContainerRequest> list=new ArrayList<StartContainerRequest>();
+  list.add(scRequest);
+  StartContainersRequest allRequests=StartContainersRequest.newInstance(list);
+  containerManager.startContainers(allRequests);
+  BaseContainerManagerTest.waitForContainerState(containerManager,cID,ContainerState.RUNNING);
+  List<ContainerId> containerIds=new ArrayList<ContainerId>();
+  containerIds.add(cID);
+  StopContainersRequest stopRequest=StopContainersRequest.newInstance(containerIds);
+  containerManager.stopContainers(stopRequest);
+  BaseContainerManagerTest.waitForContainerState(containerManager,cID,ContainerState.COMPLETE);
+  containerManager.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

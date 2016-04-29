@@ -1,0 +1,89 @@
+<h3 style="margin:0px">Class: org.apache.openejb.itest.failover.ReconnectDelayListSelfTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void test() throws Exception {
+  System.setProperty("version",OpenEjbVersion.get().getVersion());
+  Duration reconnectDelay=new Duration("1 second");
+  final File zip=Repository.getArtifact("org.apache.openejb","openejb-standalone","zip");
+  final File app=Repository.getArtifact("org.apache.openejb.itests","failover-ejb","jar");
+  final File dir=Files.tmpdir();
+  System.setProperty("openejb.client.requestretry","true");
+  final Map<String,StandaloneServer> servers=new HashMap<String,StandaloneServer>();
+  for (  String name : new String[]{"red","green","blue"}) {
+    final File home=new File(dir,name);
+    Files.mkdir(home);
+    Zips.unzip(zip,home,true);
+    final StandaloneServer server=new StandaloneServer(home,home);
+    server.killOnExit();
+    server.ignoreOut();
+    server.getJvmOpts().add("-Dopenejb.classloader.forced-load=org.apache.openejb");
+    server.getProperties().put("name",name);
+    server.getProperties().put("openejb.extract.configuration","false");
+    IO.copy(app,Files.path(home,"apps","itest.jar"));
+    IO.copy(IO.read("<openejb><Deployments dir=\"apps/\"/></openejb>"),Files.path(home,"conf","openejb.xml"));
+    final StandaloneServer.ServerService ejbd=server.getServerService("ejbd");
+    ejbd.setDisabled(false);
+    ejbd.setBind("0.0.0.0");
+    ejbd.setPort(getAvailablePort());
+    ejbd.setThreads(5);
+    ejbd.set("discoveryHost","localhost");
+    ejbd.set("discovery","ejb:ejbd://{discoveryHost}:{port}/" + name);
+    final StandaloneServer.ServerService multipoint=server.getServerService(MULTIPOINT);
+    multipoint.setBind("0.0.0.0");
+    multipoint.setPort(getAvailablePort());
+    multipoint.setDisabled(false);
+    multipoint.set("discoveryHost","localhost");
+    multipoint.set("discoveryName",name);
+    multipoint.set("reconnectDelay",reconnectDelay.toString());
+    servers.put(name,server);
+  }
+  final StandaloneServer red=servers.get("red");
+  for (  Map.Entry<String,StandaloneServer> entry : servers.entrySet()) {
+    final StandaloneServer server=entry.getValue();
+    final StandaloneServer.ServerService multipoint=server.getServerService(MULTIPOINT);
+    final String value="localhost:" + red.getServerService(MULTIPOINT).getPort() + ",localhost:"+ multipoint.getPort();
+    multipoint.set("initialServers",value);
+  }
+  for (  Map.Entry<String,StandaloneServer> entry : servers.entrySet()) {
+    if (entry.getKey().equals("red"))     continue;
+    entry.getValue().start(1,TimeUnit.MINUTES);
+  }
+{
+    final StandaloneServer blue=servers.get("blue");
+    final Properties environment=new Properties();
+    environment.put(Context.INITIAL_CONTEXT_FACTORY,RemoteInitialContextFactory.class.getName());
+    environment.put(Context.PROVIDER_URL,"ejbd://localhost:" + blue.getServerService("ejbd").getPort());
+    final InitialContext context=new InitialContext(environment);
+    final Calculator bean=(Calculator)context.lookup("CalculatorBeanRemote");
+    invoke(bean,10,"blue");
+    blue.kill();
+    try {
+      bean.name();
+      Assert.fail("Server should be down and failover not hooked up");
+    }
+ catch (    Exception e) {
+    }
+  }
+  red.start(1,TimeUnit.MINUTES);
+  Thread.sleep((long)(reconnectDelay.getTime(TimeUnit.MILLISECONDS) * 1.5));
+{
+    final StandaloneServer green=servers.get("green");
+    final Properties environment=new Properties();
+    environment.put(Context.INITIAL_CONTEXT_FACTORY,RemoteInitialContextFactory.class.getName());
+    environment.put(Context.PROVIDER_URL,"ejbd://localhost:" + green.getServerService("ejbd").getPort());
+    final InitialContext context=new InitialContext(environment);
+    final Calculator bean=(Calculator)context.lookup("CalculatorBeanRemote");
+    invoke(bean,10,"green");
+    green.kill();
+    invoke(bean,10,"red");
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,387 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.segment.CompactionAndCleanupIT (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-16 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Regression test for OAK-2192 testing for mixed segments. This test does not
+ * cover OAK-3348. I.e. it does not assert the segment graph is free of cross
+ * gc generation references.
+ */
+@Test public void testMixedSegments() throws Exception {
+  FileStore store=new FileStore(directory,2,false);
+  final SegmentNodeStore nodeStore=new SegmentNodeStore(store);
+  final AtomicBoolean compactionSuccess=new AtomicBoolean(true);
+  CompactionStrategy strategy=new CompactionStrategy(true,false,CLEAN_NONE,0,(byte)5){
+    @Override public boolean compacted(    Callable<Boolean> setHead) throws Exception {
+      compactionSuccess.set(nodeStore.locked(setHead,1,MINUTES));
+      return compactionSuccess.get();
+    }
+  }
+;
+  strategy.setForceAfterFail(true);
+  store.setCompactionStrategy(strategy);
+  NodeBuilder root=nodeStore.getRoot().builder();
+  createNodes(root.setChildNode("test"),10,3);
+  nodeStore.merge(root,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final Set<UUID> beforeSegments=new HashSet<UUID>();
+  collectSegments(store.getHead(),beforeSegments);
+  final AtomicReference<Boolean> run=new AtomicReference<Boolean>(true);
+  final List<String> failedCommits=newArrayList();
+  Thread[] threads=new Thread[10];
+  for (int k=0; k < threads.length; k++) {
+    final int threadId=k;
+    threads[k]=new Thread(new Runnable(){
+      @Override public void run(){
+        for (int j=0; run.get(); j++) {
+          String nodeName="b-" + threadId + ","+ j;
+          try {
+            NodeBuilder root=nodeStore.getRoot().builder();
+            root.setChildNode(nodeName);
+            nodeStore.merge(root,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+            Thread.sleep(5);
+          }
+ catch (          CommitFailedException e) {
+            failedCommits.add(nodeName);
+          }
+catch (          InterruptedException e) {
+            Thread.interrupted();
+            break;
+          }
+        }
+      }
+    }
+);
+    threads[k].start();
+  }
+  store.compact();
+  run.set(false);
+  for (  Thread t : threads) {
+    t.join();
+  }
+  store.flush();
+  assumeTrue("Failed to acquire compaction lock",compactionSuccess.get());
+  assertTrue("Failed commits: " + failedCommits,failedCommits.isEmpty());
+  Set<UUID> afterSegments=new HashSet<UUID>();
+  collectSegments(store.getHead(),afterSegments);
+  try {
+    for (    UUID u : beforeSegments) {
+      assertFalse("Mixed segments found: " + u,afterSegments.contains(u));
+    }
+  }
+  finally {
+    store.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void cleanDir(){
+  try {
+    deleteDirectory(directory);
+  }
+ catch (  IOException e) {
+    log.error("Error cleaning directory",e);
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Set a root node referring to a child node that lives in a different segments. Depending
+ * on the order how the SegmentBufferWriters associated with the threads used to create the
+ * nodes are flushed, this will introduce a forward reference between the segments.
+ * The current cleanup mechanism cannot handle forward references and removes the referenced
+ * segment causing a SNFE.
+ * This is a regression introduced with OAK-1828.
+ */
+@Test public void cleanupCyclicGraph() throws IOException, ExecutionException, InterruptedException {
+  FileStore fileStore=newFileStore(directory).create();
+  final SegmentWriter writer=fileStore.getTracker().getWriter();
+  final SegmentNodeState oldHead=fileStore.getHead();
+  final SegmentNodeState child=run(new Callable<SegmentNodeState>(){
+    @Override public SegmentNodeState call() throws Exception {
+      NodeBuilder builder=EMPTY_NODE.builder();
+      return writer.writeNode(EMPTY_NODE);
+    }
+  }
+);
+  SegmentNodeState newHead=run(new Callable<SegmentNodeState>(){
+    @Override public SegmentNodeState call() throws Exception {
+      NodeBuilder builder=oldHead.builder();
+      builder.setChildNode("child",child);
+      return writer.writeNode(builder.getNodeState());
+    }
+  }
+);
+  writer.flush();
+  fileStore.setHead(oldHead,newHead);
+  fileStore.close();
+  fileStore=newFileStore(directory).create();
+  traverse(fileStore.getHead());
+  fileStore.cleanup();
+  traverse(fileStore.getHead());
+  fileStore.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-3 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+- Is not executed with the test suite
+"></span><br>
+/** 
+ * Test asserting OAK-3348: Cross gc sessions might introduce references to pre-compacted segments
+ */
+@Test @Ignore("OAK-3348") public void preCompactionReferences() throws IOException, CommitFailedException, InterruptedException {
+  for (  String ref : new String[]{"merge-before-compact","merge-after-compact"}) {
+    File repoDir=new File(directory,ref);
+    FileStore fileStore=newFileStore(repoDir).withMaxFileSize(2).create();
+    final SegmentNodeStore nodeStore=newSegmentNodeStore(fileStore).create();
+    fileStore.setCompactionStrategy(new CompactionStrategy(true,false,CLEAN_NONE,0,(byte)5){
+      @Override public boolean compacted(      Callable<Boolean> setHead) throws Exception {
+        return nodeStore.locked(setHead);
+      }
+    }
+);
+    try {
+      NodeBuilder preGCBuilder=nodeStore.getRoot().builder();
+      preGCBuilder.setChildNode("test").setProperty("blob",createBlob(nodeStore,1024 * 1024));
+      nodeStore.merge(preGCBuilder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+      preGCBuilder=nodeStore.getRoot().builder();
+      preGCBuilder.getChildNode("test").remove();
+      nodeStore.merge(preGCBuilder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+      preGCBuilder=nodeStore.getRoot().builder();
+      preGCBuilder.setChildNode("test").setChildNode("a").setChildNode("b").setProperty("foo","bar");
+      for (int k=0; k < getInteger("update.limit",10000); k+=2) {
+        preGCBuilder.setChildNode("dummy").remove();
+      }
+      if ("merge-before-compact".equals(ref)) {
+        NodeBuilder builder=nodeStore.getRoot().builder();
+        builder.setChildNode("n");
+        nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+        nodeStore.merge(preGCBuilder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+      }
+      fileStore.compact();
+      if ("merge-after-compact".equals(ref)) {
+        NodeBuilder builder=nodeStore.getRoot().builder();
+        builder.setChildNode("n");
+        nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+        nodeStore.merge(preGCBuilder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+      }
+    }
+  finally {
+      fileStore.close();
+    }
+    fileStore=newFileStore(repoDir).withMaxFileSize(2).create();
+    try {
+      fileStore.cleanup();
+      assertTrue(ref + " repository size " + fileStore.size()+ " < "+ 1024 * 1024,fileStore.size() < 1024 * 1024);
+    }
+  finally {
+      fileStore.close();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws IOException {
+  directory=File.createTempFile("FileStoreTest","dir",new File("target"));
+  directory.delete();
+  directory.mkdir();
+}
+
+</code></pre>
+
+<pre class="type-5 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void propertyRetention() throws IOException, CommitFailedException {
+  FileStore fileStore=new NonCachingFileStore(directory,1);
+  try {
+    final SegmentNodeStore nodeStore=new SegmentNodeStore(fileStore);
+    CompactionStrategy strategy=new CompactionStrategy(false,false,CLEAN_ALL,0,(byte)0){
+      @Override public boolean compacted(      @Nonnull Callable<Boolean> setHead) throws Exception {
+        return nodeStore.locked(setHead);
+      }
+    }
+;
+    strategy.setPersistCompactionMap(false);
+    fileStore.setCompactionStrategy(strategy);
+    NodeBuilder builder=nodeStore.getRoot().builder();
+    builder.setChildNode("test").setProperty("property","value");
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    NodeState test=nodeStore.getRoot().getChildNode("test");
+    SegmentId id=((SegmentNodeState)test).getRecordId().getSegmentId();
+    assertTrue(fileStore.containsSegment(id));
+    builder=nodeStore.getRoot().builder();
+    addContent(builder.setChildNode("dump"));
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    assertTrue(fileStore.containsSegment(id));
+    PropertyState property=test.getProperty("property");
+    assertEquals("value",property.getValue(STRING));
+    fileStore.flush();
+    fileStore.compact();
+    fileStore.cleanup();
+    try {
+      fileStore.readSegment(id);
+      fail("Segment " + id + "should be gc'ed");
+    }
+ catch (    SegmentNotFoundException ignore) {
+    }
+  }
+  finally {
+    fileStore.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void compactionNoBinaryClone() throws Exception {
+  final int blobSize=5 * 1024 * 1024;
+  final int dataNodes=10000;
+  FileStore fileStore=FileStore.newFileStore(directory).withMaxFileSize(1).create();
+  final SegmentNodeStore nodeStore=new SegmentNodeStore(fileStore);
+  CompactionStrategy custom=new CompactionStrategy(false,false,CLEAN_OLD,TimeUnit.HOURS.toMillis(1),(byte)0){
+    @Override public boolean compacted(    @Nonnull Callable<Boolean> setHead) throws Exception {
+      return nodeStore.locked(setHead);
+    }
+  }
+;
+  custom.setPersistCompactionMap(false);
+  fileStore.setCompactionStrategy(custom);
+  NodeBuilder extra=nodeStore.getRoot().builder();
+  NodeBuilder content=extra.child("content");
+  for (int i=0; i < dataNodes; i++) {
+    NodeBuilder c=content.child("c" + i);
+    for (int j=0; j < 1000; j++) {
+      c.setProperty("p" + i,"v" + i);
+    }
+  }
+  nodeStore.merge(extra,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final long dataSize=fileStore.size();
+  log.debug("File store dataSize {}",byteCountToDisplaySize(dataSize));
+  try {
+    NodeBuilder builder=nodeStore.getRoot().builder();
+    builder.setProperty("a1",createBlob(nodeStore,blobSize));
+    builder.setProperty("b","foo");
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    log.debug("File store pre removal {}, expecting {}",byteCountToDisplaySize(fileStore.size()),byteCountToDisplaySize(blobSize + dataSize));
+    assertEquals(mb(blobSize + dataSize),mb(fileStore.size()));
+    builder=nodeStore.getRoot().builder();
+    builder.removeProperty("a1");
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    log.debug("File store pre compaction {}, expecting {}",byteCountToDisplaySize(fileStore.size()),byteCountToDisplaySize(blobSize + dataSize));
+    assertEquals(mb(blobSize + dataSize),mb(fileStore.size()));
+    assertTrue(fileStore.maybeCompact(false));
+    assertSize("post compaction",fileStore.size(),blobSize + dataSize,blobSize + 2 * dataSize);
+    builder=nodeStore.getRoot().builder();
+    builder.setProperty("a2",createBlob(nodeStore,blobSize));
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    assertSize("pre cleanup",fileStore.size(),2 * blobSize + dataSize,2 * blobSize + 2 * dataSize);
+    assertTrue(fileStore.maybeCompact(false));
+    fileStore.cleanup();
+    assertSize("post cleanup",fileStore.size(),0,blobSize + 2 * dataSize);
+    custom.setOlderThan(0);
+    TimeUnit.MILLISECONDS.sleep(5);
+    boolean needsCompaction=true;
+    for (int i=0; i < 3 && needsCompaction; i++) {
+      needsCompaction=fileStore.maybeCompact(false);
+      fileStore.cleanup();
+    }
+    assertFalse(fileStore.maybeCompact(false));
+    byte[] blob=ByteStreams.toByteArray(nodeStore.getRoot().getProperty("a2").getValue(Type.BINARY).getNewStream());
+    assertEquals(blobSize,blob.length);
+  }
+  finally {
+    fileStore.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void noCleanupOnCompactionMap() throws Exception {
+  final int blobSize=5 * 1024 * 1024;
+  final int dataNodes=10000;
+  FileStore fileStore=new FileStore(directory,1);
+  final SegmentNodeStore nodeStore=new SegmentNodeStore(fileStore);
+  CompactionStrategy custom=new CompactionStrategy(false,false,CLEAN_OLD,TimeUnit.HOURS.toMillis(1),(byte)0){
+    @Override public boolean compacted(    @Nonnull Callable<Boolean> setHead) throws Exception {
+      return nodeStore.locked(setHead);
+    }
+  }
+;
+  fileStore.setCompactionStrategy(custom);
+  NodeBuilder extra=nodeStore.getRoot().builder();
+  NodeBuilder content=extra.child("content");
+  for (int i=0; i < dataNodes; i++) {
+    NodeBuilder c=content.child("c" + i);
+    for (int j=0; j < 1000; j++) {
+      c.setProperty("p" + i,"v" + i);
+    }
+  }
+  nodeStore.merge(extra,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+  final long dataSize=fileStore.size();
+  log.debug("File store dataSize {}",byteCountToDisplaySize(dataSize));
+  try {
+    NodeBuilder builder=nodeStore.getRoot().builder();
+    builder.setProperty("a1",createBlob(nodeStore,blobSize));
+    builder.setProperty("b","foo");
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    builder=nodeStore.getRoot().builder();
+    builder.removeProperty("a1");
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    fileStore.maybeCompact(false);
+    builder=nodeStore.getRoot().builder();
+    builder.setProperty("a2",createBlob(nodeStore,blobSize));
+    nodeStore.merge(builder,EmptyHook.INSTANCE,CommitInfo.EMPTY);
+    fileStore.maybeCompact(false);
+    fileStore.cleanup();
+    custom.setOlderThan(0);
+    TimeUnit.MILLISECONDS.sleep(5);
+    boolean needsCompaction=true;
+    for (int i=0; i < 3 && needsCompaction; i++) {
+      needsCompaction=fileStore.maybeCompact(false);
+      fileStore.cleanup();
+    }
+  }
+  finally {
+    fileStore.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

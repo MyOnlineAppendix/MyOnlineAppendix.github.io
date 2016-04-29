@@ -1,0 +1,101 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestLocalContainerLauncher (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void cleanupTestDirs() throws IOException {
+  if (testWorkDir != null) {
+    delete(testWorkDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRenameMapOutputForReduce() throws Exception {
+  final JobConf conf=new JobConf();
+  final MROutputFiles mrOutputFiles=new MROutputFiles();
+  mrOutputFiles.setConf(conf);
+  conf.set(MRConfig.LOCAL_DIR,localDirs[0].toString());
+  final Path mapOut=mrOutputFiles.getOutputFileForWrite(1);
+  conf.set(MRConfig.LOCAL_DIR,localDirs[1].toString());
+  final Path mapOutIdx=mrOutputFiles.getOutputIndexFileForWrite(1);
+  Assert.assertNotEquals("Paths must be different!",mapOut.getParent(),mapOutIdx.getParent());
+  conf.setStrings(MRConfig.LOCAL_DIR,localDirs);
+  final FileContext lfc=FileContext.getLocalFSFileContext(conf);
+  lfc.create(mapOut,EnumSet.of(CREATE)).close();
+  lfc.create(mapOutIdx,EnumSet.of(CREATE)).close();
+  final JobId jobId=MRBuilderUtils.newJobId(12345L,1,2);
+  final TaskId tid=MRBuilderUtils.newTaskId(jobId,0,TaskType.MAP);
+  final TaskAttemptId taid=MRBuilderUtils.newTaskAttemptId(tid,0);
+  LocalContainerLauncher.renameMapOutputForReduce(conf,taid,mrOutputFiles);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("rawtypes") @Test(timeout=10000) public void testKillJob() throws Exception {
+  JobConf conf=new JobConf();
+  AppContext context=mock(AppContext.class);
+  final CountDownLatch isDone=new CountDownLatch(1);
+  EventHandler handler=new EventHandler(){
+    @Override public void handle(    Event event){
+      LOG.info("handling event " + event.getClass() + " with type "+ event.getType());
+      if (event instanceof TaskAttemptEvent) {
+        if (event.getType() == TaskAttemptEventType.TA_CONTAINER_CLEANED) {
+          isDone.countDown();
+        }
+      }
+    }
+  }
+;
+  when(context.getEventHandler()).thenReturn(handler);
+  LocalContainerLauncher launcher=new LocalContainerLauncher(context,mock(TaskUmbilicalProtocol.class));
+  launcher.init(conf);
+  launcher.start();
+  JobId jobId=MRBuilderUtils.newJobId(System.currentTimeMillis(),1,1);
+  TaskId taskId=MRBuilderUtils.newTaskId(jobId,1,TaskType.MAP);
+  TaskAttemptId taId=MRBuilderUtils.newTaskAttemptId(taskId,0);
+  Job job=mock(Job.class);
+  when(job.getTotalMaps()).thenReturn(1);
+  when(job.getTotalReduces()).thenReturn(0);
+  Map<JobId,Job> jobs=new HashMap<JobId,Job>();
+  jobs.put(jobId,job);
+  when(context.getAllJobs()).thenReturn(jobs);
+  org.apache.hadoop.mapreduce.v2.app.job.Task ytask=mock(org.apache.hadoop.mapreduce.v2.app.job.Task.class);
+  when(ytask.getType()).thenReturn(TaskType.MAP);
+  when(job.getTask(taskId)).thenReturn(ytask);
+  MapTask mapTask=mock(MapTask.class);
+  when(mapTask.isMapOrReduce()).thenReturn(true);
+  when(mapTask.isMapTask()).thenReturn(true);
+  TaskAttemptID taskID=TypeConverter.fromYarn(taId);
+  when(mapTask.getTaskID()).thenReturn(taskID);
+  when(mapTask.getJobID()).thenReturn(taskID.getJobID());
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      LOG.info("sleeping for 5 minutes...");
+      Thread.sleep(5 * 60 * 1000);
+      return null;
+    }
+  }
+).when(mapTask).run(isA(JobConf.class),isA(TaskUmbilicalProtocol.class));
+  ContainerLauncherEvent launchEvent=new ContainerRemoteLaunchEvent(taId,null,createMockContainer(),mapTask);
+  launcher.handle(launchEvent);
+  Thread.sleep(200);
+  ContainerLauncherEvent cleanupEvent=new ContainerLauncherEvent(taId,null,null,null,ContainerLauncher.EventType.CONTAINER_REMOTE_CLEANUP);
+  launcher.handle(cleanupEvent);
+  isDone.await();
+  launcher.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

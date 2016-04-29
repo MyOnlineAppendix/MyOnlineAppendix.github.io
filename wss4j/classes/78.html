@@ -1,0 +1,994 @@
+<h3 style="margin:0px">Class: org.apache.wss4j.integration.test.kerberos.KerberosTest (16 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(11)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-5 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKerberosSignatureKIInbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+    WSSecHeader secHeader=new WSSecHeader(doc);
+    secHeader.insertSecurityHeader();
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+;
+    bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+    bst.setID("Id-" + bst.hashCode());
+    WSSecSignature sign=new WSSecSignature();
+    sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+    sign.setKeyIdentifierType(WSConstants.CUSTOM_KEY_IDENTIFIER);
+    sign.setCustomTokenValueType(WSConstants.WSS_KRB_KI_VALUE_TYPE);
+    SecretKey secretKey=bst.getSecretKey();
+    byte[] keyData=secretKey.getEncoded();
+    sign.setSecretKey(keyData);
+    byte[] digestBytes=KeyUtils.generateDigest(bst.getToken());
+    sign.setCustomTokenId(Base64.encode(digestBytes));
+    sign.build(doc,null,secHeader);
+    WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+    javax.xml.transform.Transformer transformer=TRANSFORMER_FACTORY.newTransformer();
+    transformer.transform(new DOMSource(doc),new StreamResult(baos));
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+ else         if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback cb=(KerberosContextAndServiceNameCallback)callbacks[0];
+          cb.setContextName("bob");
+          cb.setServiceName("bob@service.ws.apache.org");
+        }
+      }
+    }
+);
+    final List<KerberosTokenSecurityEvent> kerberosTokenSecurityEvents=new ArrayList<KerberosTokenSecurityEvent>();
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    SecurityEventListener securityEventListener=new SecurityEventListener(){
+      @Override public void registerSecurityEvent(      SecurityEvent securityEvent) throws XMLSecurityException {
+        if (securityEvent instanceof KerberosTokenSecurityEvent) {
+          kerberosTokenSecurityEvents.add((KerberosTokenSecurityEvent)securityEvent);
+        }
+      }
+    }
+;
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())),null,securityEventListener);
+    Document document=StAX2DOM.readDoc(dbf.newDocumentBuilder(),xmlStreamReader);
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_dsig_Signature.getNamespaceURI(),WSSConstants.TAG_dsig_Signature.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),1);
+    Assert.assertEquals(nodeList.item(0).getParentNode().getLocalName(),WSSConstants.TAG_WSSE_SECURITY.getLocalPart());
+    Assert.assertEquals(kerberosTokenSecurityEvents.size(),1);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and process it.
+ */
+@Test public void testKerberosCreationAndProcessing() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+      if (passwordCallback.getPrompt().contains("alice")) {
+        passwordCallback.setPassword("alice".toCharArray());
+      }
+ else       if (passwordCallback.getPrompt().contains("bob")) {
+        passwordCallback.setPassword("bob".toCharArray());
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(doc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(doc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKerberosEncryptionKIInbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+    WSSecHeader secHeader=new WSSecHeader(doc);
+    secHeader.insertSecurityHeader();
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+;
+    bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+    bst.setID("Id-" + bst.hashCode());
+    WSSecEncrypt builder=new WSSecEncrypt();
+    builder.setSymmetricEncAlgorithm(WSConstants.AES_128);
+    SecretKey secretKey=bst.getSecretKey();
+    builder.setSymmetricKey(secretKey);
+    builder.setEncryptSymmKey(false);
+    builder.setCustomReferenceValue(WSConstants.WSS_KRB_KI_VALUE_TYPE);
+    byte[] digestBytes=KeyUtils.generateDigest(bst.getToken());
+    builder.setEncKeyId(Base64.encode(digestBytes));
+    builder.build(doc,null,secHeader);
+    WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+    javax.xml.transform.Transformer transformer=TRANSFORMER_FACTORY.newTransformer();
+    transformer.transform(new DOMSource(doc),new StreamResult(baos));
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+ else         if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback cb=(KerberosContextAndServiceNameCallback)callbacks[0];
+          cb.setContextName("bob");
+          cb.setServiceName("bob@service.ws.apache.org");
+        }
+      }
+    }
+);
+    final List<KerberosTokenSecurityEvent> kerberosTokenSecurityEvents=new ArrayList<KerberosTokenSecurityEvent>();
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    SecurityEventListener securityEventListener=new SecurityEventListener(){
+      @Override public void registerSecurityEvent(      SecurityEvent securityEvent) throws XMLSecurityException {
+        if (securityEvent instanceof KerberosTokenSecurityEvent) {
+          kerberosTokenSecurityEvents.add((KerberosTokenSecurityEvent)securityEvent);
+        }
+      }
+    }
+;
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())),null,securityEventListener);
+    Document document=StAX2DOM.readDoc(dbf.newDocumentBuilder(),xmlStreamReader);
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_WSSE_BINARY_SECURITY_TOKEN.getNamespaceURI(),WSSConstants.TAG_WSSE_BINARY_SECURITY_TOKEN.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),1);
+    Assert.assertEquals(nodeList.item(0).getParentNode().getLocalName(),WSSConstants.TAG_WSSE_SECURITY.getLocalPart());
+    nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_xenc_EncryptedData.getNamespaceURI(),WSSConstants.TAG_xenc_EncryptedData.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),0);
+    Assert.assertEquals(kerberosTokenSecurityEvents.size(),1);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testKerberosEncryptionOutbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document document;
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.ENCRYPT_WITH_KERBEROS_TOKEN);
+    securityProperties.setActions(actions);
+    securityProperties.setEncryptionSymAlgorithm(WSSConstants.NS_XENC_AES128);
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback kerberosContextAndServiceNameCallback=(KerberosContextAndServiceNameCallback)callbacks[0];
+          kerberosContextAndServiceNameCallback.setContextName("alice");
+          kerberosContextAndServiceNameCallback.setServiceName("bob@service.ws.apache.org");
+        }
+ else         if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+);
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    document=dbf.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_xenc_ReferenceList.getNamespaceURI(),WSSConstants.TAG_xenc_ReferenceList.getLocalPart());
+    Assert.assertEquals(1,nodeList.getLength());
+  }
+{
+    WSSConfig wssConfig=WSSConfig.getNewInstance();
+    KerberosTokenValidator validator=new KerberosTokenValidator();
+    validator.setContextName("bob");
+    validator.setServiceName("bob@service.ws.apache.org");
+    wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+    WSSecurityEngine secEngine=new WSSecurityEngine();
+    secEngine.setWssConfig(wssConfig);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+      }
+    }
+;
+    WSHandlerResult results=secEngine.processSecurityHeader(document,null,callbackHandler,null);
+    WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+    BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+    Assert.assertTrue(token != null);
+    Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+    Assert.assertTrue(principal instanceof KerberosPrincipal);
+    Assert.assertTrue(principal.getName().contains("alice"));
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-5 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Get and validate a SPNEGO token.
+ */
+@Test public void testSpnego() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  SpnegoTokenContext spnegoToken=new SpnegoTokenContext();
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+      if (passwordCallback.getPrompt().contains("alice")) {
+        passwordCallback.setPassword("alice".toCharArray());
+      }
+ else       if (passwordCallback.getPrompt().contains("bob")) {
+        passwordCallback.setPassword("bob".toCharArray());
+      }
+    }
+  }
+;
+  spnegoToken.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  byte[] token=spnegoToken.getToken();
+  Assert.assertNotNull(token);
+  spnegoToken=new SpnegoTokenContext();
+  spnegoToken.validateServiceTicket("bob",callbackHandler,"bob@service.ws.apache.org",token);
+  Assert.assertTrue(spnegoToken.isEstablished());
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKerberosEncryptionInbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+    WSSecHeader secHeader=new WSSecHeader(doc);
+    secHeader.insertSecurityHeader();
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+;
+    bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+    bst.setID("Id-" + bst.hashCode());
+    WSSecEncrypt builder=new WSSecEncrypt();
+    builder.setSymmetricEncAlgorithm(WSConstants.AES_256);
+    SecretKey secretKey=bst.getSecretKey();
+    builder.setSymmetricKey(secretKey);
+    builder.setEncryptSymmKey(false);
+    builder.setCustomReferenceValue(WSConstants.WSS_GSS_KRB_V5_AP_REQ);
+    builder.setEncKeyId(bst.getID());
+    builder.build(doc,null,secHeader);
+    WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+    javax.xml.transform.Transformer transformer=TRANSFORMER_FACTORY.newTransformer();
+    transformer.transform(new DOMSource(doc),new StreamResult(baos));
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadDecryptionKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+ else         if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback cb=(KerberosContextAndServiceNameCallback)callbacks[0];
+          cb.setContextName("bob");
+          cb.setServiceName("bob@service.ws.apache.org");
+        }
+      }
+    }
+);
+    final List<KerberosTokenSecurityEvent> kerberosTokenSecurityEvents=new ArrayList<KerberosTokenSecurityEvent>();
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    SecurityEventListener securityEventListener=new SecurityEventListener(){
+      @Override public void registerSecurityEvent(      SecurityEvent securityEvent) throws XMLSecurityException {
+        if (securityEvent instanceof KerberosTokenSecurityEvent) {
+          kerberosTokenSecurityEvents.add((KerberosTokenSecurityEvent)securityEvent);
+        }
+      }
+    }
+;
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())),null,securityEventListener);
+    Document document=StAX2DOM.readDoc(dbf.newDocumentBuilder(),xmlStreamReader);
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_WSSE_BINARY_SECURITY_TOKEN.getNamespaceURI(),WSSConstants.TAG_WSSE_BINARY_SECURITY_TOKEN.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),1);
+    Assert.assertEquals(nodeList.item(0).getParentNode().getLocalName(),WSSConstants.TAG_WSSE_SECURITY.getLocalPart());
+    nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_xenc_EncryptedData.getNamespaceURI(),WSSConstants.TAG_xenc_EncryptedData.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),0);
+    Assert.assertEquals(kerberosTokenSecurityEvents.size(),1);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and use the session key to sign the SOAP Body.
+ */
+@Test public void testKerberosSignature() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      if (callbacks[0] instanceof PasswordCallback) {
+        PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+        if (passwordCallback.getPrompt().contains("alice")) {
+          passwordCallback.setPassword("alice".toCharArray());
+        }
+ else         if (passwordCallback.getPrompt().contains("bob")) {
+          passwordCallback.setPassword("bob".toCharArray());
+        }
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  bst.setID("Id-" + bst.hashCode());
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  WSSecSignature sign=new WSSecSignature();
+  sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+  sign.setKeyIdentifierType(WSConstants.CUSTOM_SYMM_SIGNING);
+  sign.setCustomTokenId(bst.getID());
+  sign.setCustomTokenValueType(WSConstants.WSS_GSS_KRB_V5_AP_REQ);
+  SecretKey secretKey=bst.getSecretKey();
+  sign.setSecretKey(secretKey.getEncoded());
+  Document signedDoc=sign.build(doc,null,secHeader);
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(signedDoc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(doc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testKerberosSignatureInbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+{
+    Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+    WSSecHeader secHeader=new WSSecHeader(doc);
+    secHeader.insertSecurityHeader();
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+;
+    bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+    bst.setID("Id-" + bst.hashCode());
+    WSSecSignature sign=new WSSecSignature();
+    sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+    sign.setKeyIdentifierType(WSConstants.CUSTOM_SYMM_SIGNING);
+    sign.setCustomTokenId(bst.getID());
+    sign.setCustomTokenValueType(WSConstants.WSS_GSS_KRB_V5_AP_REQ);
+    SecretKey secretKey=bst.getSecretKey();
+    sign.setSecretKey(secretKey.getEncoded());
+    sign.build(doc,null,secHeader);
+    WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+    javax.xml.transform.Transformer transformer=TRANSFORMER_FACTORY.newTransformer();
+    transformer.transform(new DOMSource(doc),new StreamResult(baos));
+  }
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    securityProperties.loadSignatureVerificationKeystore(this.getClass().getClassLoader().getResource("receiver.jks"),"default".toCharArray());
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+ else         if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback cb=(KerberosContextAndServiceNameCallback)callbacks[0];
+          cb.setContextName("bob");
+          cb.setServiceName("bob@service.ws.apache.org");
+        }
+      }
+    }
+);
+    final List<KerberosTokenSecurityEvent> kerberosTokenSecurityEvents=new ArrayList<KerberosTokenSecurityEvent>();
+    InboundWSSec wsSecIn=WSSec.getInboundWSSec(securityProperties);
+    SecurityEventListener securityEventListener=new SecurityEventListener(){
+      @Override public void registerSecurityEvent(      SecurityEvent securityEvent) throws XMLSecurityException {
+        if (securityEvent instanceof KerberosTokenSecurityEvent) {
+          kerberosTokenSecurityEvents.add((KerberosTokenSecurityEvent)securityEvent);
+        }
+      }
+    }
+;
+    XMLStreamReader xmlStreamReader=wsSecIn.processInMessage(xmlInputFactory.createXMLStreamReader(new ByteArrayInputStream(baos.toByteArray())),null,securityEventListener);
+    Document document=StAX2DOM.readDoc(dbf.newDocumentBuilder(),xmlStreamReader);
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_dsig_Signature.getNamespaceURI(),WSSConstants.TAG_dsig_Signature.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),1);
+    Assert.assertEquals(nodeList.item(0).getParentNode().getLocalName(),WSSConstants.TAG_WSSE_SECURITY.getLocalPart());
+    Assert.assertEquals(kerberosTokenSecurityEvents.size(),1);
+    final KerberosTokenSecurityEvent kerberosTokenSecurityEvent=kerberosTokenSecurityEvents.get(0);
+    Assert.assertNotNull(kerberosTokenSecurityEvent.getSecurityToken().getSubject());
+    Assert.assertTrue(kerberosTokenSecurityEvent.getSecurityToken().getPrincipal() instanceof KerberosPrincipal);
+    Assert.assertEquals(kerberosTokenSecurityEvent.getSecurityToken().getPrincipal().getName(),"alice@service.ws.apache.org");
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testKerberosSignatureOutbound() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document document;
+{
+    WSSSecurityProperties securityProperties=new WSSSecurityProperties();
+    List<WSSConstants.Action> actions=new ArrayList<WSSConstants.Action>();
+    actions.add(WSSConstants.SIGNATURE_WITH_KERBEROS_TOKEN);
+    securityProperties.setActions(actions);
+    securityProperties.setCallbackHandler(new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof KerberosContextAndServiceNameCallback) {
+          KerberosContextAndServiceNameCallback kerberosContextAndServiceNameCallback=(KerberosContextAndServiceNameCallback)callbacks[0];
+          kerberosContextAndServiceNameCallback.setContextName("alice");
+          kerberosContextAndServiceNameCallback.setServiceName("bob@service.ws.apache.org");
+        }
+ else         if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("alice")) {
+            passwordCallback.setPassword("alice".toCharArray());
+          }
+        }
+      }
+    }
+);
+    ByteArrayOutputStream baos=new ByteArrayOutputStream();
+    OutboundWSSec wsSecOut=WSSec.getOutboundWSSec(securityProperties);
+    XMLStreamWriter xmlStreamWriter=wsSecOut.processOutMessage(baos,StandardCharsets.UTF_8.name(),new ArrayList<SecurityEvent>());
+    XMLStreamReader xmlStreamReader=xmlInputFactory.createXMLStreamReader(this.getClass().getClassLoader().getResourceAsStream("testdata/plain-soap-1.1.xml"));
+    XmlReaderToWriter.writeAll(xmlStreamReader,xmlStreamWriter);
+    xmlStreamWriter.close();
+    document=dbf.newDocumentBuilder().parse(new ByteArrayInputStream(baos.toByteArray()));
+    NodeList nodeList=document.getElementsByTagNameNS(WSSConstants.TAG_dsig_Signature.getNamespaceURI(),WSSConstants.TAG_dsig_Signature.getLocalPart());
+    Assert.assertEquals(nodeList.getLength(),1);
+  }
+{
+    WSSConfig wssConfig=WSSConfig.getNewInstance();
+    KerberosTokenValidator validator=new KerberosTokenValidator();
+    validator.setContextName("bob");
+    validator.setServiceName("bob@service.ws.apache.org");
+    wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+    WSSecurityEngine secEngine=new WSSecurityEngine();
+    secEngine.setWssConfig(wssConfig);
+    CallbackHandler callbackHandler=new CallbackHandler(){
+      @Override public void handle(      Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+        if (callbacks[0] instanceof PasswordCallback) {
+          PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+          if (passwordCallback.getPrompt().contains("bob")) {
+            passwordCallback.setPassword("bob".toCharArray());
+          }
+        }
+      }
+    }
+;
+    WSHandlerResult results=secEngine.processSecurityHeader(document,null,callbackHandler,null);
+    WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+    BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+    Assert.assertTrue(token != null);
+    Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+    Assert.assertTrue(principal instanceof KerberosPrincipal);
+    Assert.assertTrue(principal.getName().contains("alice"));
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Various unit tests for a kerberos client
+ */
+@Test public void testKerberosClient() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+      if (passwordCallback.getPrompt().contains("alice")) {
+        passwordCallback.setPassword("alice".toCharArray());
+      }
+ else       if (passwordCallback.getPrompt().contains("bob")) {
+        passwordCallback.setPassword("bob".toCharArray());
+      }
+    }
+  }
+;
+  try {
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    bst.retrieveServiceTicket("alice2",callbackHandler,"bob@service");
+    Assert.fail("Failure expected on an unknown user");
+  }
+ catch (  WSSecurityException ex) {
+    Assert.assertTrue(ex.getMessage().startsWith("An error occurred in trying to obtain a TGT:"));
+  }
+  try {
+    KerberosSecurity bst=new KerberosSecurity(doc);
+    bst.retrieveServiceTicket("alice",callbackHandler,"bob2@service");
+    Assert.fail("Failure expected on an unknown user");
+  }
+ catch (  WSSecurityException ex) {
+    Assert.assertEquals(ex.getMessage(),"An error occurred in trying to obtain a service ticket");
+  }
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDown() throws Exception {
+  SecurityTestUtil.cleanup();
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and use the session key to encrypt the SOAP Body.
+ */
+@Test public void testKerberosEncryption() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      if (callbacks[0] instanceof PasswordCallback) {
+        PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+        if (passwordCallback.getPrompt().contains("alice")) {
+          passwordCallback.setPassword("alice".toCharArray());
+        }
+ else         if (passwordCallback.getPrompt().contains("bob")) {
+          passwordCallback.setPassword("bob".toCharArray());
+        }
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  bst.setID("Id-" + bst.hashCode());
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  WSSecEncrypt builder=new WSSecEncrypt();
+  builder.setSymmetricEncAlgorithm(WSConstants.AES_128);
+  SecretKey secretKey=bst.getSecretKey();
+  builder.setSymmetricKey(secretKey);
+  builder.setEncryptSymmKey(false);
+  builder.setCustomReferenceValue(WSConstants.WSS_GSS_KRB_V5_AP_REQ);
+  builder.setEncKeyId(bst.getID());
+  Document encryptedDoc=builder.build(doc,null,secHeader);
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(encryptedDoc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(encryptedDoc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void updatePort() throws Exception {
+  if (!portUpdated) {
+    String basedir=System.getProperty("basedir");
+    if (basedir == null) {
+      basedir=new File(".").getCanonicalPath();
+    }
+    Path path=FileSystems.getDefault().getPath(basedir,"/src/test/resources/kerberos/krb5.conf");
+    String content=new String(Files.readAllBytes(path),StandardCharsets.UTF_8);
+    content=content.replaceAll("port","" + super.getKdcServer().getTransports()[0].getPort());
+    Path path2=FileSystems.getDefault().getPath(basedir,"/target/test-classes/kerberos/krb5.conf");
+    Files.write(path2,content.getBytes());
+    System.setProperty("java.security.krb5.conf",path2.toString());
+    portUpdated=true;
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and use the session key to encrypt the SOAP Body.
+ */
+@Test public void testKerberosEncryptionBSTFirst() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      if (callbacks[0] instanceof PasswordCallback) {
+        PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+        if (passwordCallback.getPrompt().contains("alice")) {
+          passwordCallback.setPassword("alice".toCharArray());
+        }
+ else         if (passwordCallback.getPrompt().contains("bob")) {
+          passwordCallback.setPassword("bob".toCharArray());
+        }
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  bst.setID("Id-" + bst.hashCode());
+  WSSecEncrypt builder=new WSSecEncrypt();
+  builder.setSymmetricEncAlgorithm(WSConstants.AES_128);
+  SecretKey secretKey=bst.getSecretKey();
+  builder.setSymmetricKey(secretKey);
+  builder.setEncryptSymmKey(false);
+  builder.setCustomReferenceValue(WSConstants.WSS_GSS_KRB_V5_AP_REQ);
+  builder.setEncKeyId(bst.getID());
+  Document encryptedDoc=builder.build(doc,null,secHeader);
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(encryptedDoc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(encryptedDoc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and use the session key to encrypt the SOAP Body.
+ */
+@Test public void testKerberosEncryptionKI() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      if (callbacks[0] instanceof PasswordCallback) {
+        PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+        if (passwordCallback.getPrompt().contains("alice")) {
+          passwordCallback.setPassword("alice".toCharArray());
+        }
+ else         if (passwordCallback.getPrompt().contains("bob")) {
+          passwordCallback.setPassword("bob".toCharArray());
+        }
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  bst.setID("Id-" + bst.hashCode());
+  WSSecEncrypt builder=new WSSecEncrypt();
+  builder.setSymmetricEncAlgorithm(WSConstants.AES_128);
+  SecretKey secretKey=bst.getSecretKey();
+  builder.setSymmetricKey(secretKey);
+  builder.setEncryptSymmKey(false);
+  builder.setCustomReferenceValue(WSConstants.WSS_KRB_KI_VALUE_TYPE);
+  byte[] digestBytes=KeyUtils.generateDigest(bst.getToken());
+  builder.setEncKeyId(Base64.encode(digestBytes));
+  Document encryptedDoc=builder.build(doc,null,secHeader);
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(encryptedDoc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(encryptedDoc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<pre class="type-3 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test using the KerberosSecurity class to retrieve a service ticket from a KDC, wrap it
+ * in a BinarySecurityToken, and use the session key to sign the SOAP Body.
+ */
+@Test public void testKerberosSignatureKI() throws Exception {
+  if (!runTests) {
+    System.out.println("Skipping test because kerberos server could not be started");
+    return;
+  }
+  Document doc=SOAPUtil.toSOAPPart(SOAPUtil.SAMPLE_SOAP_MSG);
+  WSSecHeader secHeader=new WSSecHeader(doc);
+  secHeader.insertSecurityHeader();
+  KerberosSecurity bst=new KerberosSecurity(doc);
+  CallbackHandler callbackHandler=new CallbackHandler(){
+    @Override public void handle(    Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+      if (callbacks[0] instanceof PasswordCallback) {
+        PasswordCallback passwordCallback=(PasswordCallback)callbacks[0];
+        if (passwordCallback.getPrompt().contains("alice")) {
+          passwordCallback.setPassword("alice".toCharArray());
+        }
+ else         if (passwordCallback.getPrompt().contains("bob")) {
+          passwordCallback.setPassword("bob".toCharArray());
+        }
+      }
+    }
+  }
+;
+  bst.retrieveServiceTicket("alice",callbackHandler,"bob@service.ws.apache.org");
+  bst.setID("Id-" + bst.hashCode());
+  WSSecSignature sign=new WSSecSignature();
+  sign.setSignatureAlgorithm(SignatureMethod.HMAC_SHA1);
+  sign.setKeyIdentifierType(WSConstants.CUSTOM_KEY_IDENTIFIER);
+  sign.setCustomTokenValueType(WSConstants.WSS_KRB_KI_VALUE_TYPE);
+  SecretKey secretKey=bst.getSecretKey();
+  byte[] keyData=secretKey.getEncoded();
+  sign.setSecretKey(keyData);
+  byte[] digestBytes=KeyUtils.generateDigest(bst.getToken());
+  sign.setCustomTokenId(Base64.encode(digestBytes));
+  Document signedDoc=sign.build(doc,null,secHeader);
+  WSSecurityUtil.prependChildElement(secHeader.getSecurityHeader(),bst.getElement());
+  if (LOG.isDebugEnabled()) {
+    String outputString=XMLUtils.prettyDocumentToString(signedDoc);
+    LOG.debug(outputString);
+  }
+  WSSConfig wssConfig=WSSConfig.getNewInstance();
+  KerberosTokenValidator validator=new KerberosTokenValidator();
+  validator.setContextName("bob");
+  validator.setServiceName("bob@service.ws.apache.org");
+  wssConfig.setValidator(WSConstants.BINARY_TOKEN,validator);
+  WSSecurityEngine secEngine=new WSSecurityEngine();
+  secEngine.setWssConfig(wssConfig);
+  WSHandlerResult results=secEngine.processSecurityHeader(doc,null,callbackHandler,null);
+  WSSecurityEngineResult actionResult=results.getActionResults().get(WSConstants.BST).get(0);
+  BinarySecurity token=(BinarySecurity)actionResult.get(WSSecurityEngineResult.TAG_BINARY_SECURITY_TOKEN);
+  Assert.assertTrue(token != null);
+  Principal principal=(Principal)actionResult.get(WSSecurityEngineResult.TAG_PRINCIPAL);
+  Assert.assertTrue(principal instanceof KerberosPrincipal);
+  Assert.assertTrue(principal.getName().contains("alice"));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,118 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.mob.mapreduce.TestMobSweepReducer (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRun() throws Exception {
+  TableName tn=TableName.valueOf(tableName);
+  byte[] mobValueBytes=new byte[100];
+  Path mobFamilyPath=MobUtils.getMobFamilyPath(TEST_UTIL.getConfiguration(),tn,family);
+  Put put=new Put(Bytes.toBytes(row));
+  put.addColumn(Bytes.toBytes(family),Bytes.toBytes(qf),1,mobValueBytes);
+  Put put2=new Put(Bytes.toBytes(row + "ignore"));
+  put2.addColumn(Bytes.toBytes(family),Bytes.toBytes(qf),1,mobValueBytes);
+  table.mutate(put);
+  table.mutate(put2);
+  table.flush();
+  admin.flush(tn);
+  FileStatus[] fileStatuses=TEST_UTIL.getTestFileSystem().listStatus(mobFamilyPath);
+  assertEquals(1,fileStatuses.length);
+  String mobFile1=fileStatuses[0].getPath().getName();
+  Configuration configuration=new Configuration(TEST_UTIL.getConfiguration());
+  configuration.setFloat(MobConstants.MOB_SWEEP_TOOL_COMPACTION_RATIO,0.6f);
+  configuration.setStrings(TableInputFormat.INPUT_TABLE,tableName);
+  configuration.setStrings(TableInputFormat.SCAN_COLUMN_FAMILY,family);
+  configuration.setStrings(SweepJob.WORKING_VISITED_DIR_KEY,"jobWorkingNamesDir");
+  configuration.setStrings(SweepJob.WORKING_FILES_DIR_KEY,"compactionFileDir");
+  configuration.setStrings(CommonConfigurationKeys.IO_SERIALIZATIONS_KEY,JavaSerialization.class.getName());
+  configuration.set(SweepJob.WORKING_VISITED_DIR_KEY,"compactionVisitedDir");
+  configuration.setLong(MobConstants.MOB_SWEEP_TOOL_COMPACTION_START_DATE,System.currentTimeMillis() + 24 * 3600 * 1000);
+  ZooKeeperWatcher zkw=new ZooKeeperWatcher(configuration,"1",new DummyMobAbortable());
+  TableName lockName=MobUtils.getTableLockName(tn);
+  String znode=ZKUtil.joinZNode(zkw.tableLockZNode,lockName.getNameAsString());
+  configuration.set(SweepJob.SWEEP_JOB_ID,"1");
+  configuration.set(SweepJob.SWEEP_JOB_TABLE_NODE,znode);
+  ServerName serverName=SweepJob.getCurrentServerName(configuration);
+  configuration.set(SweepJob.SWEEP_JOB_SERVERNAME,serverName.toString());
+  TableLockManager tableLockManager=TableLockManager.createTableLockManager(configuration,zkw,serverName);
+  TableLock lock=tableLockManager.writeLock(lockName,"Run sweep tool");
+  lock.acquire();
+  try {
+    Counter counter=new GenericCounter();
+    Reducer<Text,KeyValue,Writable,Writable>.Context ctx=mock(Reducer.Context.class);
+    when(ctx.getConfiguration()).thenReturn(configuration);
+    when(ctx.getCounter(Matchers.any(SweepCounter.class))).thenReturn(counter);
+    when(ctx.nextKey()).thenReturn(true).thenReturn(false);
+    when(ctx.getCurrentKey()).thenReturn(new Text(mobFile1));
+    byte[] refBytes=Bytes.toBytes(mobFile1);
+    long valueLength=refBytes.length;
+    byte[] newValue=Bytes.add(Bytes.toBytes(valueLength),refBytes);
+    KeyValue kv2=new KeyValue(Bytes.toBytes(row),Bytes.toBytes(family),Bytes.toBytes(qf),1,KeyValue.Type.Put,newValue);
+    List<KeyValue> list=new ArrayList<KeyValue>();
+    list.add(kv2);
+    when(ctx.getValues()).thenReturn(list);
+    SweepReducer reducer=new SweepReducer();
+    reducer.run(ctx);
+  }
+  finally {
+    lock.release();
+  }
+  FileStatus[] filsStatuses2=TEST_UTIL.getTestFileSystem().listStatus(mobFamilyPath);
+  String mobFile2=filsStatuses2[0].getPath().getName();
+  assertEquals(1,filsStatuses2.length);
+  assertEquals(false,mobFile2.equalsIgnoreCase(mobFile1));
+  String workingPath=configuration.get(SweepJob.WORKING_VISITED_DIR_KEY);
+  FileStatus[] statuses=TEST_UTIL.getTestFileSystem().listStatus(new Path(workingPath));
+  Set<String> files=new TreeSet<String>();
+  for (  FileStatus st : statuses) {
+    files.addAll(getKeyFromSequenceFile(TEST_UTIL.getTestFileSystem(),st.getPath(),configuration));
+  }
+  assertEquals(1,files.size());
+  assertEquals(true,files.contains(mobFile1));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  admin.disableTable(TableName.valueOf(tableName));
+  admin.deleteTable(TableName.valueOf(tableName));
+  admin.close();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@SuppressWarnings("deprecation") @Before public void setUp() throws Exception {
+  HTableDescriptor desc=new HTableDescriptor(tableName);
+  HColumnDescriptor hcd=new HColumnDescriptor(family);
+  hcd.setMobEnabled(true);
+  hcd.setMobThreshold(3L);
+  hcd.setMaxVersions(4);
+  desc.addFamily(hcd);
+  admin=TEST_UTIL.getHBaseAdmin();
+  admin.createTable(desc);
+  table=ConnectionFactory.createConnection(TEST_UTIL.getConfiguration()).getBufferedMutator(TableName.valueOf(tableName));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

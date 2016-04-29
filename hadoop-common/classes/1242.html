@@ -1,0 +1,400 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.nodemanager.containermanager.logaggregation.TestLogAggregationService (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testLocalFileDeletionAfterUpload() throws Exception {
+  this.delSrvc=new DeletionService(createContainerExecutor());
+  delSrvc=spy(delSrvc);
+  this.delSrvc.init(conf);
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=spy(new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler));
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId application1=BuilderUtils.newApplicationId(1234,1);
+  File app1LogDir=new File(localLogDir,ConverterUtils.toString(application1));
+  app1LogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application1,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  ApplicationAttemptId appAttemptId=BuilderUtils.newApplicationAttemptId(application1,1);
+  ContainerId container11=BuilderUtils.newContainerId(appAttemptId,1);
+  writeContainerLogs(app1LogDir,container11);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container11,0));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application1));
+  logAggregationService.stop();
+  assertEquals(0,logAggregationService.getNumAggregators());
+  verify(logAggregationService).closeFileSystems(any(UserGroupInformation.class));
+  verify(delSrvc).delete(eq(user),eq((Path)null),eq(new Path(app1LogDir.getAbsolutePath())));
+  delSrvc.stop();
+  String containerIdStr=ConverterUtils.toString(container11);
+  File containerLogDir=new File(app1LogDir,containerIdStr);
+  for (  String fileType : new String[]{"stdout","stderr","syslog"}) {
+    File f=new File(containerLogDir,fileType);
+    Assert.assertFalse("check " + f,f.exists());
+  }
+  Assert.assertFalse(app1LogDir.exists());
+  Path logFilePath=logAggregationService.getRemoteNodeLogFileForApp(application1,this.user);
+  Assert.assertTrue("Log file [" + logFilePath + "] not found",new File(logFilePath.toUri().getPath()).exists());
+  dispatcher.await();
+  ApplicationEvent expectedEvents[]=new ApplicationEvent[]{new ApplicationEvent(appAttemptId.getApplicationId(),ApplicationEventType.APPLICATION_LOG_HANDLING_INITED),new ApplicationEvent(appAttemptId.getApplicationId(),ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED)};
+  checkEvents(appEventHandler,expectedEvents,true,"getType","getApplicationID");
+  dispatcher.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testVerifyAndCreateRemoteDirNonExistence() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  File aNewFile=new File(String.valueOf("tmp" + System.currentTimeMillis()));
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,aNewFile.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  LogAggregationService logAggregationService=spy(new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler));
+  logAggregationService.init(this.conf);
+  boolean existsBefore=aNewFile.exists();
+  assertTrue("The new file already exists!",!existsBefore);
+  logAggregationService.verifyAndCreateRemoteLogDir(this.conf);
+  boolean existsAfter=aNewFile.exists();
+  assertTrue("The new aggregate file is not successfully created",existsAfter);
+  aNewFile.delete();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testLogAggregationInitAppFailsWithoutKillingNM() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=spy(new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler));
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId appId=BuilderUtils.newApplicationId(System.currentTimeMillis(),(int)Math.random());
+  doThrow(new YarnRuntimeException("KABOOM!")).when(logAggregationService).initAppAggregator(eq(appId),eq(user),any(Credentials.class),any(ContainerLogsRetentionPolicy.class),anyMap());
+  logAggregationService.handle(new LogHandlerAppStartedEvent(appId,this.user,null,ContainerLogsRetentionPolicy.AM_AND_FAILED_CONTAINERS_ONLY,this.acls));
+  dispatcher.await();
+  ApplicationEvent expectedEvents[]=new ApplicationEvent[]{new ApplicationEvent(appId,ApplicationEventType.APPLICATION_LOG_HANDLING_FAILED)};
+  checkEvents(appEventHandler,expectedEvents,false,"getType","getApplicationID","getDiagnostic");
+  verify(logAggregationService,never()).closeFileSystems(any(UserGroupInformation.class));
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(BuilderUtils.newContainerId(4,1,1,1),0));
+  dispatcher.await();
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(BuilderUtils.newApplicationId(1,5)));
+  dispatcher.await();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testMultipleAppsLogAggregation() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler);
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId application1=BuilderUtils.newApplicationId(1234,1);
+  File app1LogDir=new File(localLogDir,ConverterUtils.toString(application1));
+  app1LogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application1,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  ApplicationAttemptId appAttemptId1=BuilderUtils.newApplicationAttemptId(application1,1);
+  ContainerId container11=BuilderUtils.newContainerId(appAttemptId1,1);
+  writeContainerLogs(app1LogDir,container11);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container11,0));
+  ApplicationId application2=BuilderUtils.newApplicationId(1234,2);
+  ApplicationAttemptId appAttemptId2=BuilderUtils.newApplicationAttemptId(application2,1);
+  File app2LogDir=new File(localLogDir,ConverterUtils.toString(application2));
+  app2LogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application2,this.user,null,ContainerLogsRetentionPolicy.APPLICATION_MASTER_ONLY,this.acls));
+  ContainerId container21=BuilderUtils.newContainerId(appAttemptId2,1);
+  writeContainerLogs(app2LogDir,container21);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container21,0));
+  ContainerId container12=BuilderUtils.newContainerId(appAttemptId1,2);
+  writeContainerLogs(app1LogDir,container12);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container12,0));
+  ApplicationId application3=BuilderUtils.newApplicationId(1234,3);
+  ApplicationAttemptId appAttemptId3=BuilderUtils.newApplicationAttemptId(application3,1);
+  File app3LogDir=new File(localLogDir,ConverterUtils.toString(application3));
+  app3LogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application3,this.user,null,ContainerLogsRetentionPolicy.AM_AND_FAILED_CONTAINERS_ONLY,this.acls));
+  dispatcher.await();
+  ApplicationEvent expectedInitEvents[]=new ApplicationEvent[]{new ApplicationEvent(application1,ApplicationEventType.APPLICATION_LOG_HANDLING_INITED),new ApplicationEvent(application2,ApplicationEventType.APPLICATION_LOG_HANDLING_INITED),new ApplicationEvent(application3,ApplicationEventType.APPLICATION_LOG_HANDLING_INITED)};
+  checkEvents(appEventHandler,expectedInitEvents,false,"getType","getApplicationID");
+  reset(appEventHandler);
+  ContainerId container31=BuilderUtils.newContainerId(appAttemptId3,1);
+  writeContainerLogs(app3LogDir,container31);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container31,0));
+  ContainerId container32=BuilderUtils.newContainerId(appAttemptId3,2);
+  writeContainerLogs(app3LogDir,container32);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container32,1));
+  ContainerId container22=BuilderUtils.newContainerId(appAttemptId2,2);
+  writeContainerLogs(app2LogDir,container22);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container22,0));
+  ContainerId container33=BuilderUtils.newContainerId(appAttemptId3,3);
+  writeContainerLogs(app3LogDir,container33);
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(container33,0));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application2));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application3));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application1));
+  logAggregationService.stop();
+  assertEquals(0,logAggregationService.getNumAggregators());
+  verifyContainerLogs(logAggregationService,application1,new ContainerId[]{container11,container12});
+  verifyContainerLogs(logAggregationService,application2,new ContainerId[]{container21});
+  verifyContainerLogs(logAggregationService,application3,new ContainerId[]{container31,container32});
+  dispatcher.await();
+  ApplicationEvent[] expectedFinishedEvents=new ApplicationEvent[]{new ApplicationEvent(application1,ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED),new ApplicationEvent(application2,ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED),new ApplicationEvent(application3,ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED)};
+  checkEvents(appEventHandler,expectedFinishedEvents,false,"getType","getApplicationID");
+  dispatcher.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLogAggregationForRealContainerLaunch() throws IOException, InterruptedException, YarnException {
+  this.containerManager.start();
+  File scriptFile=new File(tmpDir,"scriptFile.sh");
+  PrintWriter fileWriter=new PrintWriter(scriptFile);
+  fileWriter.write("\necho Hello World! Stdout! > " + new File(localLogDir,"stdout"));
+  fileWriter.write("\necho Hello World! Stderr! > " + new File(localLogDir,"stderr"));
+  fileWriter.write("\necho Hello World! Syslog! > " + new File(localLogDir,"syslog"));
+  fileWriter.close();
+  ContainerLaunchContext containerLaunchContext=recordFactory.newRecordInstance(ContainerLaunchContext.class);
+  ApplicationId appId=ApplicationId.newInstance(0,0);
+  ApplicationAttemptId appAttemptId=BuilderUtils.newApplicationAttemptId(appId,1);
+  ContainerId cId=BuilderUtils.newContainerId(appAttemptId,0);
+  URL resource_alpha=ConverterUtils.getYarnUrlFromPath(localFS.makeQualified(new Path(scriptFile.getAbsolutePath())));
+  LocalResource rsrc_alpha=recordFactory.newRecordInstance(LocalResource.class);
+  rsrc_alpha.setResource(resource_alpha);
+  rsrc_alpha.setSize(-1);
+  rsrc_alpha.setVisibility(LocalResourceVisibility.APPLICATION);
+  rsrc_alpha.setType(LocalResourceType.FILE);
+  rsrc_alpha.setTimestamp(scriptFile.lastModified());
+  String destinationFile="dest_file";
+  Map<String,LocalResource> localResources=new HashMap<String,LocalResource>();
+  localResources.put(destinationFile,rsrc_alpha);
+  containerLaunchContext.setLocalResources(localResources);
+  List<String> commands=new ArrayList<String>();
+  commands.add("/bin/bash");
+  commands.add(scriptFile.getAbsolutePath());
+  containerLaunchContext.setCommands(commands);
+  StartContainerRequest scRequest=StartContainerRequest.newInstance(containerLaunchContext,TestContainerManager.createContainerToken(cId,DUMMY_RM_IDENTIFIER,context.getNodeId(),user,context.getContainerTokenSecretManager()));
+  List<StartContainerRequest> list=new ArrayList<StartContainerRequest>();
+  list.add(scRequest);
+  StartContainersRequest allRequests=StartContainersRequest.newInstance(list);
+  this.containerManager.startContainers(allRequests);
+  BaseContainerManagerTest.waitForContainerState(this.containerManager,cId,ContainerState.COMPLETE);
+  this.containerManager.handle(new CMgrCompletedAppsEvent(Arrays.asList(appId),CMgrCompletedAppsEvent.Reason.ON_SHUTDOWN));
+  this.containerManager.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testVerifyAndCreateRemoteDirsFailure() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=spy(new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler));
+  logAggregationService.init(this.conf);
+  YarnRuntimeException e=new YarnRuntimeException("KABOOM!");
+  doThrow(e).when(logAggregationService).verifyAndCreateRemoteLogDir(any(Configuration.class));
+  logAggregationService.start();
+  ApplicationId appId=BuilderUtils.newApplicationId(System.currentTimeMillis(),(int)Math.random());
+  logAggregationService.handle(new LogHandlerAppStartedEvent(appId,this.user,null,ContainerLogsRetentionPolicy.AM_AND_FAILED_CONTAINERS_ONLY,this.acls));
+  dispatcher.await();
+  ApplicationEvent[] expectedEvents=new ApplicationEvent[]{new ApplicationEvent(appId,ApplicationEventType.APPLICATION_LOG_HANDLING_FAILED)};
+  checkEvents(appEventHandler,expectedEvents,false,"getType","getApplicationID","getDiagnostic");
+  Mockito.reset(logAggregationService);
+  ApplicationId appId2=BuilderUtils.newApplicationId(System.currentTimeMillis(),(int)Math.random());
+  File appLogDir=new File(localLogDir,ConverterUtils.toString(appId2));
+  appLogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(appId2,this.user,null,ContainerLogsRetentionPolicy.AM_AND_FAILED_CONTAINERS_ONLY,this.acls));
+  dispatcher.await();
+  expectedEvents=new ApplicationEvent[]{new ApplicationEvent(appId,ApplicationEventType.APPLICATION_LOG_HANDLING_FAILED),new ApplicationEvent(appId2,ApplicationEventType.APPLICATION_LOG_HANDLING_INITED)};
+  checkEvents(appEventHandler,expectedEvents,false,"getType","getApplicationID","getDiagnostic");
+  logAggregationService.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAppLogDirCreation() throws Exception {
+  final String logSuffix="logs";
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,logSuffix);
+  InlineDispatcher dispatcher=new InlineDispatcher();
+  dispatcher.init(this.conf);
+  dispatcher.start();
+  FileSystem fs=FileSystem.get(this.conf);
+  final FileSystem spyFs=spy(FileSystem.get(this.conf));
+  LogAggregationService aggSvc=new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler){
+    @Override protected FileSystem getFileSystem(    Configuration conf){
+      return spyFs;
+    }
+  }
+;
+  aggSvc.init(this.conf);
+  aggSvc.start();
+  ApplicationId appId=BuilderUtils.newApplicationId(1,1);
+  Path userDir=fs.makeQualified(new Path(remoteRootLogDir.getAbsolutePath(),this.user));
+  Path suffixDir=new Path(userDir,logSuffix);
+  Path appDir=new Path(suffixDir,appId.toString());
+  aggSvc.handle(new LogHandlerAppStartedEvent(appId,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  verify(spyFs).mkdirs(eq(userDir),isA(FsPermission.class));
+  verify(spyFs).mkdirs(eq(suffixDir),isA(FsPermission.class));
+  verify(spyFs).mkdirs(eq(appDir),isA(FsPermission.class));
+  ApplicationId appId2=BuilderUtils.newApplicationId(1,2);
+  Path appDir2=new Path(suffixDir,appId2.toString());
+  aggSvc.handle(new LogHandlerAppStartedEvent(appId2,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  verify(spyFs).mkdirs(eq(appDir2),isA(FsPermission.class));
+  ApplicationId appId3=BuilderUtils.newApplicationId(1,3);
+  Path appDir3=new Path(suffixDir,appId3.toString());
+  new File(appDir3.toUri().getPath()).mkdir();
+  aggSvc.handle(new LogHandlerAppStartedEvent(appId3,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  verify(spyFs,never()).mkdirs(eq(appDir3),isA(FsPermission.class));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testLogAggregationCreateDirsFailsWithoutKillingNM() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=spy(new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler));
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId appId=BuilderUtils.newApplicationId(System.currentTimeMillis(),(int)Math.random());
+  Exception e=new RuntimeException("KABOOM!");
+  doThrow(e).when(logAggregationService).createAppDir(any(String.class),any(ApplicationId.class),any(UserGroupInformation.class));
+  logAggregationService.handle(new LogHandlerAppStartedEvent(appId,this.user,null,ContainerLogsRetentionPolicy.AM_AND_FAILED_CONTAINERS_ONLY,this.acls));
+  dispatcher.await();
+  ApplicationEvent expectedEvents[]=new ApplicationEvent[]{new ApplicationEvent(appId,ApplicationEventType.APPLICATION_LOG_HANDLING_FAILED)};
+  checkEvents(appEventHandler,expectedEvents,false,"getType","getApplicationID","getDiagnostic");
+  verify(logAggregationService).closeFileSystems(any(UserGroupInformation.class));
+  logAggregationService.handle(new LogHandlerContainerFinishedEvent(BuilderUtils.newContainerId(4,1,1,1),0));
+  dispatcher.await();
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(BuilderUtils.newApplicationId(1,5)));
+  dispatcher.await();
+  logAggregationService.stop();
+  assertEquals(0,logAggregationService.getNumAggregators());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testLogAggregatorCleanup() throws Exception {
+  DeletionService delSrvc=mock(DeletionService.class);
+  LocalDirsHandlerService mockedDirSvc=mock(LocalDirsHandlerService.class);
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=new LogAggregationService(dispatcher,this.context,delSrvc,mockedDirSvc);
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId application1=BuilderUtils.newApplicationId(1234,1);
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application1,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application1));
+  dispatcher.await();
+  int timeToWait=20 * 1000;
+  while (timeToWait > 0 && logAggregationService.getNumAggregators() > 0) {
+    Thread.sleep(100);
+    timeToWait-=100;
+  }
+  Assert.assertEquals("Log aggregator failed to cleanup!",0,logAggregationService.getNumAggregators());
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test @SuppressWarnings("unchecked") public void testNoContainerOnNode() throws Exception {
+  this.conf.set(YarnConfiguration.NM_LOG_DIRS,localLogDir.getAbsolutePath());
+  this.conf.set(YarnConfiguration.NM_REMOTE_APP_LOG_DIR,this.remoteRootLogDir.getAbsolutePath());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=new LogAggregationService(dispatcher,this.context,this.delSrvc,super.dirsHandler);
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId application1=BuilderUtils.newApplicationId(1234,1);
+  File app1LogDir=new File(localLogDir,ConverterUtils.toString(application1));
+  app1LogDir.mkdir();
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application1,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  logAggregationService.handle(new LogHandlerAppFinishedEvent(application1));
+  logAggregationService.stop();
+  assertEquals(0,logAggregationService.getNumAggregators());
+  Assert.assertFalse(new File(logAggregationService.getRemoteNodeLogFileForApp(application1,this.user).toUri().getPath()).exists());
+  dispatcher.await();
+  ApplicationEvent expectedEvents[]=new ApplicationEvent[]{new ApplicationEvent(application1,ApplicationEventType.APPLICATION_LOG_HANDLING_INITED),new ApplicationEvent(application1,ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED)};
+  checkEvents(appEventHandler,expectedEvents,true,"getType","getApplicationID");
+  dispatcher.stop();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=20000) @SuppressWarnings("unchecked") public void testStopAfterError() throws Exception {
+  DeletionService delSrvc=mock(DeletionService.class);
+  LocalDirsHandlerService mockedDirSvc=mock(LocalDirsHandlerService.class);
+  when(mockedDirSvc.getLogDirs()).thenThrow(new RuntimeException());
+  DrainDispatcher dispatcher=createDispatcher();
+  EventHandler<ApplicationEvent> appEventHandler=mock(EventHandler.class);
+  dispatcher.register(ApplicationEventType.class,appEventHandler);
+  LogAggregationService logAggregationService=new LogAggregationService(dispatcher,this.context,delSrvc,mockedDirSvc);
+  logAggregationService.init(this.conf);
+  logAggregationService.start();
+  ApplicationId application1=BuilderUtils.newApplicationId(1234,1);
+  logAggregationService.handle(new LogHandlerAppStartedEvent(application1,this.user,null,ContainerLogsRetentionPolicy.ALL_CONTAINERS,this.acls));
+  logAggregationService.stop();
+  assertEquals(0,logAggregationService.getNumAggregators());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

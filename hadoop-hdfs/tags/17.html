@@ -1,0 +1,426 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.hdfs.TestLeaseRecovery2 </h4><pre class="type-10 type-3 type-8 type-9 type-6 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test makes the client does not renew its lease and also
+ * set the hard lease expiration period to be short 1s. Thus triggering
+ * lease expiration to happen while the client is still alive.
+ * The test makes sure that the lease recovery completes and the client
+ * fails if it continues to write to the file.
+ * @throws Exception
+ */
+@Test public void testHardLeaseRecovery() throws Exception {
+  String filestr="/hardLeaseRecovery";
+  AppendTestUtil.LOG.info("filestr=" + filestr);
+  Path filepath=new Path(filestr);
+  FSDataOutputStream stm=dfs.create(filepath,true,BUF_SIZE,REPLICATION_NUM,BLOCK_SIZE);
+  assertTrue(dfs.dfs.exists(filestr));
+  int size=AppendTestUtil.nextInt(FILE_SIZE);
+  AppendTestUtil.LOG.info("size=" + size);
+  stm.write(buffer,0,size);
+  AppendTestUtil.LOG.info("hflush");
+  stm.hflush();
+  AppendTestUtil.LOG.info("leasechecker.interruptAndJoin()");
+  dfs.dfs.leaserenewer.interruptAndJoin();
+  cluster.setLeasePeriod(LONG_LEASE_PERIOD,SHORT_LEASE_PERIOD);
+  LocatedBlocks locatedBlocks;
+  do {
+    Thread.sleep(SHORT_LEASE_PERIOD);
+    locatedBlocks=DFSClient.callGetBlockLocations(dfs.dfs.namenode,filestr,0L,size);
+  }
+ while (locatedBlocks.isUnderConstruction());
+  assertEquals(size,locatedBlocks.getFileLength());
+  try {
+    stm.write('b');
+    stm.close();
+    fail("Writer thread should have been killed");
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
+  AppendTestUtil.LOG.info("File size is good. Now validating sizes from datanodes...");
+  AppendTestUtil.checkFullFile(dfs,filepath,size,buffer,filestr);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestDataNodeMultipleRegistrations </h4><pre class="type-9 type-13 type-6 type-4 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * start multiple NNs and single DN and verifies per BP registrations and
+ * handshakes.
+ * @throws IOException
+ */
+@Test public void test2NNRegistration() throws IOException {
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numNameNodes(2).nameNodePort(9928).build();
+  try {
+    cluster.waitActive();
+    NameNode nn1=cluster.getNameNode(0);
+    NameNode nn2=cluster.getNameNode(1);
+    assertNotNull("cannot create nn1",nn1);
+    assertNotNull("cannot create nn2",nn2);
+    String bpid1=nn1.getFSImage().getBlockPoolID();
+    String bpid2=nn2.getFSImage().getBlockPoolID();
+    String cid1=nn1.getFSImage().getClusterID();
+    String cid2=nn2.getFSImage().getClusterID();
+    int lv1=nn1.getFSImage().getLayoutVersion();
+    int lv2=nn2.getFSImage().getLayoutVersion();
+    int ns1=nn1.getFSImage().getNamespaceID();
+    int ns2=nn2.getFSImage().getNamespaceID();
+    assertNotSame("namespace ids should be different",ns1,ns2);
+    LOG.info("nn1: lv=" + lv1 + ";cid="+ cid1+ ";bpid="+ bpid1+ ";uri="+ nn1.getNameNodeAddress());
+    LOG.info("nn2: lv=" + lv2 + ";cid="+ cid2+ ";bpid="+ bpid2+ ";uri="+ nn2.getNameNodeAddress());
+    DataNode dn=cluster.getDataNodes().get(0);
+    Collection<VolumeInfo> volInfos=((FSDataset)dn.data).getVolumeInfo();
+    assertNotNull("No volumes in the fsdataset",volInfos);
+    int i=0;
+    for (    VolumeInfo vi : volInfos) {
+      LOG.info("vol " + i++ + ";dir="+ vi.directory+ ";fs= "+ vi.freeSpace);
+    }
+    assertEquals("number of volumes is wrong",2,volInfos.size());
+    for (    BPOfferService bpos : dn.getAllBpOs()) {
+      LOG.info("reg: bpid=" + "; name=" + bpos.bpRegistration.name + "; sid="+ bpos.bpRegistration.storageID+ "; nna="+ bpos.nnAddr);
+    }
+    BPOfferService bpos1=dn.getAllBpOs()[0];
+    BPOfferService bpos2=dn.getAllBpOs()[1];
+    if (bpos1.nnAddr.equals(nn2.getNameNodeAddress())) {
+      BPOfferService tmp=bpos1;
+      bpos1=bpos2;
+      bpos2=tmp;
+    }
+    assertEquals("wrong nn address",bpos1.nnAddr,nn1.getNameNodeAddress());
+    assertEquals("wrong nn address",bpos2.nnAddr,nn2.getNameNodeAddress());
+    assertEquals("wrong bpid",bpos1.getBlockPoolId(),bpid1);
+    assertEquals("wrong bpid",bpos2.getBlockPoolId(),bpid2);
+    assertEquals("wrong cid",dn.getClusterId(),cid1);
+    assertEquals("cid should be same",cid2,cid1);
+    assertEquals("namespace should be same",bpos1.bpNSInfo.namespaceID,ns1);
+    assertEquals("namespace should be same",bpos2.bpNSInfo.namespaceID,ns2);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-6 type-4 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * starts single nn and single dn and verifies registration and handshake
+ * @throws IOException
+ */
+@Test public void testFedSingleNN() throws IOException {
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).nameNodePort(9927).build();
+  try {
+    NameNode nn1=cluster.getNameNode();
+    assertNotNull("cannot create nn1",nn1);
+    String bpid1=nn1.getFSImage().getBlockPoolID();
+    String cid1=nn1.getFSImage().getClusterID();
+    int lv1=nn1.getFSImage().getLayoutVersion();
+    LOG.info("nn1: lv=" + lv1 + ";cid="+ cid1+ ";bpid="+ bpid1+ ";uri="+ nn1.getNameNodeAddress());
+    DataNode dn=cluster.getDataNodes().get(0);
+    Collection<VolumeInfo> volInfos=((FSDataset)dn.data).getVolumeInfo();
+    assertNotNull("No volumes in the fsdataset",volInfos);
+    int i=0;
+    for (    VolumeInfo vi : volInfos) {
+      LOG.info("vol " + i++ + ";dir="+ vi.directory+ ";fs= "+ vi.freeSpace);
+    }
+    assertEquals("number of volumes is wrong",2,volInfos.size());
+    for (    BPOfferService bpos : dn.getAllBpOs()) {
+      LOG.info("reg: bpid=" + "; name=" + bpos.bpRegistration.name + "; sid="+ bpos.bpRegistration.storageID+ "; nna="+ bpos.nnAddr);
+    }
+    BPOfferService bpos1=dn.getAllBpOs()[0];
+    bpos1.lastBlockReport=0;
+    bpos1.blockReport();
+    assertEquals("wrong nn address",bpos1.nnAddr,nn1.getNameNodeAddress());
+    assertEquals("wrong bpid",bpos1.getBlockPoolId(),bpid1);
+    assertEquals("wrong cid",dn.getClusterId(),cid1);
+    cluster.shutdown();
+    assertEquals(0,dn.getAllBpOs().length);
+    cluster=null;
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestDatanodeRestart </h4><pre class="type-16 type-10 type-9 type-6 type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRecoverReplicas() throws IOException {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,1024L);
+  conf.setInt(DFSConfigKeys.DFS_CLIENT_WRITE_PACKET_SIZE_KEY,512);
+  conf.setBoolean("dfs.support.append",true);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).build();
+  cluster.waitActive();
+  try {
+    FileSystem fs=cluster.getFileSystem();
+    for (int i=0; i < 4; i++) {
+      Path fileName=new Path("/test" + i);
+      DFSTestUtil.createFile(fs,fileName,1,(short)1,0L);
+      DFSTestUtil.waitReplication(fs,fileName,(short)1);
+    }
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    DataNode dn=cluster.getDataNodes().get(0);
+    Iterator<ReplicaInfo> replicasItor=((FSDataset)dn.data).volumeMap.replicas(bpid).iterator();
+    ReplicaInfo replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,true);
+    createUnlinkTmpFile(replica,false,true);
+    replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,false);
+    createUnlinkTmpFile(replica,false,false);
+    replica=replicasItor.next();
+    createUnlinkTmpFile(replica,true,true);
+    createUnlinkTmpFile(replica,false,false);
+    cluster.restartDataNodes();
+    cluster.waitActive();
+    dn=cluster.getDataNodes().get(0);
+    Collection<ReplicaInfo> replicas=((FSDataset)(dn.data)).volumeMap.replicas(bpid);
+    Assert.assertEquals(4,replicas.size());
+    replicasItor=replicas.iterator();
+    while (replicasItor.hasNext()) {
+      Assert.assertEquals(ReplicaState.FINALIZED,replicasItor.next().getState());
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestInterDatanodeProtocol </h4><pre class="type-10 type-3 type-8 type-9 type-6 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test  for{@link FSDataset#updateReplicaUnderRecovery(ExtendedBlock,long,long)} 
+ */
+@Test public void testUpdateReplicaUnderRecovery() throws IOException {
+  final Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+    cluster.waitActive();
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    DistributedFileSystem dfs=(DistributedFileSystem)cluster.getFileSystem();
+    String filestr="/foo";
+    Path filepath=new Path(filestr);
+    DFSTestUtil.createFile(dfs,filepath,1024L,(short)3,0L);
+    final LocatedBlock locatedblock=getLastLocatedBlock(dfs.getClient().getNamenode(),filestr);
+    final DatanodeInfo[] datanodeinfo=locatedblock.getLocations();
+    Assert.assertTrue(datanodeinfo.length > 0);
+    final DataNode datanode=cluster.getDataNode(datanodeinfo[0].getIpcPort());
+    Assert.assertTrue(datanode != null);
+    Assert.assertTrue(datanode.data instanceof FSDataset);
+    final FSDataset fsdataset=(FSDataset)datanode.data;
+    final ExtendedBlock b=locatedblock.getBlock();
+    final long recoveryid=b.getGenerationStamp() + 1;
+    final long newlength=b.getNumBytes() - 1;
+    final ReplicaRecoveryInfo rri=fsdataset.initReplicaRecovery(new RecoveringBlock(b,null,recoveryid));
+    final ReplicaInfo replica=fsdataset.fetchReplicaInfo(bpid,b.getBlockId());
+    Assert.assertEquals(ReplicaState.RUR,replica.getState());
+    FSDataset.checkReplicaFiles(replica);
+{
+      final ExtendedBlock tmp=new ExtendedBlock(b.getBlockPoolId(),rri.getBlockId(),rri.getNumBytes() - 1,rri.getGenerationStamp());
+      try {
+        fsdataset.updateReplicaUnderRecovery(tmp,recoveryid,newlength);
+        Assert.fail();
+      }
+ catch (      IOException ioe) {
+        System.out.println("GOOD: getting " + ioe);
+      }
+    }
+    final ReplicaInfo finalized=fsdataset.updateReplicaUnderRecovery(new ExtendedBlock(b.getBlockPoolId(),rri),recoveryid,newlength);
+    FSDataset.checkReplicaFiles(finalized);
+    Assert.assertEquals(b.getBlockId(),finalized.getBlockId());
+    Assert.assertEquals(recoveryid,finalized.getGenerationStamp());
+    Assert.assertEquals(newlength,finalized.getNumBytes());
+  }
+  finally {
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestBlocksWithNotEnoughRacks </h4><pre class="type-16 type-10 type-12 type-8 type-9 type-6 type-17 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCorruptBlockRereplicatedAcrossRacks() throws Exception {
+  Configuration conf=getConf();
+  short REPLICATION_FACTOR=2;
+  int fileLen=512;
+  final Path filePath=new Path("/testFile");
+  String racks[]={"/rack1","/rack1","/rack2","/rack2"};
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks).build();
+  final FSNamesystem ns=cluster.getNameNode().getNamesystem();
+  try {
+    final FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,filePath,fileLen,REPLICATION_FACTOR,1L);
+    final String fileContent=DFSTestUtil.readFile(fs,filePath);
+    ExtendedBlock b=DFSTestUtil.getFirstBlock(fs,filePath);
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+    int dnToCorrupt=DFSTestUtil.firstDnWithBlock(cluster,b);
+    assertTrue(MiniDFSCluster.corruptReplica(dnToCorrupt,b));
+    cluster.restartDataNode(dnToCorrupt);
+    DFSTestUtil.waitCorruptReplicas(fs,ns,filePath,b,1);
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+    for (int i=0; i < racks.length; i++) {
+      String blockContent=cluster.readBlockOnDataNode(i,b);
+      if (blockContent != null && i != dnToCorrupt) {
+        assertEquals("Corrupt replica",fileContent,blockContent);
+      }
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-9 type-6 type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testReduceReplFactorDueToRejoinRespectsRackPolicy() throws Exception {
+  Configuration conf=getConf();
+  short REPLICATION_FACTOR=2;
+  final Path filePath=new Path("/testFile");
+  String racks[]={"/rack1","/rack1","/rack2"};
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(racks.length).racks(racks).build();
+  final FSNamesystem ns=cluster.getNameNode().getNamesystem();
+  try {
+    final FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil.createFile(fs,filePath,1L,REPLICATION_FACTOR,1L);
+    ExtendedBlock b=DFSTestUtil.getFirstBlock(fs,filePath);
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+    ArrayList<DataNode> datanodes=cluster.getDataNodes();
+    assertEquals(3,datanodes.size());
+    DataNode dataNode=datanodes.get(2);
+    DatanodeID dnId=dataNode.getDatanodeId();
+    cluster.stopDataNode(2);
+    ns.removeDatanode(dnId);
+    DFSTestUtil.waitForReplication(cluster,b,1,REPLICATION_FACTOR,1);
+    String rack2[]={"/rack2"};
+    cluster.startDataNodes(conf,1,true,null,rack2);
+    cluster.waitActive();
+    DFSTestUtil.waitForReplication(cluster,b,2,REPLICATION_FACTOR,0);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestSaveNamespace </h4><pre class="type-10 type-8 type-9 type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Verify that a saveNamespace command brings faulty directories
+ * in fs.name.dir and fs.edit.dir back online.
+ */
+@Test public void testReinsertnamedirsInSavenamespace() throws Exception {
+  Configuration conf=getConf();
+  conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY,true);
+  NameNode.initMetrics(conf,NamenodeRole.ACTIVE);
+  DFSTestUtil.formatNameNode(conf);
+  FSNamesystem fsn=new FSNamesystem(conf);
+  FSImage originalImage=fsn.dir.fsImage;
+  NNStorage storage=originalImage.getStorage();
+  storage.close();
+  NNStorage spyStorage=spy(storage);
+  originalImage.storage=spyStorage;
+  FSImage spyImage=spy(originalImage);
+  fsn.dir.fsImage=spyImage;
+  spyImage.getStorage().setStorageDirectories(FSNamesystem.getNamespaceDirs(conf),FSNamesystem.getNamespaceEditsDirs(conf));
+  doAnswer(new FaultySaveImage(false)).when(spyImage).saveFSImage((File)anyObject());
+  try {
+    doAnEdit(fsn,1);
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    LOG.info("Doing the first savenamespace.");
+    fsn.saveNamespace();
+    LOG.warn("First savenamespace sucessful.");
+    assertTrue("Savenamespace should have marked one directory as bad." + " But found " + spyStorage.getRemovedStorageDirs().size() + " bad directories.",spyStorage.getRemovedStorageDirs().size() == 1);
+    LOG.info("Doing the second savenamespace.");
+    fsn.saveNamespace();
+    LOG.warn("Second savenamespace sucessful.");
+    assertTrue("Savenamespace should have been successful in removing " + " bad directories from Image." + " But found " + storage.getRemovedStorageDirs().size() + " bad directories.",storage.getRemovedStorageDirs().size() == 0);
+    LOG.info("Shutting down fsimage.");
+    originalImage.close();
+    fsn.close();
+    fsn=null;
+    LOG.info("Loading new FSmage from disk.");
+    fsn=new FSNamesystem(conf);
+    LOG.info("Checking reloaded image.");
+    checkEditExists(fsn,1);
+    LOG.info("Reloaded image is good.");
+  }
+  finally {
+    if (fsn != null) {
+      fsn.close();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

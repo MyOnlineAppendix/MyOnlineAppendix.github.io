@@ -1,0 +1,425 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBooleanVerifier</h3><kbd>Verifies boolean conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.whirr.actions.integration.PhaseExecutionBarrierTest </h4><pre class="type-4 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void testNoRemoteExecutionOverlap() throws Exception {
+  ClusterSpec spec=getTestClusterSpec();
+  ClusterController controller=(new ClusterControllerFactory()).create(spec.getServiceName());
+  try {
+    controller.launchCluster(spec);
+    Map<? extends NodeMetadata,ExecResponse> responseMap=controller.runScriptOnNodesMatching(spec,Predicates.<NodeMetadata>alwaysTrue(),exec("cat /tmp/bootstrap-start /tmp/bootstrap-end /tmp/configure-start"));
+    ExecResponse response=Iterables.get(responseMap.values(),0);
+    LOG.info("Got response: {}",response);
+    String[] parts=Strings.split(response.getOutput(),'\n');
+    int bootstrapStart=parseInt(deleteWhitespace(parts[0]));
+    int bootstrapEnd=parseInt(deleteWhitespace(parts[1]));
+    int configureStart=parseInt(deleteWhitespace(parts[2]));
+    assertTrue(bootstrapStart < bootstrapEnd);
+    assertTrue(bootstrapEnd < configureStart);
+  }
+  finally {
+    controller.destroyCluster(spec);
+  }
+  assertNoOverlapOnLocalMachine();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.net.integration.FastDnsResolverTest </h4><pre class="type-15 type-16 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Try the reverse DNS name resolver on all IPv4 interfaces
+ * @throws IOException
+ */
+@Test public void testResolveAddress() throws IOException {
+  long start, end;
+  Enumeration<NetworkInterface> en=NetworkInterface.getNetworkInterfaces();
+  while (en.hasMoreElements()) {
+    NetworkInterface netint=en.nextElement();
+    Enumeration<InetAddress> inetAddresses=netint.getInetAddresses();
+    for (    InetAddress inetAddress : Collections.list(inetAddresses)) {
+      if (inetAddress instanceof Inet4Address) {
+        start=currentTimeMillis();
+        String reverse=getDnsResolver().apply(inetAddress.getHostAddress());
+        end=currentTimeMillis();
+        assertTrue("resolveAddress takes " + (end - start) + " millis, it should be "+ "shorter than 5 seconds",(end - start) < 5500);
+        checkResponse(reverse,netint,inetAddress);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.DryRunModuleTest </h4><pre class="type-4 type-10 type-17 type-3 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Simple test that tests dry run module and at the same time enforces clear
+ * separation of script execution phases.
+ */
+@Test public void testNoInitScriptsAfterConfigurationStartedAndNoConfigScriptsAfterDestroy() throws ConfigurationException, JSchException, IOException, InterruptedException {
+  final List<String> expectedExecutionOrder=ImmutableList.of("bootstrap","configure","start","destroy");
+  CompositeConfiguration config=new CompositeConfiguration();
+  config.setProperty("whirr.provider","stub");
+  config.setProperty("whirr.cluster-name","stub-test");
+  config.setProperty("whirr.instance-templates","10 noop+noop3,10 noop2+noop,10 noop3+noop2");
+  config.setProperty("whirr.state-store","memory");
+  ClusterSpec clusterSpec=ClusterSpec.withTemporaryKeys(config);
+  ClusterController controller=new ClusterController();
+  DryRun dryRun=getDryRunInControllerForCluster(controller,clusterSpec);
+  dryRun.reset();
+  controller.launchCluster(clusterSpec);
+  controller.destroyCluster(clusterSpec);
+  ListMultimap<NodeMetadata,Statement> perNodeExecutions=dryRun.getExecutions();
+  List<StatementOnNode> totalExecutions=dryRun.getTotallyOrderedExecutions();
+  for (  Entry<NodeMetadata,Collection<Statement>> entry : perNodeExecutions.asMap().entrySet()) {
+    assertSame("An incorrect number of scripts was executed in the node: " + entry.getValue(),entry.getValue().size(),expectedExecutionOrder.size());
+    List<Statement> asList=Lists.newArrayList(entry.getValue());
+    int count=0;
+    for (    String phase : expectedExecutionOrder) {
+      String scriptName=getScriptName(asList.get(count));
+      assertTrue("The '" + phase + "' script was executed in the wrong order, found: "+ scriptName,scriptName.startsWith(phase));
+      count+=1;
+    }
+  }
+  Stack<String> executedPhases=new Stack<String>();
+  for (  StatementOnNode script : totalExecutions) {
+    String[] parts=getScriptName(script.getStatement()).split("-");
+    if ((!executedPhases.empty() && !executedPhases.peek().equals(parts[0])) || executedPhases.empty()) {
+      executedPhases.push(parts[0]);
+    }
+  }
+  assertEquals(expectedExecutionOrder.size(),executedPhases.size());
+  for (  String phaseName : Lists.reverse(expectedExecutionOrder)) {
+    assertEquals(executedPhases.pop(),phaseName);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.cassandra.integration.CassandraServiceTest </h4><pre class="type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void testInstances() throws Exception {
+  Set<String> endPoints=Sets.newLinkedHashSet();
+  for (  Instance instance : cluster.getInstances()) {
+    Cassandra.Client client=client(instance);
+    Map<String,List<String>> tr=client.describe_schema_versions();
+    for (    List<String> version : tr.values()) {
+      endPoints.addAll(version);
+    }
+    client.getOutputProtocol().getTransport().close();
+  }
+  LOG.info("List of endpoints: " + endPoints);
+  for (  Instance instance : cluster.getInstances()) {
+    String address=instance.getPrivateAddress().getHostAddress();
+    assertTrue(address + " not in cluster!",endPoints.remove(address));
+  }
+  assertTrue("Unknown node returned: " + endPoints.toString(),endPoints.isEmpty());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.cdh.integration.Cdh3HBaseServiceTest </h4><pre class="type-4 type-1 type-10 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  ArrayList<ColumnDescriptor> columns=new ArrayList<ColumnDescriptor>();
+  ColumnDescriptor cd=new ColumnDescriptor();
+  cd.name=FAMILY1;
+  columns.add(cd);
+  cd=new ColumnDescriptor();
+  cd.name=FAMILY2;
+  columns.add(cd);
+  Hbase.Client client=controller.getThriftClient();
+  client.createTable(TABLE,columns);
+  ArrayList<Mutation> mutations=new ArrayList<Mutation>();
+  mutations.add(new Mutation(false,COLUMN,VALUE));
+  client.mutateRow(TABLE,ROW,mutations);
+  int scan1=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY1));
+  List<TRowResult> rows=client.scannerGet(scan1);
+  assertThat(rows.size(),is(1));
+  assertThat(Bytes.toString(rows.get(0).getRow()),is("testRow"));
+  assertTrue("No more rows",client.scannerGet(scan1).isEmpty());
+  client.scannerClose(scan1);
+  int scan2=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY2));
+  assertTrue("No more rows",client.scannerGet(scan2).isEmpty());
+  client.scannerClose(scan2);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.cdh.integration.CdhHBaseServiceTest </h4><pre class="type-4 type-1 type-10 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void test() throws Exception {
+  ArrayList<ColumnDescriptor> columns=new ArrayList<ColumnDescriptor>();
+  ColumnDescriptor cd=new ColumnDescriptor();
+  cd.name=FAMILY1;
+  columns.add(cd);
+  cd=new ColumnDescriptor();
+  cd.name=FAMILY2;
+  columns.add(cd);
+  Hbase.Client client=controller.getThriftClient();
+  client.createTable(TABLE,columns);
+  ArrayList<Mutation> mutations=new ArrayList<Mutation>();
+  mutations.add(new Mutation(false,COLUMN,VALUE));
+  client.mutateRow(TABLE,ROW,mutations);
+  int scan1=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY1));
+  List<TRowResult> rows=client.scannerGet(scan1);
+  assertThat(rows.size(),is(1));
+  assertThat(Bytes.toString(rows.get(0).getRow()),is("testRow"));
+  assertTrue("No more rows",client.scannerGet(scan1).isEmpty());
+  client.scannerClose(scan1);
+  int scan2=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY2));
+  assertTrue("No more rows",client.scannerGet(scan2).isEmpty());
+  client.scannerClose(scan2);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.chef.integration.ChefServiceTest </h4><pre class="type-4 type-1 type-10 type-3 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void testChefRunRecipeFromURL() throws Exception {
+  Recipe nginx=new Recipe("nginx",null,"http://s3.amazonaws.com/opscode-community/cookbook_versions/tarballs/529/original/nginx.tgz");
+  Map<? extends NodeMetadata,ExecResponse> responses=runRecipe(nginx);
+  printResponses(nginx,responses);
+  HttpClient client=new HttpClient();
+  final GetMethod getIndex=new GetMethod(String.format("http://%s",responses.keySet().iterator().next().getPublicAddresses().iterator().next()));
+  assertTrue("Could not connect with nginx server",retry(new Predicate<HttpClient>(){
+    @Override public boolean apply(    HttpClient input){
+      try {
+        int statusCode=input.executeMethod(getIndex);
+        assertEquals("Status code should be 200",HttpStatus.SC_OK,statusCode);
+        return true;
+      }
+ catch (      Exception e) {
+        return false;
+      }
+    }
+  }
+,10,1,TimeUnit.SECONDS).apply(client));
+  String indexPageHTML=getIndex.getResponseBodyAsString();
+  assertTrue("The string 'nginx' should appear on the index page",indexPageHTML.contains("nginx"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.ganglia.integration.GangliaServiceTest </h4><pre class="type-4 type-1 type-10 type-3 type-12 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void test() throws Exception {
+  Instance metad=cluster.getInstanceMatching(RolePredicates.role(GangliaMetadClusterActionHandler.GANGLIA_METAD_ROLE));
+  String metadHostname=metad.getPublicHostName();
+  assertNotNull(metadHostname);
+  HttpClient client=new HttpClient();
+  GetMethod getIndex=new GetMethod(String.format("http://%s/ganglia/",metadHostname));
+  int statusCode=client.executeMethod(getIndex);
+  assertEquals("Status code should be 200",HttpStatus.SC_OK,statusCode);
+  String indexPageHTML=getIndex.getResponseBodyAsString();
+  assertTrue("The string 'Ganglia' should appear on the index page",indexPageHTML.contains("Ganglia"));
+  assertTrue("The string 'WhirrGrid' should appear on the index page",indexPageHTML.contains("WhirrGrid"));
+  for (  Instance instance : cluster.getInstancesMatching(anyRoleIn(Sets.<String>newHashSet(GANGLIA_METAD_ROLE,GANGLIA_MONITOR_ROLE)))) {
+    testMonitorResponse(instance);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.hadoop.integration.benchmark.HadoopServiceTeraSortBenchmark </h4><pre class="type-15 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+"></span><br>
+@Test public void testTeraSort() throws Exception {
+  int runs=Integer.parseInt(System.getProperty("terasortRuns","3"));
+  for (int i=0; i < runs; i++) {
+    LOG.info("Starting TeraSort run {} of {}",i + 1,runs);
+    runTeraGen();
+    runTeraSort();
+    runTeraValidate();
+    FileSystem fs=FileSystem.get(controller.getConfiguration());
+    FSDataInputStream in=fs.open(new Path("report/part-00000"));
+    BufferedReader reader=new BufferedReader(new InputStreamReader(in));
+    String line=null;
+    StringBuilder problems=new StringBuilder();
+    boolean failed=false;
+    while ((line=reader.readLine()) != null) {
+      problems.append(line).append("\n");
+      failed=true;
+    }
+    assertFalse(problems.toString(),failed);
+    reader.close();
+    fs.delete(new Path("input"),true);
+    fs.delete(new Path("output"),true);
+    fs.delete(new Path("report"),true);
+    LOG.info("Completed TeraSort run {} of {}",i + 1,runs);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.hama.integration.HamaServiceTest </h4><pre class="type-1 type-10 type-12 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void test() throws Exception {
+  HamaConfiguration jobConf=controller.getConfiguration();
+  jobConf.set("hadoop.rpc.socket.factory.class.default","org.apache.hadoop.net.StandardSocketFactory");
+  BSPJob bsp=new BSPJob(jobConf,new BSPJobID());
+  LOG.info("Job conf: " + bsp.getConf().get("hadoop.rpc.socket.factory.class.default") + ", "+ bsp.getJobID().toString());
+  bsp.setJarByClass(MyEstimator.class);
+  bsp.setBspClass(MyEstimator.class);
+  bsp.setInputFormat(NullInputFormat.class);
+  bsp.setOutputKeyClass(Text.class);
+  bsp.setOutputValueClass(DoubleWritable.class);
+  bsp.setOutputFormat(TextOutputFormat.class);
+  bsp.set("bsp.working.dir","/tmp");
+  FileOutputFormat.setOutputPath(bsp,TMP_OUTPUT);
+  LOG.info("Client configuration start ..");
+  HamaConfiguration clientConf=controller.getConfiguration();
+  BSPJobClient jobClient=new BSPJobClient(clientConf);
+  ClusterStatus cluster=jobClient.getClusterStatus(true);
+  assertNotNull(cluster);
+  assertTrue(cluster.getGroomServers() > 0);
+  assertTrue(cluster.getMaxTasks() > 1);
+  bsp.setNumBspTask(cluster.getMaxTasks());
+  LOG.info("Client conf: " + clientConf.get("hadoop.rpc.socket.factory.class.default"));
+  RunningJob rJob=jobClient.submitJob(bsp);
+  rJob.waitForCompletion();
+  LOG.info("finished");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.hbase.integration.AbstractHBaseServiceTest </h4><pre class="type-4 type-1 type-10 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void test() throws Exception {
+  ArrayList<ColumnDescriptor> columns=new ArrayList<ColumnDescriptor>();
+  ColumnDescriptor cd=new ColumnDescriptor();
+  cd.name=FAMILY1;
+  columns.add(cd);
+  cd=new ColumnDescriptor();
+  cd.name=FAMILY2;
+  columns.add(cd);
+  Hbase.Client client=controller.getThriftClient();
+  client.createTable(TABLE,columns);
+  ArrayList<Mutation> mutations=new ArrayList<Mutation>();
+  mutations.add(new Mutation(false,COLUMN,VALUE,true));
+  client.mutateRow(TABLE,ROW,mutations,null);
+  int scan1=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY1),null);
+  List<TRowResult> rows=client.scannerGet(scan1);
+  assertThat(rows.size(),is(1));
+  assertThat(Bytes.toString(rows.get(0).getRow()),is("testRow"));
+  assertTrue("No more rows",client.scannerGet(scan1).isEmpty());
+  client.scannerClose(scan1);
+  int scan2=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY2),null);
+  assertTrue("No more rows",client.scannerGet(scan2).isEmpty());
+  client.scannerClose(scan2);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.hbase.integration.HBaseOldServiceTest </h4><pre class="type-4 type-1 type-10 type-2 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=TestConstants.ITEST_TIMEOUT) public void test() throws Exception {
+  ArrayList<ColumnDescriptor> columns=new ArrayList<ColumnDescriptor>();
+  ColumnDescriptor cd=new ColumnDescriptor();
+  cd.name=FAMILY1;
+  columns.add(cd);
+  cd=new ColumnDescriptor();
+  cd.name=FAMILY2;
+  columns.add(cd);
+  Hbase.Client client=controller.getThriftClient();
+  client.createTable(TABLE,columns);
+  ArrayList<Mutation> mutations=new ArrayList<Mutation>();
+  mutations.add(new Mutation(false,COLUMN,VALUE));
+  client.mutateRow(TABLE,ROW,mutations);
+  int scan1=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY1));
+  List<TRowResult> rows=client.scannerGet(scan1);
+  assertThat(rows.size(),is(1));
+  assertThat(Bytes.toString(rows.get(0).getRow()),is("testRow"));
+  assertTrue("No more rows",client.scannerGet(scan1).isEmpty());
+  client.scannerClose(scan1);
+  int scan2=client.scannerOpen(TABLE,FIRST,Lists.newArrayList(FAMILY2));
+  assertTrue("No more rows",client.scannerGet(scan2).isEmpty());
+  client.scannerClose(scan2);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.whirr.service.kerberos.KerberosServerDryRunTest </h4><pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testJavaInstalledTrue() throws Exception {
+  DryRun dryRun=launchWithClusterSpec(newClusterSpecForProperties(ImmutableMap.of("whirr.instance-templates","1 " + KerberosServerHandler.ROLE + "+"+ KerberosClientHandler.ROLE,"whirr.env.jdk_installed","true")));
+  assertScriptPredicateOnPhase(dryRun,"bootstrap",bootstrapPredicate());
+  boolean assertFailed=false;
+  try {
+    assertScriptPredicateOnPhase(dryRun,"bootstrap",containsPattern("install_openjdk"));
+  }
+ catch (  AssertionFailedError assertionFailedError) {
+    assertFailed=true;
+  }
+  Assert.assertTrue(assertFailed);
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

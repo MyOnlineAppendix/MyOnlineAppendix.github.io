@@ -1,0 +1,138 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.v2.TestSpeculativeExecutionWithMRApp (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSepculateSuccessfulWithUpdateEvents() throws Exception {
+  Clock actualClock=new SystemClock();
+  final ControlledClock clock=new ControlledClock(actualClock);
+  clock.setTime(System.currentTimeMillis());
+  MRApp app=new MRApp(NUM_MAPPERS,NUM_REDUCERS,false,"test",true,clock);
+  Job job=app.submit(new Configuration(),true,true);
+  app.waitForState(job,JobState.RUNNING);
+  Map<TaskId,Task> tasks=job.getTasks();
+  Assert.assertEquals("Num tasks is not correct",NUM_MAPPERS + NUM_REDUCERS,tasks.size());
+  Iterator<Task> taskIter=tasks.values().iterator();
+  while (taskIter.hasNext()) {
+    app.waitForState(taskIter.next(),TaskState.RUNNING);
+  }
+  clock.setTime(System.currentTimeMillis() + 1000);
+  EventHandler appEventHandler=app.getContext().getEventHandler();
+  for (  Map.Entry<TaskId,Task> mapTask : tasks.entrySet()) {
+    for (    Map.Entry<TaskAttemptId,TaskAttempt> taskAttempt : mapTask.getValue().getAttempts().entrySet()) {
+      TaskAttemptStatus status=createTaskAttemptStatus(taskAttempt.getKey(),(float)0.5,TaskAttemptState.RUNNING);
+      TaskAttemptStatusUpdateEvent event=new TaskAttemptStatusUpdateEvent(taskAttempt.getKey(),status);
+      appEventHandler.handle(event);
+    }
+  }
+  Task speculatedTask=null;
+  int numTasksToFinish=NUM_MAPPERS + NUM_REDUCERS - 1;
+  clock.setTime(System.currentTimeMillis() + 1000);
+  for (  Map.Entry<TaskId,Task> task : tasks.entrySet()) {
+    for (    Map.Entry<TaskAttemptId,TaskAttempt> taskAttempt : task.getValue().getAttempts().entrySet()) {
+      if (numTasksToFinish > 0) {
+        appEventHandler.handle(new TaskAttemptEvent(taskAttempt.getKey(),TaskAttemptEventType.TA_DONE));
+        appEventHandler.handle(new TaskAttemptEvent(taskAttempt.getKey(),TaskAttemptEventType.TA_CONTAINER_CLEANED));
+        numTasksToFinish--;
+        app.waitForState(taskAttempt.getValue(),TaskAttemptState.SUCCEEDED);
+      }
+ else {
+        TaskAttemptStatus status=createTaskAttemptStatus(taskAttempt.getKey(),(float)0.75,TaskAttemptState.RUNNING);
+        speculatedTask=task.getValue();
+        TaskAttemptStatusUpdateEvent event=new TaskAttemptStatusUpdateEvent(taskAttempt.getKey(),status);
+        appEventHandler.handle(event);
+      }
+    }
+  }
+  clock.setTime(System.currentTimeMillis() + 15000);
+  for (  Map.Entry<TaskId,Task> task : tasks.entrySet()) {
+    for (    Map.Entry<TaskAttemptId,TaskAttempt> taskAttempt : task.getValue().getAttempts().entrySet()) {
+      if (taskAttempt.getValue().getState() != TaskAttemptState.SUCCEEDED) {
+        TaskAttemptStatus status=createTaskAttemptStatus(taskAttempt.getKey(),(float)0.75,TaskAttemptState.RUNNING);
+        TaskAttemptStatusUpdateEvent event=new TaskAttemptStatusUpdateEvent(taskAttempt.getKey(),status);
+        appEventHandler.handle(event);
+      }
+    }
+  }
+  final Task speculatedTaskConst=speculatedTask;
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      if (speculatedTaskConst.getAttempts().size() != 2) {
+        clock.setTime(System.currentTimeMillis() + 1000);
+        return false;
+      }
+ else {
+        return true;
+      }
+    }
+  }
+,1000,60000);
+  TaskAttempt[] ta=makeFirstAttemptWin(appEventHandler,speculatedTask);
+  verifySpeculationMessage(app,ta);
+  app.waitForState(Service.STATE.STOPPED);
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSpeculateSuccessfulWithoutUpdateEvents() throws Exception {
+  Clock actualClock=new SystemClock();
+  final ControlledClock clock=new ControlledClock(actualClock);
+  clock.setTime(System.currentTimeMillis());
+  MRApp app=new MRApp(NUM_MAPPERS,NUM_REDUCERS,false,"test",true,clock);
+  Job job=app.submit(new Configuration(),true,true);
+  app.waitForState(job,JobState.RUNNING);
+  Map<TaskId,Task> tasks=job.getTasks();
+  Assert.assertEquals("Num tasks is not correct",NUM_MAPPERS + NUM_REDUCERS,tasks.size());
+  Iterator<Task> taskIter=tasks.values().iterator();
+  while (taskIter.hasNext()) {
+    app.waitForState(taskIter.next(),TaskState.RUNNING);
+  }
+  clock.setTime(System.currentTimeMillis() + 2000);
+  EventHandler appEventHandler=app.getContext().getEventHandler();
+  for (  Map.Entry<TaskId,Task> mapTask : tasks.entrySet()) {
+    for (    Map.Entry<TaskAttemptId,TaskAttempt> taskAttempt : mapTask.getValue().getAttempts().entrySet()) {
+      TaskAttemptStatus status=createTaskAttemptStatus(taskAttempt.getKey(),(float)0.8,TaskAttemptState.RUNNING);
+      TaskAttemptStatusUpdateEvent event=new TaskAttemptStatusUpdateEvent(taskAttempt.getKey(),status);
+      appEventHandler.handle(event);
+    }
+  }
+  Random generator=new Random();
+  Object[] taskValues=tasks.values().toArray();
+  final Task taskToBeSpeculated=(Task)taskValues[generator.nextInt(taskValues.length)];
+  for (  Map.Entry<TaskId,Task> mapTask : tasks.entrySet()) {
+    for (    Map.Entry<TaskAttemptId,TaskAttempt> taskAttempt : mapTask.getValue().getAttempts().entrySet()) {
+      if (mapTask.getKey() != taskToBeSpeculated.getID()) {
+        appEventHandler.handle(new TaskAttemptEvent(taskAttempt.getKey(),TaskAttemptEventType.TA_DONE));
+        appEventHandler.handle(new TaskAttemptEvent(taskAttempt.getKey(),TaskAttemptEventType.TA_CONTAINER_CLEANED));
+        app.waitForState(taskAttempt.getValue(),TaskAttemptState.SUCCEEDED);
+      }
+    }
+  }
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      if (taskToBeSpeculated.getAttempts().size() != 2) {
+        clock.setTime(System.currentTimeMillis() + 1000);
+        return false;
+      }
+ else {
+        return true;
+      }
+    }
+  }
+,1000,60000);
+  TaskAttempt[] ta=makeFirstAttemptWin(appEventHandler,taskToBeSpeculated);
+  verifySpeculationMessage(app,ta);
+  app.waitForState(Service.STATE.STOPPED);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

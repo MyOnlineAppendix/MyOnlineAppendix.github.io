@@ -1,0 +1,197 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAssumptionSetter</h3><kbd>Sets implicit assumptions </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.hdfs.security.token.block.TestBlockToken </h4><pre class="type-16 type-10 type-12 type-3 type-9 type-18 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that fast repeated invocations of createClientDatanodeProtocolProxy
+ * will not end up using up thousands of sockets. This is a regression test for
+ * HDFS-1965.
+ */
+@Test public void testBlockTokenRpcLeak() throws Exception {
+  Assume.assumeTrue(FD_DIR.exists());
+  BlockTokenSecretManager sm=new BlockTokenSecretManager(true,blockKeyUpdateInterval,blockTokenLifetime);
+  Token<BlockTokenIdentifier> token=sm.generateToken(block3,EnumSet.allOf(BlockTokenSecretManager.AccessMode.class));
+  final Server server=createMockDatanode(sm,token);
+  server.start();
+  final InetSocketAddress addr=NetUtils.getConnectAddress(server);
+  DatanodeID fakeDnId=new DatanodeID("localhost:" + addr.getPort(),"fake-storage",0,addr.getPort());
+  ExtendedBlock b=new ExtendedBlock("fake-pool",new Block(12345L));
+  LocatedBlock fakeBlock=new LocatedBlock(b,new DatanodeInfo[0]);
+  fakeBlock.setBlockToken(token);
+  ClientDatanodeProtocol proxyToNoWhere=RPC.getProxy(ClientDatanodeProtocol.class,ClientDatanodeProtocol.versionID,new InetSocketAddress("1.1.1.1",1),UserGroupInformation.createRemoteUser("junk"),conf,NetUtils.getDefaultSocketFactory(conf));
+  ClientDatanodeProtocol proxy=null;
+  int fdsAtStart=countOpenFileDescriptors();
+  try {
+    long endTime=System.currentTimeMillis() + 3000;
+    while (System.currentTimeMillis() < endTime) {
+      proxy=DFSTestUtil.createClientDatanodeProtocolProxy(fakeDnId,conf,1000,fakeBlock);
+      assertEquals(block3.getBlockId(),proxy.getReplicaVisibleLength(block3));
+      if (proxy != null) {
+        RPC.stopProxy(proxy);
+      }
+      LOG.info("Num open fds:" + countOpenFileDescriptors());
+    }
+    int fdsAtEnd=countOpenFileDescriptors();
+    if (fdsAtEnd - fdsAtStart > 50) {
+      fail("Leaked " + (fdsAtEnd - fdsAtStart) + " fds!");
+    }
+  }
+  finally {
+    server.stop();
+  }
+  RPC.stopProxy(proxyToNoWhere);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestDataNodeVolumeFailureReporting </h4><pre class="type-8 type-18 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that the NN re-learns of volume failures after restart.
+ */
+@Test public void testVolFailureStatsPreservedOnNNRestart() throws Exception {
+  assumeTrue(!System.getProperty("os.name").startsWith("Windows"));
+  cluster.startDataNodes(conf,2,true,null,null);
+  cluster.waitActive();
+  FSNamesystem ns=cluster.getNamesystem();
+  long origCapacity=DFSTestUtil.getLiveDatanodeCapacity(ns);
+  long dnCapacity=DFSTestUtil.getDatanodeCapacity(ns,0);
+  File dn1Vol1=new File(dataDir,"data" + (2 * 0 + 1));
+  File dn2Vol1=new File(dataDir,"data" + (2 * 1 + 1));
+  assertTrue("Couldn't chmod local vol",dn1Vol1.setExecutable(false));
+  assertTrue("Couldn't chmod local vol",dn2Vol1.setExecutable(false));
+  Path file1=new Path("/test1");
+  DFSTestUtil.createFile(fs,file1,1024,(short)2,1L);
+  DFSTestUtil.waitReplication(fs,file1,(short)2);
+  DFSTestUtil.waitForDatanodeStatus(ns,3,0,2,origCapacity - (1 * dnCapacity),WAIT_FOR_HEARTBEATS);
+  cluster.restartNameNode(0);
+  cluster.waitActive();
+  DFSTestUtil.waitForDatanodeStatus(ns,3,0,2,origCapacity - (1 * dnCapacity),WAIT_FOR_HEARTBEATS);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-9 type-18 type-6 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that individual volume failures do not cause DNs to fail, that
+ * all volumes failed on a single datanode do cause it to fail, and
+ * that the capacities and liveliness is adjusted correctly in the NN.
+ */
+@Test public void testSuccessiveVolumeFailures() throws Exception {
+  assumeTrue(!System.getProperty("os.name").startsWith("Windows"));
+  cluster.startDataNodes(conf,2,true,null,null);
+  cluster.waitActive();
+  Thread.sleep(WAIT_FOR_HEARTBEATS);
+  FSNamesystem ns=cluster.getNamesystem();
+  long origCapacity=DFSTestUtil.getLiveDatanodeCapacity(ns);
+  long dnCapacity=DFSTestUtil.getDatanodeCapacity(ns,0);
+  File dn1Vol1=new File(dataDir,"data" + (2 * 0 + 1));
+  File dn2Vol1=new File(dataDir,"data" + (2 * 1 + 1));
+  File dn3Vol1=new File(dataDir,"data" + (2 * 2 + 1));
+  File dn3Vol2=new File(dataDir,"data" + (2 * 2 + 2));
+  assertTrue("Couldn't chmod local vol",dn1Vol1.setExecutable(false));
+  assertTrue("Couldn't chmod local vol",dn2Vol1.setExecutable(false));
+  Path file1=new Path("/test1");
+  DFSTestUtil.createFile(fs,file1,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file1,(short)3);
+  ArrayList<DataNode> dns=cluster.getDataNodes();
+  assertTrue("DN1 should be up",dns.get(0).isDatanodeUp());
+  assertTrue("DN2 should be up",dns.get(1).isDatanodeUp());
+  assertTrue("DN3 should be up",dns.get(2).isDatanodeUp());
+  assertCounter("VolumeFailures",1L,getMetrics(dns.get(0).getMetrics().name()));
+  assertCounter("VolumeFailures",1L,getMetrics(dns.get(1).getMetrics().name()));
+  assertCounter("VolumeFailures",0L,getMetrics(dns.get(2).getMetrics().name()));
+  assert (WAIT_FOR_HEARTBEATS * 10) > WAIT_FOR_DEATH;
+  DFSTestUtil.waitForDatanodeStatus(ns,3,0,2,origCapacity - (1 * dnCapacity),WAIT_FOR_HEARTBEATS);
+  assertTrue("Couldn't chmod local vol",dn3Vol1.setExecutable(false));
+  Path file2=new Path("/test2");
+  DFSTestUtil.createFile(fs,file2,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file2,(short)3);
+  assertTrue("DN3 should still be up",dns.get(2).isDatanodeUp());
+  assertCounter("VolumeFailures",1L,getMetrics(dns.get(2).getMetrics().name()));
+  ArrayList<DatanodeDescriptor> live=new ArrayList<DatanodeDescriptor>();
+  ArrayList<DatanodeDescriptor> dead=new ArrayList<DatanodeDescriptor>();
+  ns.DFSNodesStatus(live,dead);
+  live.clear();
+  dead.clear();
+  ns.DFSNodesStatus(live,dead);
+  assertEquals("DN3 should have 1 failed volume",1,live.get(2).getVolumeFailures());
+  dnCapacity=DFSTestUtil.getDatanodeCapacity(ns,0);
+  DFSTestUtil.waitForDatanodeStatus(ns,3,0,3,origCapacity - (3 * dnCapacity),WAIT_FOR_HEARTBEATS);
+  assertTrue("Couldn't chmod local vol",dn3Vol2.setExecutable(false));
+  Path file3=new Path("/test3");
+  DFSTestUtil.createFile(fs,file3,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file3,(short)2);
+  DFSTestUtil.waitForDatanodeDeath(dns.get(2));
+  assertCounter("VolumeFailures",2L,getMetrics(dns.get(2).getMetrics().name()));
+  DFSTestUtil.waitForDatanodeStatus(ns,2,1,2,origCapacity - (4 * dnCapacity),WAIT_FOR_HEARTBEATS);
+  assertTrue("Couldn't chmod local vol",dn1Vol1.setExecutable(true));
+  assertTrue("Couldn't chmod local vol",dn2Vol1.setExecutable(true));
+  assertTrue("Couldn't chmod local vol",dn3Vol1.setExecutable(true));
+  assertTrue("Couldn't chmod local vol",dn3Vol2.setExecutable(true));
+  cluster.restartDataNodes();
+  cluster.waitActive();
+  Path file4=new Path("/test4");
+  DFSTestUtil.createFile(fs,file4,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file4,(short)3);
+  DFSTestUtil.waitForDatanodeStatus(ns,3,0,0,origCapacity,WAIT_FOR_HEARTBEATS);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestDataNodeVolumeFailureToleration </h4><pre class="type-8 type-18 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY configuration
+ * option, ie the DN shuts itself down when the number of failures
+ * experienced drops below the tolerated amount.
+ */
+@Test public void testConfigureMinValidVolumes() throws Exception {
+  assumeTrue(!System.getProperty("os.name").startsWith("Windows"));
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_FAILED_VOLUMES_TOLERATED_KEY,0);
+  cluster.startDataNodes(conf,2,true,null,null);
+  cluster.waitActive();
+  FSNamesystem ns=cluster.getNamesystem();
+  long origCapacity=DFSTestUtil.getLiveDatanodeCapacity(ns);
+  long dnCapacity=DFSTestUtil.getDatanodeCapacity(ns,0);
+  File dn2Vol1=new File(dataDir,"data" + (2 * 1 + 1));
+  assertTrue("Couldn't chmod local vol",dn2Vol1.setExecutable(false));
+  Path file1=new Path("/test1");
+  DFSTestUtil.createFile(fs,file1,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file1,(short)2);
+  DFSTestUtil.waitForDatanodeStatus(ns,2,1,0,origCapacity - (1 * dnCapacity),WAIT_FOR_HEARTBEATS);
+  assertTrue("Couldn't chmod local vol",dn2Vol1.setExecutable(true));
+  Path file2=new Path("/test2");
+  DFSTestUtil.createFile(fs,file2,1024,(short)3,1L);
+  DFSTestUtil.waitReplication(fs,file2,(short)2);
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

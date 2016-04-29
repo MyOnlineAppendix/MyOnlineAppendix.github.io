@@ -1,0 +1,111 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestDecommissioningStatus (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 type-11 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests Decommissioning Status in DFS.
+ */
+@Test public void testDecommissionStatus() throws IOException, InterruptedException {
+  InetSocketAddress addr=new InetSocketAddress("localhost",cluster.getNameNodePort());
+  DFSClient client=new DFSClient(addr,conf);
+  DatanodeInfo[] info=client.datanodeReport(DatanodeReportType.LIVE);
+  assertEquals("Number of Datanodes ",2,info.length);
+  DistributedFileSystem fileSys=cluster.getFileSystem();
+  DFSAdmin admin=new DFSAdmin(cluster.getConfiguration(0));
+  short replicas=2;
+  Path file1=new Path("decommission.dat");
+  DFSTestUtil.createFile(fileSys,file1,fileSize,fileSize,blockSize,replicas,seed);
+  Path file2=new Path("decommission1.dat");
+  FSDataOutputStream st1=writeIncompleteFile(fileSys,file2,replicas);
+  Thread.sleep(5000);
+  FSNamesystem fsn=cluster.getNamesystem();
+  final DatanodeManager dm=fsn.getBlockManager().getDatanodeManager();
+  for (int iteration=0; iteration < numDatanodes; iteration++) {
+    String downnode=decommissionNode(fsn,client,localFileSys,iteration);
+    dm.refreshNodes(conf);
+    decommissionedNodes.add(downnode);
+    Thread.sleep(5000);
+    final List<DatanodeDescriptor> decommissioningNodes=dm.getDecommissioningNodes();
+    if (iteration == 0) {
+      assertEquals(decommissioningNodes.size(),1);
+      DatanodeDescriptor decommNode=decommissioningNodes.get(0);
+      checkDecommissionStatus(decommNode,4,0,2);
+      checkDFSAdminDecommissionStatus(decommissioningNodes.subList(0,1),fileSys,admin);
+    }
+ else {
+      assertEquals(decommissioningNodes.size(),2);
+      DatanodeDescriptor decommNode1=decommissioningNodes.get(0);
+      DatanodeDescriptor decommNode2=decommissioningNodes.get(1);
+      checkDecommissionStatus(decommNode1,4,4,2);
+      checkDecommissionStatus(decommNode2,4,4,2);
+      checkDFSAdminDecommissionStatus(decommissioningNodes.subList(0,2),fileSys,admin);
+    }
+  }
+  writeConfigFile(localFileSys,excludeFile,null);
+  dm.refreshNodes(conf);
+  st1.close();
+  cleanupFile(fileSys,file1);
+  cleanupFile(fileSys,file2);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDown() throws Exception {
+  if (localFileSys != null)   cleanupFile(localFileSys,dir);
+  if (fileSys != null)   fileSys.close();
+  if (cluster != null)   cluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Verify a DN remains in DECOMMISSION_INPROGRESS state if it is marked
+ * as dead before decommission has completed. That will allow DN to resume
+ * the replication process after it rejoins the cluster.
+ */
+@Test(timeout=120000) public void testDecommissionStatusAfterDNRestart() throws IOException, InterruptedException {
+  DistributedFileSystem fileSys=(DistributedFileSystem)cluster.getFileSystem();
+  Path f=new Path("decommission.dat");
+  DFSTestUtil.createFile(fileSys,f,fileSize,fileSize,fileSize,(short)1,seed);
+  RemoteIterator<LocatedFileStatus> fileList=fileSys.listLocatedStatus(f);
+  BlockLocation[] blockLocations=fileList.next().getBlockLocations();
+  String dnName=blockLocations[0].getNames()[0];
+  FSNamesystem fsn=cluster.getNamesystem();
+  final DatanodeManager dm=fsn.getBlockManager().getDatanodeManager();
+  decommissionNode(fsn,localFileSys,dnName);
+  dm.refreshNodes(conf);
+  DataNodeProperties dataNodeProperties=cluster.stopDataNode(dnName);
+  final List<DatanodeDescriptor> dead=new ArrayList<DatanodeDescriptor>();
+  while (true) {
+    dm.fetchDatanodes(null,dead,false);
+    if (dead.size() == 1) {
+      break;
+    }
+    Thread.sleep(1000);
+  }
+  BlockManagerTestUtil.checkHeartbeat(fsn.getBlockManager());
+  BlockManagerTestUtil.checkDecommissionState(dm,dead.get(0));
+  assertTrue("the node is in decommissioned state ",!dead.get(0).isDecommissioned());
+  cluster.restartDataNode(dataNodeProperties,true);
+  cluster.waitActive();
+  writeConfigFile(localFileSys,excludeFile,null);
+  dm.refreshNodes(conf);
+  cleanupFile(fileSys,f);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

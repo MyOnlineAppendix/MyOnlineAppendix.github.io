@@ -1,0 +1,588 @@
+<h3 style="margin:0px">Class: org.apache.sshd.server.ServerTest (13 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  sshd=setupTestServer();
+  sshd.setShellFactory(new TestEchoShellFactory());
+  client=setupTestClient();
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testServerIdleTimeoutWithForce() throws Exception {
+  final CountDownLatch latch=new CountDownLatch(1);
+  sshd.setCommandFactory(new StreamCommand.Factory());
+  final long IDLE_TIMEOUT_VALUE=TimeUnit.SECONDS.toMillis(5L);
+  PropertyResolverUtils.updateProperty(sshd,FactoryManager.IDLE_TIMEOUT,IDLE_TIMEOUT_VALUE);
+  final long DISCONNECT_TIMEOUT_VALUE=TimeUnit.SECONDS.toMillis(2L);
+  PropertyResolverUtils.updateProperty(sshd,FactoryManager.DISCONNECT_TIMEOUT,DISCONNECT_TIMEOUT_VALUE);
+  sshd.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+      outputDebugMessage("Session created: %s",session);
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      outputDebugMessage("Session %s event: %s",session,event);
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+      outputDebugMessage("Session %s exception %s caught: %s",session,t.getClass().getSimpleName(),t.getMessage());
+    }
+    @Override public void sessionClosed(    Session session){
+      outputDebugMessage("Session closed: %s",session);
+      latch.countDown();
+    }
+  }
+);
+  TestChannelListener channelListener=new TestChannelListener();
+  sshd.addChannelListener(channelListener);
+  sshd.start();
+  client.start();
+  try (ClientSession s=createTestClientSession(sshd);ChannelExec shell=s.createExecChannel("normal");PipedInputStream pis=new PipedInputStream();PipedOutputStream pos=new PipedOutputStream(pis)){
+    shell.setOut(pos);
+    shell.open().verify(5L,TimeUnit.SECONDS);
+    assertTrue("No changes in activated channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No activated server side channels",GenericUtils.size(channelListener.getActiveChannels()) > 0);
+    assertTrue("No changes in open channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No open server side channels",GenericUtils.size(channelListener.getOpenChannels()) > 0);
+    try (AbstractSession serverSession=sshd.getActiveSessions().iterator().next()){
+      AbstractConnectionService<?> service=serverSession.getService(AbstractConnectionService.class);
+      Collection<? extends Channel> channels=service.getChannels();
+      try (Channel channel=channels.iterator().next()){
+        final long MAX_TIMEOUT_VALUE=IDLE_TIMEOUT_VALUE + DISCONNECT_TIMEOUT_VALUE + TimeUnit.SECONDS.toMillis(3L);
+        for (long totalNanoTime=0L; channel.getRemoteWindow().getSize() > 0; ) {
+          long nanoStart=System.nanoTime();
+          Thread.sleep(1L);
+          long nanoEnd=System.nanoTime();
+          long nanoDuration=nanoEnd - nanoStart;
+          totalNanoTime+=nanoDuration;
+          assertTrue("Waiting for too long on remote window size to reach zero",totalNanoTime < TimeUnit.MILLISECONDS.toNanos(MAX_TIMEOUT_VALUE));
+        }
+        LoggerFactory.getLogger(getClass()).info("Waiting for session idle timeouts");
+        long t0=System.currentTimeMillis();
+        latch.await(1,TimeUnit.MINUTES);
+        long t1=System.currentTimeMillis(), diff=t1 - t0;
+        assertTrue("Wait time too low: " + diff,diff > IDLE_TIMEOUT_VALUE);
+        assertTrue("Wait time too high: " + diff,diff < MAX_TIMEOUT_VALUE);
+      }
+     }
+   }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-3 type-12 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFailAuthenticationWithFuture() throws Exception {
+  final int MAX_AUTH_REQUESTS=10;
+  PropertyResolverUtils.updateProperty(sshd,ServerAuthenticationManager.MAX_AUTH_REQUESTS,MAX_AUTH_REQUESTS);
+  sshd.start();
+  client.setServiceFactories(Arrays.asList(new ClientUserAuthServiceOld.Factory(),ClientConnectionServiceFactory.INSTANCE));
+  client.start();
+  try (ClientSession s=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    int nbTrials=0;
+    AuthFuture authFuture;
+    do {
+      nbTrials++;
+      assertTrue("Number of trials below max.",nbTrials < 100);
+      authFuture=s.getService(ClientUserAuthServiceOld.class).auth(new org.apache.sshd.deprecated.UserAuthPassword(s,"ssh-connection","buggy"));
+      assertTrue("Authentication wait failed",authFuture.await(5L,TimeUnit.SECONDS));
+      assertTrue("Authentication not done",authFuture.isDone());
+      assertFalse("Authentication unexpectedly successful",authFuture.isSuccess());
+    }
+ while (authFuture.getException() == null);
+    Throwable t=authFuture.getException();
+    assertNotNull("Missing auth future exception",t);
+    assertTrue("Number trials (" + nbTrials + ") below min.="+ MAX_AUTH_REQUESTS,nbTrials > MAX_AUTH_REQUESTS);
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testFailAuthenticationWithWaitFor() throws Exception {
+  final int MAX_AUTH_REQUESTS=10;
+  PropertyResolverUtils.updateProperty(sshd,ServerAuthenticationManager.MAX_AUTH_REQUESTS,MAX_AUTH_REQUESTS);
+  sshd.start();
+  client.setServiceFactories(Arrays.asList(new ClientUserAuthServiceOld.Factory(),ClientConnectionServiceFactory.INSTANCE));
+  client.start();
+  try (ClientSession s=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    int nbTrials=0;
+    Collection<ClientSession.ClientSessionEvent> res=Collections.emptySet();
+    Collection<ClientSession.ClientSessionEvent> mask=EnumSet.of(ClientSession.ClientSessionEvent.CLOSED,ClientSession.ClientSessionEvent.WAIT_AUTH);
+    while (!res.contains(ClientSession.ClientSessionEvent.CLOSED)) {
+      nbTrials++;
+      s.getService(ClientUserAuthServiceOld.class).auth(new org.apache.sshd.deprecated.UserAuthPassword(s,"ssh-connection","buggy"));
+      res=s.waitFor(mask,TimeUnit.SECONDS.toMillis(5L));
+      assertFalse("Timeout signalled",res.contains(ClientSession.ClientSessionEvent.TIMEOUT));
+    }
+    assertTrue("Number trials (" + nbTrials + ") below min.="+ MAX_AUTH_REQUESTS,nbTrials > MAX_AUTH_REQUESTS);
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  if (sshd != null) {
+    sshd.stop(true);
+  }
+  if (client != null) {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 type-2 type-12 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLanguageNegotiation() throws Exception {
+  sshd.start();
+  client.setSessionFactory(new org.apache.sshd.client.session.SessionFactory(client){
+    @Override protected ClientSessionImpl doCreateSession(    IoSession ioSession) throws Exception {
+      return new ClientSessionImpl(getClient(),ioSession){
+        @Override protected Map<KexProposalOption,String> createProposal(        String hostKeyTypes){
+          Map<KexProposalOption,String> proposal=super.createProposal(hostKeyTypes);
+          proposal.put(KexProposalOption.S2CLANG,"en-US");
+          proposal.put(KexProposalOption.C2SLANG,"en-US");
+          return proposal;
+        }
+      }
+;
+    }
+  }
+);
+  final Semaphore sigSem=new Semaphore(0,true);
+  client.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+      outputDebugMessage("Session created: %s",session);
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      if (Event.KeyEstablished.equals(event)) {
+        for (        KexProposalOption option : new KexProposalOption[]{KexProposalOption.S2CLANG,KexProposalOption.C2SLANG}) {
+          assertNull("Unexpected negotiated language for " + option,session.getNegotiatedKexParameter(option));
+        }
+        sigSem.release();
+      }
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+      outputDebugMessage("Session %s exception %s caught: %s",session,t.getClass().getSimpleName(),t.getMessage());
+    }
+    @Override public void sessionClosed(    Session session){
+      outputDebugMessage("Session closed: %s",session);
+    }
+  }
+);
+  client.start();
+  try (ClientSession s=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    assertTrue("Failed to receive signal on time",sigSem.tryAcquire(11L,TimeUnit.SECONDS));
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testIdleTimeout() throws Exception {
+  final CountDownLatch latch=new CountDownLatch(1);
+  TestEchoShell.latch=new CountDownLatch(1);
+  final long IDLE_TIMEOUT=2500;
+  PropertyResolverUtils.updateProperty(sshd,FactoryManager.IDLE_TIMEOUT,IDLE_TIMEOUT);
+  sshd.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+      outputDebugMessage("Session created: %s",session);
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      outputDebugMessage("Session %s event: ",session,event);
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+      outputDebugMessage("Session %s exception %s caught: %s",session,t.getClass().getSimpleName(),t.getMessage());
+    }
+    @Override public void sessionClosed(    Session session){
+      outputDebugMessage("Session closed: %s",session);
+      latch.countDown();
+    }
+  }
+);
+  TestChannelListener channelListener=new TestChannelListener();
+  sshd.addChannelListener(channelListener);
+  sshd.start();
+  client.start();
+  try (ClientSession s=createTestClientSession(sshd);ChannelShell shell=s.createShellChannel();ByteArrayOutputStream out=new ByteArrayOutputStream();ByteArrayOutputStream err=new ByteArrayOutputStream()){
+    shell.setOut(out);
+    shell.setErr(err);
+    shell.open().verify(9L,TimeUnit.SECONDS);
+    assertTrue("No changes in activated channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No activated server side channels",GenericUtils.size(channelListener.getActiveChannels()) > 0);
+    assertTrue("No changes in open channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No open server side channels",GenericUtils.size(channelListener.getOpenChannels()) > 0);
+    Collection<ClientSession.ClientSessionEvent> res=s.waitFor(EnumSet.of(ClientSession.ClientSessionEvent.CLOSED),2L * IDLE_TIMEOUT);
+    assertTrue("Session should be closed and authenticated: " + res,res.containsAll(EnumSet.of(ClientSession.ClientSessionEvent.CLOSED,ClientSession.ClientSessionEvent.AUTHED)));
+  }
+  finally {
+    client.stop();
+  }
+  assertTrue("Session latch not signalled in time",latch.await(1L,TimeUnit.SECONDS));
+  assertTrue("Shell latch not signalled in time",TestEchoShell.latch.await(1L,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<pre class="type-2 type-3 type-7 type-12 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCompressionNegotiation() throws Exception {
+  sshd.setSessionFactory(new org.apache.sshd.server.session.SessionFactory(sshd){
+    @Override protected ServerSessionImpl doCreateSession(    IoSession ioSession) throws Exception {
+      return new ServerSessionImpl(getServer(),ioSession){
+        @Override protected Map<KexProposalOption,String> createProposal(        String hostKeyTypes){
+          Map<KexProposalOption,String> proposal=super.createProposal(hostKeyTypes);
+          proposal.put(KexProposalOption.C2SCOMP,getCurrentTestName());
+          proposal.put(KexProposalOption.S2CCOMP,getCurrentTestName());
+          return proposal;
+        }
+      }
+;
+    }
+  }
+);
+  sshd.start();
+  client.setSessionFactory(new org.apache.sshd.client.session.SessionFactory(client){
+    @Override protected ClientSessionImpl doCreateSession(    IoSession ioSession) throws Exception {
+      return new ClientSessionImpl(getClient(),ioSession){
+        @Override protected Map<KexProposalOption,String> createProposal(        String hostKeyTypes){
+          Map<KexProposalOption,String> proposal=super.createProposal(hostKeyTypes);
+          proposal.put(KexProposalOption.C2SCOMP,getCurrentTestName());
+          proposal.put(KexProposalOption.S2CCOMP,getCurrentTestName());
+          return proposal;
+        }
+      }
+;
+    }
+  }
+);
+  final Semaphore sigSem=new Semaphore(0,true);
+  client.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+      outputDebugMessage("Session created: %s",session);
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      assertNotEquals("Unexpected key establishment success",Event.KeyEstablished,event);
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+      outputDebugMessage("Session %s exception %s caught: %s",session,t.getClass().getSimpleName(),t.getMessage());
+    }
+    @Override public void sessionClosed(    Session session){
+      sigSem.release();
+    }
+  }
+);
+  client.start();
+  try {
+    try (ClientSession s=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+      assertTrue("Session closing not signalled on time",sigSem.tryAcquire(5L,TimeUnit.SECONDS));
+      for (      boolean incoming : new boolean[]{true,false}) {
+        assertNull("Unexpected compression information for incoming=" + incoming,s.getCompressionInformation(incoming));
+      }
+      assertFalse("Session unexpectedly still open",s.isOpen());
+    }
+   }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKexCompletedEvent() throws Exception {
+  final AtomicInteger serverEventCount=new AtomicInteger(0);
+  sshd.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      if (event == Event.KexCompleted) {
+        serverEventCount.incrementAndGet();
+      }
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+    }
+    @Override public void sessionClosed(    Session session){
+    }
+  }
+);
+  sshd.start();
+  final AtomicInteger clientEventCount=new AtomicInteger(0);
+  client.addSessionListener(new SessionListener(){
+    @Override public void sessionCreated(    Session session){
+    }
+    @Override public void sessionEvent(    Session session,    Event event){
+      if (event == Event.KexCompleted) {
+        clientEventCount.incrementAndGet();
+      }
+    }
+    @Override public void sessionException(    Session session,    Throwable t){
+    }
+    @Override public void sessionClosed(    Session session){
+    }
+  }
+);
+  client.start();
+  try (ClientSession s=createTestClientSession(sshd)){
+    assertEquals("Mismatched client events count",1,clientEventCount.get());
+    assertEquals("Mismatched server events count",1,serverEventCount.get());
+    s.close(false);
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-3 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaxKeyboardInteractiveTrialsSetting() throws Exception {
+  sshd.setPasswordAuthenticator(RejectAllPasswordAuthenticator.INSTANCE);
+  sshd.setPublickeyAuthenticator(RejectAllPublickeyAuthenticator.INSTANCE);
+  final InteractiveChallenge challenge=new InteractiveChallenge();
+  challenge.setInteractionInstruction(getCurrentTestName());
+  challenge.setInteractionName(getClass().getSimpleName());
+  challenge.setLanguageTag("il-heb");
+  challenge.addPrompt(new PromptEntry("Password",false));
+  final AtomicInteger serverCount=new AtomicInteger(0);
+  sshd.setKeyboardInteractiveAuthenticator(new KeyboardInteractiveAuthenticator(){
+    @Override public InteractiveChallenge generateChallenge(    ServerSession session,    String username,    String lang,    String subMethods){
+      return challenge;
+    }
+    @Override public boolean authenticate(    ServerSession session,    String username,    List<String> responses) throws Exception {
+      outputDebugMessage("authenticate(%s@%s) count=%s",username,session,serverCount);
+      serverCount.incrementAndGet();
+      return false;
+    }
+  }
+);
+  sshd.start();
+  String authMethods=GenericUtils.join(Arrays.asList(UserAuthMethodFactory.KB_INTERACTIVE,UserAuthMethodFactory.PUBLIC_KEY,UserAuthMethodFactory.PUBLIC_KEY),',');
+  PropertyResolverUtils.updateProperty(client,ClientAuthenticationManager.PREFERRED_AUTHS,authMethods);
+  final AtomicInteger clientCount=new AtomicInteger(0);
+  final String[] replies={getCurrentTestName()};
+  client.setUserInteraction(new UserInteraction(){
+    @Override public void welcome(    ClientSession session,    String banner,    String lang){
+    }
+    @Override public boolean isInteractionAllowed(    ClientSession session){
+      return true;
+    }
+    @Override public String[] interactive(    ClientSession session,    String name,    String instruction,    String lang,    String[] prompt,    boolean[] echo){
+      clientCount.incrementAndGet();
+      return replies;
+    }
+    @Override public String getUpdatedPassword(    ClientSession session,    String prompt,    String lang){
+      throw new UnsupportedOperationException("Unexpected updated password request");
+    }
+  }
+);
+  client.start();
+  try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    AuthFuture auth=session.auth();
+    assertTrue("Failed to complete authentication on time",auth.await(17L,TimeUnit.SECONDS));
+    assertFalse("Unexpected authentication success",auth.isSuccess());
+    assertEquals("Mismatched interactive server challenge calls",ClientAuthenticationManager.DEFAULT_PASSWORD_PROMPTS,serverCount.get());
+    assertEquals("Mismatched interactive client challenge calls",ClientAuthenticationManager.DEFAULT_PASSWORD_PROMPTS,clientCount.get());
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-3 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testImmediateAuthFailureOpcode() throws Exception {
+  sshd.setPasswordAuthenticator(RejectAllPasswordAuthenticator.INSTANCE);
+  sshd.setPublickeyAuthenticator(RejectAllPublickeyAuthenticator.INSTANCE);
+  final AtomicInteger challengeCount=new AtomicInteger(0);
+  sshd.setKeyboardInteractiveAuthenticator(new KeyboardInteractiveAuthenticator(){
+    @Override public InteractiveChallenge generateChallenge(    ServerSession session,    String username,    String lang,    String subMethods){
+      challengeCount.incrementAndGet();
+      outputDebugMessage("generateChallenge(%s@%s) count=%s",username,session,challengeCount);
+      return null;
+    }
+    @Override public boolean authenticate(    ServerSession session,    String username,    List<String> responses) throws Exception {
+      return false;
+    }
+  }
+);
+  sshd.start();
+  String authMethods=GenericUtils.join(Arrays.asList(UserAuthMethodFactory.KB_INTERACTIVE,UserAuthMethodFactory.PUBLIC_KEY,UserAuthMethodFactory.PUBLIC_KEY),',');
+  PropertyResolverUtils.updateProperty(client,ClientAuthenticationManager.PREFERRED_AUTHS,authMethods);
+  client.start();
+  try (ClientSession session=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    AuthFuture auth=session.auth();
+    assertTrue("Failed to complete authentication on time",auth.await(17L,TimeUnit.SECONDS));
+    assertFalse("Unexpected authentication success",auth.isSuccess());
+    assertEquals("Mismatched interactive challenge calls",1,challengeCount.get());
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-2 type-3 type-7 type-12 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEnvironmentVariablesPropagationToServer() throws Exception {
+  final AtomicReference<Environment> envHolder=new AtomicReference<Environment>(null);
+  sshd.setCommandFactory(new CommandFactory(){
+    @Override public Command createCommand(    final String command){
+      ValidateUtils.checkTrue(String.CASE_INSENSITIVE_ORDER.compare(command,getCurrentTestName()) == 0,"Unexpected command: %s",command);
+      return new Command(){
+        private ExitCallback cb;
+        @Override public void setOutputStream(        OutputStream out){
+        }
+        @Override public void setInputStream(        InputStream in){
+        }
+        @Override public void setExitCallback(        ExitCallback callback){
+          cb=callback;
+        }
+        @Override public void setErrorStream(        OutputStream err){
+        }
+        @Override public void destroy(){
+        }
+        @Override public void start(        Environment env) throws IOException {
+          if (envHolder.getAndSet(env) != null) {
+            throw new StreamCorruptedException("Multiple starts for command=" + command);
+          }
+          cb.onExit(0,command);
+        }
+      }
+;
+    }
+  }
+);
+  TestChannelListener channelListener=new TestChannelListener();
+  sshd.addChannelListener(channelListener);
+  sshd.start();
+  @SuppressWarnings("synthetic-access") Map<String,String> expected=new TreeMap<String,String>(String.CASE_INSENSITIVE_ORDER){
+    private static final long serialVersionUID=1L;
+{
+      put("test",getCurrentTestName());
+      put("port",Integer.toString(sshd.getPort()));
+      put("user",OsUtils.getCurrentUser());
+    }
+  }
+;
+  client.start();
+  try (ClientSession s=createTestClientSession(sshd);ChannelExec shell=s.createExecChannel(getCurrentTestName())){
+    for (    Map.Entry<String,String> ee : expected.entrySet()) {
+      shell.setEnv(ee.getKey(),ee.getValue());
+    }
+    shell.open().verify(5L,TimeUnit.SECONDS);
+    assertTrue("No changes in activated channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No activated server side channels",GenericUtils.size(channelListener.getActiveChannels()) > 0);
+    assertTrue("No changes in open channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+    assertTrue("No open server side channels",GenericUtils.size(channelListener.getOpenChannels()) > 0);
+    Collection<ClientChannel.ClientChannelEvent> result=shell.waitFor(EnumSet.of(ClientChannel.ClientChannelEvent.CLOSED),TimeUnit.SECONDS.toMillis(17L));
+    assertFalse("Channel close timeout",result.contains(ClientChannel.ClientChannelEvent.TIMEOUT));
+    Integer status=shell.getExitStatus();
+    assertNotNull("No exit status",status);
+    assertEquals("Bad exit status",0,status.intValue());
+  }
+  finally {
+    client.stop();
+  }
+  assertTrue("No changes in closed channels",channelListener.waitForModification(3L,TimeUnit.SECONDS));
+  assertTrue("Still activated server side channels",GenericUtils.isEmpty(channelListener.getActiveChannels()));
+  Environment cmdEnv=envHolder.get();
+  assertNotNull("No environment set",cmdEnv);
+  Map<String,String> vars=cmdEnv.getEnv();
+  assertTrue("Mismatched vars count",GenericUtils.size(vars) >= GenericUtils.size(expected));
+  for (  Map.Entry<String,String> ee : expected.entrySet()) {
+    String key=ee.getKey(), expValue=ee.getValue(), actValue=vars.get(key);
+    assertEquals("Mismatched value for " + key,expValue,actValue);
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testAuthenticationTimeout() throws Exception {
+  final long AUTH_TIMEOUT=TimeUnit.SECONDS.toMillis(5L);
+  PropertyResolverUtils.updateProperty(sshd,FactoryManager.AUTH_TIMEOUT,AUTH_TIMEOUT);
+  sshd.start();
+  client.start();
+  try (ClientSession s=client.connect(getCurrentTestName(),TEST_LOCALHOST,sshd.getPort()).verify(7L,TimeUnit.SECONDS).getSession()){
+    Collection<ClientSession.ClientSessionEvent> res=s.waitFor(EnumSet.of(ClientSession.ClientSessionEvent.CLOSED),2L * AUTH_TIMEOUT);
+    assertTrue("Session should be closed: " + res,res.containsAll(EnumSet.of(ClientSession.ClientSessionEvent.CLOSED,ClientSession.ClientSessionEvent.WAIT_AUTH)));
+  }
+  finally {
+    client.stop();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

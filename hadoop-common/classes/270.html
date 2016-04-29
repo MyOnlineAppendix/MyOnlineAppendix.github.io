@@ -1,0 +1,49 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestDatanodeReport (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * This test attempts to different types of datanode report.
+ */
+@Test public void testDatanodeReport() throws Exception {
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,500);
+  conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,1L);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_OF_DATANODES).build();
+  try {
+    cluster.waitActive();
+    final String bpid=cluster.getNamesystem().getBlockPoolId();
+    final List<DataNode> datanodes=cluster.getDataNodes();
+    final DFSClient client=cluster.getFileSystem().dfs;
+    assertReports(NUM_OF_DATANODES,DatanodeReportType.ALL,client,datanodes,bpid);
+    assertReports(NUM_OF_DATANODES,DatanodeReportType.LIVE,client,datanodes,bpid);
+    assertReports(0,DatanodeReportType.DEAD,client,datanodes,bpid);
+    final DataNode last=datanodes.get(datanodes.size() - 1);
+    LOG.info("XXX shutdown datanode " + last.getDatanodeUuid());
+    last.shutdown();
+    DatanodeInfo[] nodeInfo=client.datanodeReport(DatanodeReportType.DEAD);
+    while (nodeInfo.length != 1) {
+      try {
+        Thread.sleep(500);
+      }
+ catch (      Exception e) {
+      }
+      nodeInfo=client.datanodeReport(DatanodeReportType.DEAD);
+    }
+    assertReports(NUM_OF_DATANODES,DatanodeReportType.ALL,client,datanodes,null);
+    assertReports(NUM_OF_DATANODES - 1,DatanodeReportType.LIVE,client,datanodes,null);
+    assertReports(1,DatanodeReportType.DEAD,client,datanodes,null);
+    Thread.sleep(5000);
+    assertGauge("ExpiredHeartbeats",1,getMetrics("FSNamesystem"));
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

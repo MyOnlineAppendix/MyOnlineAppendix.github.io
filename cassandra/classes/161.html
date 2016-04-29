@@ -1,0 +1,140 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.lifecycle.ViewTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFlushing(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  View initialView=fakeView(1,0,cfs);
+  View cur=initialView;
+  Memtable memtable1=initialView.getCurrentMemtable();
+  Memtable memtable2=MockSchema.memtable(cfs);
+  cur=View.switchMemtable(memtable2).apply(cur);
+  Assert.assertEquals(2,cur.liveMemtables.size());
+  Assert.assertEquals(memtable1,cur.liveMemtables.get(0));
+  Assert.assertEquals(memtable2,cur.getCurrentMemtable());
+  Memtable memtable3=MockSchema.memtable(cfs);
+  cur=View.switchMemtable(memtable3).apply(cur);
+  Assert.assertEquals(3,cur.liveMemtables.size());
+  Assert.assertEquals(0,cur.flushingMemtables.size());
+  Assert.assertEquals(memtable1,cur.liveMemtables.get(0));
+  Assert.assertEquals(memtable2,cur.liveMemtables.get(1));
+  Assert.assertEquals(memtable3,cur.getCurrentMemtable());
+  testFailure(View.replaceFlushed(memtable2,null),cur);
+  cur=View.markFlushing(memtable2).apply(cur);
+  Assert.assertTrue(cur.flushingMemtables.contains(memtable2));
+  Assert.assertEquals(2,cur.liveMemtables.size());
+  Assert.assertEquals(1,cur.flushingMemtables.size());
+  Assert.assertEquals(memtable2,cur.flushingMemtables.get(0));
+  Assert.assertEquals(memtable1,cur.liveMemtables.get(0));
+  Assert.assertEquals(memtable3,cur.getCurrentMemtable());
+  cur=View.markFlushing(memtable1).apply(cur);
+  Assert.assertEquals(1,cur.liveMemtables.size());
+  Assert.assertEquals(2,cur.flushingMemtables.size());
+  Assert.assertEquals(memtable1,cur.flushingMemtables.get(0));
+  Assert.assertEquals(memtable2,cur.flushingMemtables.get(1));
+  Assert.assertEquals(memtable3,cur.getCurrentMemtable());
+  cur=View.replaceFlushed(memtable2,null).apply(cur);
+  Assert.assertEquals(1,cur.liveMemtables.size());
+  Assert.assertEquals(1,cur.flushingMemtables.size());
+  Assert.assertEquals(memtable1,cur.flushingMemtables.get(0));
+  Assert.assertEquals(memtable3,cur.getCurrentMemtable());
+  SSTableReader sstable=MockSchema.sstable(1,cfs);
+  cur=View.replaceFlushed(memtable1,singleton(sstable)).apply(cur);
+  Assert.assertEquals(0,cur.flushingMemtables.size());
+  Assert.assertEquals(1,cur.liveMemtables.size());
+  Assert.assertEquals(memtable3,cur.getCurrentMemtable());
+  Assert.assertEquals(1,cur.sstables.size());
+  Assert.assertEquals(sstable,cur.sstablesMap.get(sstable));
+}
+
+</code></pre>
+
+<pre class="type-6 type-7 type-4 type-2 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testSSTablesInBounds(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  View initialView=fakeView(0,5,cfs);
+  for (int i=0; i < 5; i++) {
+    for (int j=i; j < 5; j++) {
+      PartitionPosition min=MockSchema.readerBounds(i);
+      PartitionPosition max=MockSchema.readerBounds(j);
+      for (      boolean minInc : new boolean[]{true}) {
+        for (        boolean maxInc : new boolean[]{true}) {
+          if (i == j && !(minInc && maxInc))           continue;
+          AbstractBounds<PartitionPosition> bounds=AbstractBounds.bounds(min,minInc,max,maxInc);
+          List<SSTableReader> r=ImmutableList.copyOf(initialView.sstablesInBounds(SSTableSet.LIVE,bounds.left,bounds.right));
+          Assert.assertEquals(String.format("%d(%s) %d(%s)",i,minInc,j,maxInc),j - i + (minInc ? 0 : -1) + (maxInc ? 1 : 0),r.size());
+        }
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-14 type-2 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCompaction(){
+  ColumnFamilyStore cfs=MockSchema.newCFS();
+  View initialView=fakeView(0,5,cfs);
+  View cur=initialView;
+  List<SSTableReader> readers=ImmutableList.copyOf(initialView.sstables);
+  Assert.assertTrue(View.permitCompacting(readers).apply(cur));
+  Assert.assertTrue(View.permitCompacting(ImmutableList.copyOf(concat(readers,readers))).apply(cur));
+  testFailure(View.updateCompacting(emptySet(),concat(readers.subList(0,1),readers.subList(0,1))),cur);
+  cur=View.updateCompacting(emptySet(),readers.subList(0,2)).apply(cur);
+  Assert.assertTrue(View.permitCompacting(readers.subList(2,5)).apply(cur));
+  Assert.assertFalse(View.permitCompacting(readers.subList(0,2)).apply(cur));
+  Assert.assertFalse(View.permitCompacting(readers.subList(0,1)).apply(cur));
+  Assert.assertFalse(View.permitCompacting(readers.subList(1,2)).apply(cur));
+  Assert.assertTrue(readers.subList(2,5).containsAll(copyOf(cur.getUncompacting(readers))));
+  Assert.assertEquals(3,copyOf(cur.getUncompacting(readers)).size());
+  Assert.assertTrue(ImmutableSet.copyOf(cur.sstables(SSTableSet.NONCOMPACTING)).containsAll(readers.subList(2,5)));
+  Assert.assertEquals(3,ImmutableSet.copyOf(cur.sstables(SSTableSet.NONCOMPACTING)).size());
+  testFailure(View.updateCompacting(emptySet(),readers.subList(0,1)),cur);
+  testFailure(View.updateCompacting(emptySet(),readers.subList(1,2)),cur);
+  testFailure(View.updateCompacting(copyOf(readers.subList(0,1)),readers.subList(1,2)),cur);
+  SSTableReader r0=MockSchema.sstable(0,cfs), r1=MockSchema.sstable(1,cfs), r2=MockSchema.sstable(2,cfs);
+  testFailure(View.updateCompacting(emptySet(),of(r2)),cur);
+  cur=View.updateLiveSet(copyOf(readers.subList(1,3)),of(r1,r2)).apply(cur);
+  Assert.assertSame(readers.get(0),cur.sstablesMap.get(r0));
+  Assert.assertSame(r1,cur.sstablesMap.get(r1));
+  Assert.assertSame(r2,cur.sstablesMap.get(r2));
+  testFailure(View.updateCompacting(emptySet(),readers.subList(2,3)),cur);
+  Assert.assertSame(readers.get(1),Iterables.getFirst(Iterables.filter(cur.compacting,Predicates.equalTo(r1)),null));
+  cur=View.updateCompacting(copyOf(readers.subList(0,1)),emptySet()).apply(cur);
+  Assert.assertTrue(View.permitCompacting(concat(readers.subList(0,1),of(r2),readers.subList(3,5))).apply(cur));
+  Assert.assertFalse(View.permitCompacting(readers.subList(1,2)).apply(cur));
+  testFailure(View.updateCompacting(emptySet(),readers.subList(1,2)),cur);
+  testFailure(View.updateCompacting(copyOf(readers.subList(0,2)),emptySet()),cur);
+  Assert.assertTrue(copyOf(concat(readers.subList(0,1),readers.subList(2,5))).containsAll(copyOf(cur.getUncompacting(readers))));
+  Assert.assertEquals(4,copyOf(cur.getUncompacting(readers)).size());
+  Set<SSTableReader> nonCompacting=ImmutableSet.copyOf(cur.sstables(SSTableSet.NONCOMPACTING));
+  Assert.assertTrue(nonCompacting.containsAll(readers.subList(2,5)));
+  Assert.assertTrue(nonCompacting.containsAll(readers.subList(0,1)));
+  Assert.assertEquals(4,nonCompacting.size());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

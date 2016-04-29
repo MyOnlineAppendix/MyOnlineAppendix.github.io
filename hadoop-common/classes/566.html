@@ -1,0 +1,54 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.ha.TestHAAppend (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test to verify the processing of PendingDataNodeMessageQueue in case of
+ * append. One block will marked as corrupt if the OP_ADD, OP_UPDATE_BLOCKS
+ * comes in one edit log segment and OP_CLOSE edit comes in next log segment
+ * which is loaded during failover. Regression test for HDFS-3605.
+ */
+@Test public void testMultipleAppendsDuringCatchupTailing() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(DFSConfigKeys.DFS_HA_TAILEDITS_PERIOD_KEY,"5000");
+  conf.setInt(DFSConfigKeys.DFS_HA_LOGROLL_PERIOD_KEY,-1);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).nnTopology(MiniDFSNNTopology.simpleHATopology()).numDataNodes(3).build();
+  FileSystem fs=null;
+  try {
+    cluster.transitionToActive(0);
+    fs=HATestUtil.configureFailoverFs(cluster,conf);
+    Path fileToAppend=new Path("/FileToAppend");
+    FSDataOutputStream out=fs.create(fileToAppend);
+    out.writeBytes("/data");
+    out.hflush();
+    cluster.getNameNode(0).getRpcServer().rollEditLog();
+    cluster.getNameNode(1).getNamesystem().getEditLogTailer().doTailEdits();
+    out.close();
+    for (int i=0; i < 5; i++) {
+      DFSTestUtil.appendFile(fs,fileToAppend,"data");
+    }
+    cluster.triggerBlockReports();
+    cluster.shutdownNameNode(0);
+    cluster.transitionToActive(1);
+    int rc=ToolRunner.run(new DFSck(cluster.getConfiguration(1)),new String[]{"/","-files","-blocks"});
+    assertEquals(0,rc);
+    assertEquals("CorruptBlocks should be empty.",0,cluster.getNameNode(1).getNamesystem().getCorruptReplicaBlocks());
+  }
+  finally {
+    if (null != cluster) {
+      cluster.shutdown();
+    }
+    if (null != fs) {
+      fs.close();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

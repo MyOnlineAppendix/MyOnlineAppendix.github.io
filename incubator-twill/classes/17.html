@@ -1,0 +1,141 @@
+<h3 style="margin:0px">Class: org.apache.twill.kafka.client.KafkaTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testKafkaClient() throws Exception {
+  String topic="testClient";
+  Thread t1=createPublishThread(kafkaClient,topic,Compression.GZIP,"GZIP Testing message",10);
+  Thread t2=createPublishThread(kafkaClient,topic,Compression.NONE,"Testing message",10);
+  t1.start();
+  t2.start();
+  Thread t3=createPublishThread(kafkaClient,topic,Compression.SNAPPY,"Snappy Testing message",10);
+  t2.join();
+  t3.start();
+  final CountDownLatch latch=new CountDownLatch(30);
+  final CountDownLatch stopLatch=new CountDownLatch(1);
+  Cancellable cancel=kafkaClient.getConsumer().prepare().add(topic,0,0).consume(new KafkaConsumer.MessageCallback(){
+    @Override public void onReceived(    Iterator<FetchedMessage> messages){
+      while (messages.hasNext()) {
+        LOG.info(Charsets.UTF_8.decode(messages.next().getPayload()).toString());
+        latch.countDown();
+      }
+    }
+    @Override public void finished(){
+      stopLatch.countDown();
+    }
+  }
+);
+  Assert.assertTrue(latch.await(5,TimeUnit.SECONDS));
+  cancel.cancel();
+  Assert.assertTrue(stopLatch.await(1,TimeUnit.SECONDS));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testKafkaClientReconnect() throws Exception {
+  String topic="backoff";
+  Properties kafkServerConfig=generateKafkaConfig(zkServer.getConnectionStr() + "/backoff");
+  EmbeddedKafkaServer server=new EmbeddedKafkaServer(kafkServerConfig);
+  ZKClientService zkClient=ZKClientService.Builder.of(zkServer.getConnectionStr() + "/backoff").build();
+  zkClient.startAndWait();
+  try {
+    zkClient.create("/",null,CreateMode.PERSISTENT).get();
+    ZKKafkaClientService kafkaClient=new ZKKafkaClientService(zkClient);
+    kafkaClient.startAndWait();
+    try {
+      server.startAndWait();
+      try {
+        createPublishThread(kafkaClient,topic,Compression.NONE,"First message",1).start();
+        final BlockingQueue<String> queue=new LinkedBlockingQueue<>();
+        Cancellable cancel=kafkaClient.getConsumer().prepare().add(topic,0,0).consume(new KafkaConsumer.MessageCallback(){
+          @Override public void onReceived(          Iterator<FetchedMessage> messages){
+            while (messages.hasNext()) {
+              queue.offer(Charsets.UTF_8.decode(messages.next().getPayload()).toString());
+            }
+          }
+          @Override public void finished(){
+          }
+        }
+);
+        Assert.assertEquals("0 First message",queue.poll(60,TimeUnit.SECONDS));
+        server.stopAndWait();
+        server=new EmbeddedKafkaServer(kafkServerConfig);
+        server.startAndWait();
+        createPublishThread(kafkaClient,topic,Compression.NONE,"Second message",1).start();
+        Assert.assertEquals("0 Second message",queue.poll(60,TimeUnit.SECONDS));
+        cancel.cancel();
+      }
+  finally {
+        kafkaClient.stopAndWait();
+      }
+    }
+  finally {
+      server.stopAndWait();
+    }
+  }
+  finally {
+    zkClient.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBrokerChange() throws Exception {
+  String connectionStr=zkServer.getConnectionStr() + "/broker_change";
+  ZKClientService zkClient=ZKClientService.Builder.of(connectionStr).build();
+  zkClient.startAndWait();
+  zkClient.create("/",null,CreateMode.PERSISTENT).get();
+  File logDir=TMP_FOLDER.newFolder();
+  EmbeddedKafkaServer server=new EmbeddedKafkaServer(generateKafkaConfig(connectionStr,logDir));
+  server.startAndWait();
+  KafkaClientService kafkaClient=new ZKKafkaClientService(zkClient);
+  kafkaClient.startAndWait();
+  final BlockingQueue<String> consumedMessages=Queues.newLinkedBlockingQueue();
+  Cancellable cancelConsumer=kafkaClient.getConsumer().prepare().addFromBeginning("test",0).consume(new KafkaConsumer.MessageCallback(){
+    @Override public void onReceived(    Iterator<FetchedMessage> messages){
+      while (messages.hasNext()) {
+        consumedMessages.add(Charsets.UTF_8.decode(messages.next().getPayload()).toString());
+      }
+    }
+    @Override public void finished(){
+    }
+  }
+);
+  KafkaPublisher publisher=kafkaClient.getPublisher(KafkaPublisher.Ack.FIRE_AND_FORGET,Compression.NONE);
+  publisher.prepare("test").add(Charsets.UTF_8.encode("Message 0"),0).send().get();
+  Assert.assertEquals("Message 0",consumedMessages.poll(5,TimeUnit.SECONDS));
+  server.stopAndWait();
+  server=new EmbeddedKafkaServer(generateKafkaConfig(connectionStr,logDir));
+  server.startAndWait();
+  TimeUnit.SECONDS.sleep(3);
+  publisher.prepare("test").add(Charsets.UTF_8.encode("Message 1"),0).send().get();
+  Assert.assertEquals("Message 1",consumedMessages.poll(5,TimeUnit.SECONDS));
+  kafkaClient.stopAndWait();
+  zkClient.stopAndWait();
+  server.stopAndWait();
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void finish() throws Exception {
+  Services.chainStop(kafkaClient,zkClientService).get();
+  kafkaServer.stopAndWait();
+  zkServer.stopAndWait();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

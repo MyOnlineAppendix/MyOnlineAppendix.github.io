@@ -1,0 +1,41 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspIterativeVerifier</h3><kbd>Verifies assertions in iterations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.provisionr.amazon.activities.RunOnDemandInstancesLiveTest </h4><pre class="type-9 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testRunInstancesWithBlockDevices() throws Exception {
+  BlockDevice blockDevice=mock(BlockDevice.class);
+  when(blockDevice.getSize()).thenReturn(8);
+  when(blockDevice.getName()).thenReturn("/dev/sda1");
+  BlockDevice blockDevice2=mock(BlockDevice.class);
+  when(blockDevice2.getSize()).thenReturn(16);
+  when(blockDevice2.getName()).thenReturn("/dev/sda4");
+  when(hardware.getBlockDevices()).thenReturn(Lists.newArrayList(blockDevice,blockDevice2));
+  activity.execute(execution);
+  Uninterruptibles.sleepUninterruptibly(30,TimeUnit.SECONDS);
+  @SuppressWarnings("unchecked") List<String> instanceIds=(List<String>)collector.getVariable(ProcessVariables.INSTANCE_IDS);
+  DescribeInstancesResult result=client.describeInstances(new DescribeInstancesRequest().withInstanceIds(instanceIds));
+  Instance instance=result.getReservations().get(0).getInstances().get(0);
+  List<InstanceBlockDeviceMapping> bdm=instance.getBlockDeviceMappings();
+  assertThat(bdm).hasSize(2);
+  List<String> volumeIds=Lists.newArrayList();
+  for (int i=0; i < bdm.size(); i++) {
+    assertThat(bdm.get(i).getDeviceName()).isEqualTo("/dev/sda" + ((i + 1) * (i + 1)));
+    assertThat(bdm.get(i).getEbs().getDeleteOnTermination()).isTrue();
+    volumeIds.add(bdm.get(i).getEbs().getVolumeId());
+  }
+  DescribeVolumesResult volumesResult=client.describeVolumes(new DescribeVolumesRequest().withVolumeIds(volumeIds));
+  for (  Volume volume : volumesResult.getVolumes()) {
+    assertThat(volume.getState()).isIn(Lists.newArrayList("creating","available","in-use"));
+  }
+  assertThat(volumesResult.getVolumes().get(0).getSize()).isNotEqualTo(volumesResult.getVolumes().get(1).getSize());
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

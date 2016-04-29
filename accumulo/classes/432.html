@@ -1,0 +1,51 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.performance.metadata.FastBulkImportIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void test() throws Exception {
+  log.info("Creating table");
+  final String tableName=getUniqueNames(1)[0];
+  final Connector c=getConnector();
+  c.tableOperations().create(tableName);
+  log.info("Adding splits");
+  SortedSet<Text> splits=new TreeSet<>();
+  for (int i=1; i < 0xfff; i+=7) {
+    splits.add(new Text(Integer.toHexString(i)));
+  }
+  c.tableOperations().addSplits(tableName,splits);
+  log.info("Creating lots of bulk import files");
+  FileSystem fs=getCluster().getFileSystem();
+  Path basePath=getCluster().getTemporaryPath();
+  CachedConfiguration.setInstance(fs.getConf());
+  Path base=new Path(basePath,"testBulkFail_" + tableName);
+  fs.delete(base,true);
+  fs.mkdirs(base);
+  Path bulkFailures=new Path(base,"failures");
+  Path files=new Path(base,"files");
+  fs.mkdirs(bulkFailures);
+  fs.mkdirs(files);
+  for (int i=0; i < 100; i++) {
+    FileSKVWriter writer=FileOperations.getInstance().openWriter(files.toString() + "/bulk_" + i+ "."+ RFile.EXTENSION,fs,fs.getConf(),AccumuloConfiguration.getDefaultConfiguration());
+    writer.startDefaultLocalityGroup();
+    for (int j=0x100; j < 0xfff; j+=3) {
+      writer.append(new Key(Integer.toHexString(j)),new Value(new byte[0]));
+    }
+    writer.close();
+  }
+  log.info("Waiting for balance");
+  c.instanceOperations().waitForBalance();
+  log.info("Bulk importing files");
+  long now=System.currentTimeMillis();
+  c.tableOperations().importDirectory(tableName,files.toString(),bulkFailures.toString(),true);
+  double diffSeconds=(System.currentTimeMillis() - now) / 1000.;
+  log.info(String.format("Import took %.2f seconds",diffSeconds));
+  assertTrue(diffSeconds < 30);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

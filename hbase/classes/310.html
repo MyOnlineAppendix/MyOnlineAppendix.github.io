@@ -1,0 +1,226 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.mapreduce.TestLoadIncrementalHFilesSplitRecovery (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This test exercises the path where there is a split after initial
+ * validation but before the atomic bulk load call. We cannot use presplitting
+ * to test this path, so we actually inject a split just before the atomic
+ * region load.
+ */
+@Test(timeout=120000) public void testSplitWhileBulkLoadPhase() throws Exception {
+  final TableName table=TableName.valueOf("splitWhileBulkloadPhase");
+  try (Connection connection=ConnectionFactory.createConnection(util.getConfiguration())){
+    setupTable(connection,table,10);
+    populateTable(connection,table,1);
+    assertExpectedTable(table,ROWCOUNT,1);
+    final AtomicInteger attemptedCalls=new AtomicInteger();
+    LoadIncrementalHFiles lih2=new LoadIncrementalHFiles(util.getConfiguration()){
+      @Override protected void bulkLoadPhase(      final Table htable,      final Connection conn,      ExecutorService pool,      Deque<LoadQueueItem> queue,      final Multimap<ByteBuffer,LoadQueueItem> regionGroups) throws IOException {
+        int i=attemptedCalls.incrementAndGet();
+        if (i == 1) {
+          forceSplit(table);
+        }
+        super.bulkLoadPhase(htable,conn,pool,queue,regionGroups);
+      }
+    }
+;
+    try (Table t=connection.getTable(table);RegionLocator locator=connection.getRegionLocator(table);Admin admin=connection.getAdmin()){
+      Path bulk=buildBulkFiles(table,2);
+      lih2.doBulkLoad(bulk,admin,t,locator);
+    }
+     assertEquals(attemptedCalls.get(),3);
+    assertExpectedTable(table,ROWCOUNT,2);
+  }
+ }
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * This test splits a table and attempts to bulk load.  The bulk import files
+ * should be split before atomically importing.
+ */
+@Test(timeout=120000) public void testGroupOrSplitPresplit() throws Exception {
+  final TableName table=TableName.valueOf("groupOrSplitPresplit");
+  try (Connection connection=ConnectionFactory.createConnection(util.getConfiguration())){
+    setupTable(connection,table,10);
+    populateTable(connection,table,1);
+    assertExpectedTable(connection,table,ROWCOUNT,1);
+    forceSplit(table);
+    final AtomicInteger countedLqis=new AtomicInteger();
+    LoadIncrementalHFiles lih=new LoadIncrementalHFiles(util.getConfiguration()){
+      @Override protected List<LoadQueueItem> groupOrSplit(      Multimap<ByteBuffer,LoadQueueItem> regionGroups,      final LoadQueueItem item,      final Table htable,      final Pair<byte[][],byte[][]> startEndKeys) throws IOException {
+        List<LoadQueueItem> lqis=super.groupOrSplit(regionGroups,item,htable,startEndKeys);
+        if (lqis != null) {
+          countedLqis.addAndGet(lqis.size());
+        }
+        return lqis;
+      }
+    }
+;
+    Path bulk=buildBulkFiles(table,2);
+    try (Table t=connection.getTable(table);RegionLocator locator=connection.getRegionLocator(table);Admin admin=connection.getAdmin()){
+      lih.doBulkLoad(bulk,admin,t,locator);
+    }
+     assertExpectedTable(connection,table,ROWCOUNT,2);
+    assertEquals(20,countedLqis.get());
+  }
+ }
+
+</code></pre>
+
+<pre class="type-11 type-17 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This simulates an remote exception which should cause LIHF to exit with an
+ * exception.
+ */
+@Test(expected=IOException.class,timeout=120000) public void testGroupOrSplitFailure() throws Exception {
+  TableName table=TableName.valueOf("groupOrSplitFailure");
+  try (Connection connection=ConnectionFactory.createConnection(util.getConfiguration())){
+    setupTable(connection,table,10);
+    LoadIncrementalHFiles lih=new LoadIncrementalHFiles(util.getConfiguration()){
+      int i=0;
+      @Override protected List<LoadQueueItem> groupOrSplit(      Multimap<ByteBuffer,LoadQueueItem> regionGroups,      final LoadQueueItem item,      final Table table,      final Pair<byte[][],byte[][]> startEndKeys) throws IOException {
+        i++;
+        if (i == 5) {
+          throw new IOException("failure");
+        }
+        return super.groupOrSplit(regionGroups,item,table,startEndKeys);
+      }
+    }
+;
+    Path dir=buildBulkFiles(table,1);
+    try (Table t=connection.getTable(table);RegionLocator locator=connection.getRegionLocator(table);Admin admin=connection.getAdmin()){
+      lih.doBulkLoad(dir,admin,t,locator);
+    }
+   }
+   fail("doBulkLoad should have thrown an exception");
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=120000) public void testGroupOrSplitWhenRegionHoleExistsInMeta() throws Exception {
+  TableName tableName=TableName.valueOf("testGroupOrSplitWhenRegionHoleExistsInMeta");
+  byte[][] SPLIT_KEYS=new byte[][]{Bytes.toBytes("row_00000100")};
+  Connection connection=ConnectionFactory.createConnection(util.getConfiguration());
+  Table table=connection.getTable(tableName);
+  setupTableWithSplitkeys(tableName,10,SPLIT_KEYS);
+  Path dir=buildBulkFiles(tableName,2);
+  final AtomicInteger countedLqis=new AtomicInteger();
+  LoadIncrementalHFiles loader=new LoadIncrementalHFiles(util.getConfiguration()){
+    protected List<LoadQueueItem> groupOrSplit(    Multimap<ByteBuffer,LoadQueueItem> regionGroups,    final LoadQueueItem item,    final Table htable,    final Pair<byte[][],byte[][]> startEndKeys) throws IOException {
+      List<LoadQueueItem> lqis=super.groupOrSplit(regionGroups,item,htable,startEndKeys);
+      if (lqis != null) {
+        countedLqis.addAndGet(lqis.size());
+      }
+      return lqis;
+    }
+  }
+;
+  try (Table t=connection.getTable(tableName);RegionLocator locator=connection.getRegionLocator(tableName);Admin admin=connection.getAdmin()){
+    loader.doBulkLoad(dir,admin,t,locator);
+  }
+ catch (  Exception e) {
+    LOG.error("exeception=",e);
+  }
+  this.assertExpectedTable(tableName,ROWCOUNT,2);
+  dir=buildBulkFiles(tableName,3);
+  List<HRegionInfo> regionInfos=MetaTableAccessor.getTableRegions(connection,tableName);
+  for (  HRegionInfo regionInfo : regionInfos) {
+    if (Bytes.equals(regionInfo.getStartKey(),HConstants.EMPTY_BYTE_ARRAY)) {
+      MetaTableAccessor.deleteRegion(connection,regionInfo);
+      break;
+    }
+  }
+  try (Table t=connection.getTable(tableName);RegionLocator locator=connection.getRegionLocator(tableName);Admin admin=connection.getAdmin()){
+    loader.doBulkLoad(dir,admin,t,locator);
+  }
+ catch (  Exception e) {
+    LOG.error("exception=",e);
+    assertTrue("IOException expected",e instanceof IOException);
+  }
+  table.close();
+  regionInfos=MetaTableAccessor.getTableRegions(connection,tableName);
+  assertTrue(regionInfos.size() >= 1);
+  this.assertExpectedTable(connection,tableName,ROWCOUNT,2);
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-11 type-17 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that shows that exception thrown from the RS side will result in an
+ * exception on the LIHFile client.
+ */
+@Test(expected=IOException.class,timeout=120000) public void testBulkLoadPhaseFailure() throws Exception {
+  TableName table=TableName.valueOf("bulkLoadPhaseFailure");
+  final AtomicInteger attmptedCalls=new AtomicInteger();
+  final AtomicInteger failedCalls=new AtomicInteger();
+  util.getConfiguration().setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,2);
+  try (Connection connection=ConnectionFactory.createConnection(this.util.getConfiguration())){
+    setupTable(connection,table,10);
+    LoadIncrementalHFiles lih=new LoadIncrementalHFiles(util.getConfiguration()){
+      @Override protected List<LoadQueueItem> tryAtomicRegionLoad(      final Connection conn,      TableName tableName,      final byte[] first,      Collection<LoadQueueItem> lqis) throws IOException {
+        int i=attmptedCalls.incrementAndGet();
+        if (i == 1) {
+          Connection errConn=null;
+          try {
+            errConn=getMockedConnection(util.getConfiguration());
+          }
+ catch (          Exception e) {
+            LOG.fatal("mocking cruft, should never happen",e);
+            throw new RuntimeException("mocking cruft, should never happen");
+          }
+          failedCalls.incrementAndGet();
+          return super.tryAtomicRegionLoad((HConnection)errConn,tableName,first,lqis);
+        }
+        return super.tryAtomicRegionLoad((HConnection)conn,tableName,first,lqis);
+      }
+    }
+;
+    try {
+      Path dir=buildBulkFiles(table,1);
+      try (Table t=connection.getTable(table);RegionLocator locator=connection.getRegionLocator(table);Admin admin=connection.getAdmin()){
+        lih.doBulkLoad(dir,admin,t,locator);
+      }
+     }
+  finally {
+      util.getConfiguration().setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,HConstants.DEFAULT_HBASE_CLIENT_RETRIES_NUMBER);
+    }
+    fail("doBulkLoad should have thrown an exception");
+  }
+ }
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void teardownCluster() throws Exception {
+  util.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

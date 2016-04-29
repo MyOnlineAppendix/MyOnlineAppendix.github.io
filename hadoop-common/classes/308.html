@@ -1,0 +1,125 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestLeaseRecovery (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-13 type-7 type-10 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * The following test first creates a file with a few blocks.
+ * It randomly truncates the replica of the last block stored in each datanode.
+ * Finally, it triggers block synchronization to synchronize all stored block.
+ */
+@Test public void testBlockSynchronization() throws Exception {
+  final int ORG_FILE_SIZE=3000;
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,BLOCK_SIZE);
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(5).build();
+    cluster.waitActive();
+    DistributedFileSystem dfs=cluster.getFileSystem();
+    String filestr="/foo";
+    Path filepath=new Path(filestr);
+    DFSTestUtil.createFile(dfs,filepath,ORG_FILE_SIZE,REPLICATION_NUM,0L);
+    assertTrue(dfs.exists(filepath));
+    DFSTestUtil.waitReplication(dfs,filepath,REPLICATION_NUM);
+    LocatedBlock locatedblock=TestInterDatanodeProtocol.getLastLocatedBlock(dfs.dfs.getNamenode(),filestr);
+    DatanodeInfo[] datanodeinfos=locatedblock.getLocations();
+    assertEquals(REPLICATION_NUM,datanodeinfos.length);
+    DataNode[] datanodes=new DataNode[REPLICATION_NUM];
+    for (int i=0; i < REPLICATION_NUM; i++) {
+      datanodes[i]=cluster.getDataNode(datanodeinfos[i].getIpcPort());
+      assertTrue(datanodes[i] != null);
+    }
+    ExtendedBlock lastblock=locatedblock.getBlock();
+    DataNode.LOG.info("newblocks=" + lastblock);
+    for (int i=0; i < REPLICATION_NUM; i++) {
+      checkMetaInfo(lastblock,datanodes[i]);
+    }
+    DataNode.LOG.info("dfs.dfs.clientName=" + dfs.dfs.clientName);
+    cluster.getNameNodeRpc().append(filestr,dfs.dfs.clientName);
+    waitLeaseRecovery(cluster);
+    Block[] updatedmetainfo=new Block[REPLICATION_NUM];
+    long oldSize=lastblock.getNumBytes();
+    lastblock=TestInterDatanodeProtocol.getLastLocatedBlock(dfs.dfs.getNamenode(),filestr).getBlock();
+    long currentGS=lastblock.getGenerationStamp();
+    for (int i=0; i < REPLICATION_NUM; i++) {
+      updatedmetainfo[i]=DataNodeTestUtils.getFSDataset(datanodes[i]).getStoredBlock(lastblock.getBlockPoolId(),lastblock.getBlockId());
+      assertEquals(lastblock.getBlockId(),updatedmetainfo[i].getBlockId());
+      assertEquals(oldSize,updatedmetainfo[i].getNumBytes());
+      assertEquals(currentGS,updatedmetainfo[i].getGenerationStamp());
+    }
+    System.out.println("Testing that lease recovery cannot happen during safemode.");
+    filestr="/foo.safemode";
+    filepath=new Path(filestr);
+    dfs.create(filepath,(short)1);
+    cluster.getNameNodeRpc().setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_ENTER,false);
+    assertTrue(dfs.dfs.exists(filestr));
+    DFSTestUtil.waitReplication(dfs,filepath,(short)1);
+    waitLeaseRecovery(cluster);
+    LeaseManager lm=NameNodeAdapter.getLeaseManager(cluster.getNamesystem());
+    assertTrue("Found " + lm.countLease() + " lease, expected 1",lm.countLease() == 1);
+    cluster.getNameNodeRpc().setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_LEAVE,false);
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Block Recovery when the meta file not having crcs for all chunks in block
+ * file
+ */
+@Test public void testBlockRecoveryWithLessMetafile() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(DFSConfigKeys.DFS_BLOCK_LOCAL_PATH_ACCESS_USER_KEY,UserGroupInformation.getCurrentUser().getShortUserName());
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+  Path file=new Path("/testRecoveryFile");
+  DistributedFileSystem dfs=cluster.getFileSystem();
+  FSDataOutputStream out=dfs.create(file);
+  int count=0;
+  while (count < 2 * 1024 * 1024) {
+    out.writeBytes("Data");
+    count+=4;
+  }
+  out.hsync();
+  ((DFSOutputStream)out.getWrappedStream()).abort();
+  LocatedBlocks locations=cluster.getNameNodeRpc().getBlockLocations(file.toString(),0,count);
+  ExtendedBlock block=locations.get(0).getBlock();
+  DataNode dn=cluster.getDataNodes().get(0);
+  BlockLocalPathInfo localPathInfo=dn.getBlockLocalPathInfo(block,null);
+  File metafile=new File(localPathInfo.getMetaPath());
+  assertTrue(metafile.exists());
+  RandomAccessFile raf=new RandomAccessFile(metafile,"rw");
+  raf.setLength(metafile.length() - 20);
+  raf.close();
+  DataNodeProperties dnProp=cluster.stopDataNode(0);
+  cluster.restartDataNode(dnProp,true);
+  DistributedFileSystem newdfs=(DistributedFileSystem)FileSystem.newInstance(cluster.getConfiguration(0));
+  count=0;
+  while (++count < 10 && !newdfs.recoverLease(file)) {
+    Thread.sleep(1000);
+  }
+  assertTrue("File should be closed",newdfs.recoverLease(file));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

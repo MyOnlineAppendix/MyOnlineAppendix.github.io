@@ -1,0 +1,136 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.wal.TestLogRollAbort (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that RegionServer aborts if we hit an error closing the WAL when
+ * there are unsynced WAL edits.  See HBASE-4282.
+ */
+@Test public void testRSAbortWithUnflushedEdits() throws Exception {
+  LOG.info("Starting testRSAbortWithUnflushedEdits()");
+  TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME).close();
+  TableName tableName=TableName.valueOf(this.getClass().getSimpleName());
+  HTableDescriptor desc=new HTableDescriptor(tableName);
+  desc.addFamily(new HColumnDescriptor(HConstants.CATALOG_FAMILY));
+  admin.createTable(desc);
+  Table table=TEST_UTIL.getConnection().getTable(desc.getTableName());
+  try {
+    HRegionServer server=TEST_UTIL.getRSForFirstRegionInTable(tableName);
+    WAL log=server.getWAL(null);
+    assertTrue("Need append support for this test",FSUtils.isAppendSupported(TEST_UTIL.getConfiguration()));
+    Put p=new Put(Bytes.toBytes("row2001"));
+    p.addColumn(HConstants.CATALOG_FAMILY,Bytes.toBytes("col"),Bytes.toBytes(2001));
+    table.put(p);
+    log.sync();
+    p=new Put(Bytes.toBytes("row2002"));
+    p.addColumn(HConstants.CATALOG_FAMILY,Bytes.toBytes("col"),Bytes.toBytes(2002));
+    table.put(p);
+    dfsCluster.restartDataNodes();
+    LOG.info("Restarted datanodes");
+    try {
+      log.rollWriter(true);
+    }
+ catch (    FailedLogCloseException flce) {
+    }
+catch (    Throwable t) {
+      LOG.fatal("FAILED TEST: Got wrong exception",t);
+    }
+  }
+  finally {
+    table.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-10 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Tests the case where a RegionServer enters a GC pause,
+ * comes back online after the master declared it dead and started to split.
+ * Want log rolling after a master split to fail. See HBASE-2312.
+ */
+@Test(timeout=300000) public void testLogRollAfterSplitStart() throws IOException {
+  LOG.info("Verify wal roll after split starts will fail.");
+  String logName="testLogRollAfterSplitStart";
+  Path thisTestsDir=new Path(HBASEDIR,DefaultWALProvider.getWALDirectoryName(logName));
+  final WALFactory wals=new WALFactory(conf,null,logName);
+  try {
+    TableName tableName=TableName.valueOf(this.getClass().getName());
+    HRegionInfo regioninfo=new HRegionInfo(tableName,HConstants.EMPTY_START_ROW,HConstants.EMPTY_END_ROW);
+    final WAL log=wals.getWAL(regioninfo.getEncodedNameAsBytes(),regioninfo.getTable().getNamespace());
+    MultiVersionConcurrencyControl mvcc=new MultiVersionConcurrencyControl(1);
+    final int total=20;
+    for (int i=0; i < total; i++) {
+      WALEdit kvs=new WALEdit();
+      kvs.add(new KeyValue(Bytes.toBytes(i),tableName.getName(),tableName.getName()));
+      HTableDescriptor htd=new HTableDescriptor(tableName);
+      htd.addFamily(new HColumnDescriptor("column"));
+      log.append(htd,regioninfo,new WALKey(regioninfo.getEncodedNameAsBytes(),tableName,System.currentTimeMillis(),mvcc),kvs,true);
+    }
+    log.sync();
+    ((FSHLog)log).replaceWriter(((FSHLog)log).getOldPath(),null,null,null);
+    Path rsSplitDir=thisTestsDir.suffix(DefaultWALProvider.SPLITTING_EXT);
+    if (!fs.rename(thisTestsDir,rsSplitDir)) {
+      throw new IOException("Failed fs.rename for log split: " + thisTestsDir);
+    }
+    LOG.debug("Renamed region directory: " + rsSplitDir);
+    LOG.debug("Processing the old log files.");
+    WALSplitter.split(HBASEDIR,rsSplitDir,OLDLOGDIR,fs,conf,wals);
+    LOG.debug("Trying to roll the WAL.");
+    try {
+      log.rollWriter();
+      Assert.fail("rollWriter() did not throw any exception.");
+    }
+ catch (    IOException ioe) {
+      if (ioe.getCause() instanceof FileNotFoundException) {
+        LOG.info("Got the expected exception: ",ioe.getCause());
+      }
+ else {
+        Assert.fail("Unexpected exception: " + ioe);
+      }
+    }
+  }
+  finally {
+    wals.close();
+    if (fs.exists(thisTestsDir)) {
+      fs.delete(thisTestsDir,true);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  TEST_UTIL.startMiniCluster(2);
+  cluster=TEST_UTIL.getHBaseCluster();
+  dfsCluster=TEST_UTIL.getDFSCluster();
+  admin=TEST_UTIL.getHBaseAdmin();
+  conf=TEST_UTIL.getConfiguration();
+  fs=TEST_UTIL.getDFSCluster().getFileSystem();
+  cluster.getMaster().balanceSwitch(false);
+  FSUtils.setRootDir(conf,HBASEDIR);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

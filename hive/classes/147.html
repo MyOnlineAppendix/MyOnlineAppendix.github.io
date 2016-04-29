@@ -1,0 +1,177 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hive.ql.io.TestIOContextMap (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-6 type-12 type-4 type-5 type-14 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTezLlapAttemptMap() throws Exception {
+  final int THREAD_COUNT=2, ITER_COUNT=1000, ATTEMPT_COUNT=3;
+  final AtomicInteger countdown=new AtomicInteger(ITER_COUNT);
+  final IOContext[] results=new IOContext[ITER_COUNT * ATTEMPT_COUNT];
+  ExecutorService executor=Executors.newFixedThreadPool(THREAD_COUNT);
+  final CountDownLatch cdlIn=new CountDownLatch(THREAD_COUNT), cdlOut=new CountDownLatch(1);
+  @SuppressWarnings("unchecked") FutureTask<Void>[] tasks=new FutureTask[THREAD_COUNT];
+  for (int i=0; i < tasks.length; ++i) {
+    tasks[i]=new FutureTask<Void>(new Callable<Void>(){
+      public Void call() throws Exception {
+        final Configuration conf=new Configuration(), conf2=new Configuration();
+        syncThreadStart(cdlIn,cdlOut);
+        while (true) {
+          int nextIx=countdown.decrementAndGet();
+          if (nextIx < 0)           break;
+          String input1="Input " + nextIx;
+          conf.set(Utilities.INPUT_NAME,input1);
+          for (int j=0; j < ATTEMPT_COUNT; ++j) {
+            String attemptId="Attempt " + nextIx + ":"+ j;
+            IOContextMap.setThreadAttemptId(attemptId);
+            final IOContext r1=results[(nextIx * ATTEMPT_COUNT) + j]=IOContextMap.get(conf);
+            if ((nextIx % (ITER_COUNT / 10)) == 0) {
+              String input2="Input2 " + nextIx;
+              conf2.set(Utilities.INPUT_NAME,input2);
+              final AtomicReference<IOContext> ref2=new AtomicReference<>();
+              Thread t=new Thread(new Runnable(){
+                public void run(){
+                  assertSame(r1,IOContextMap.get(conf));
+                  ref2.set(IOContextMap.get(conf2));
+                }
+              }
+);
+              t.start();
+              t.join();
+              assertSame(ref2.get(),IOContextMap.get(conf2));
+            }
+          }
+          if (nextIx == 0)           break;
+        }
+        return null;
+      }
+    }
+);
+    executor.execute(tasks[i]);
+  }
+  cdlIn.await();
+  cdlOut.countDown();
+  for (int i=0; i < tasks.length; ++i) {
+    tasks[i].get();
+  }
+  Configuration conf=new Configuration();
+  Set<IOContext> resultSet=Sets.newIdentityHashSet();
+  for (int i=0; i < ITER_COUNT; ++i) {
+    conf.set(Utilities.INPUT_NAME,"Input " + i);
+    for (int j=0; j < ATTEMPT_COUNT; ++j) {
+      String attemptId="Attempt " + i + ":"+ j;
+      IOContext result=results[(i * ATTEMPT_COUNT) + j];
+      assertTrue(resultSet.add(result));
+      IOContextMap.setThreadAttemptId(attemptId);
+      assertSame(result,IOContextMap.get(conf));
+      IOContextMap.clearThreadAttempt(attemptId);
+      IOContextMap.setThreadAttemptId(attemptId);
+      assertNotSame(result,IOContextMap.get(conf));
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-4 type-5 type-14 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMRTezGlobalMap() throws Exception {
+  final int THREAD_COUNT=2, ITER_COUNT=1000;
+  final AtomicInteger countdown=new AtomicInteger(ITER_COUNT);
+  final CountDownLatch phase1End=new CountDownLatch(THREAD_COUNT);
+  final IOContext[] results=new IOContext[ITER_COUNT];
+  ExecutorService executor=Executors.newFixedThreadPool(THREAD_COUNT);
+  final CountDownLatch cdlIn=new CountDownLatch(THREAD_COUNT), cdlOut=new CountDownLatch(1);
+  @SuppressWarnings("unchecked") FutureTask<Void>[] tasks=new FutureTask[THREAD_COUNT];
+  for (int i=0; i < tasks.length; ++i) {
+    tasks[i]=new FutureTask<Void>(new Callable<Void>(){
+      public Void call() throws Exception {
+        Configuration conf=new Configuration();
+        syncThreadStart(cdlIn,cdlOut);
+        while (true) {
+          int nextIx=countdown.decrementAndGet();
+          if (nextIx < 0)           break;
+          conf.set(Utilities.INPUT_NAME,"Input " + nextIx);
+          results[nextIx]=IOContextMap.get(conf);
+          if (nextIx == 0)           break;
+        }
+        phase1End.countDown();
+        phase1End.await();
+        for (int i=0; i < ITER_COUNT; ++i) {
+          conf.set(Utilities.INPUT_NAME,"Input " + i);
+          IOContext ctx=IOContextMap.get(conf);
+          assertSame(results[i],ctx);
+        }
+        return null;
+      }
+    }
+);
+    executor.execute(tasks[i]);
+  }
+  cdlIn.await();
+  cdlOut.countDown();
+  for (int i=0; i < tasks.length; ++i) {
+    tasks[i].get();
+  }
+  Set<IOContext> resultSet=Sets.newIdentityHashSet();
+  for (int i=0; i < results.length; ++i) {
+    assertTrue(resultSet.add(results[i]));
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 type-6 type-4 type-5 type-14 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSparkThreadLocal() throws Exception {
+  final Configuration conf1=new Configuration();
+  conf1.set(HiveConf.ConfVars.HIVE_EXECUTION_ENGINE.varname,"spark");
+  final Configuration conf2=new Configuration(conf1);
+  conf2.set(Utilities.INPUT_NAME,"Other input");
+  final int THREAD_COUNT=2;
+  ExecutorService executor=Executors.newFixedThreadPool(THREAD_COUNT);
+  final CountDownLatch cdlIn=new CountDownLatch(THREAD_COUNT), cdlOut=new CountDownLatch(1);
+  @SuppressWarnings("unchecked") FutureTask<IOContext>[] tasks=new FutureTask[THREAD_COUNT];
+  for (int i=0; i < tasks.length; ++i) {
+    tasks[i]=new FutureTask<IOContext>(new Callable<IOContext>(){
+      public IOContext call() throws Exception {
+        syncThreadStart(cdlIn,cdlOut);
+        IOContext c1=IOContextMap.get(conf1), c2=IOContextMap.get(conf2);
+        assertSame(c1,c2);
+        return c1;
+      }
+    }
+);
+    executor.execute(tasks[i]);
+  }
+  cdlIn.await();
+  cdlOut.countDown();
+  Set<IOContext> results=Sets.newIdentityHashSet();
+  for (int i=0; i < tasks.length; ++i) {
+    assertTrue(results.add(tasks[i].get()));
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

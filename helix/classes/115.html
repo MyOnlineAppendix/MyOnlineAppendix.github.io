@@ -1,0 +1,116 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.manager.TestConsecutiveZkSessionExpiry (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-1 type-8 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultiClusterController() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  int n=2;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,4,n,2,"MasterSlave",true);
+  MockMultiClusterController[] multiClusterControllers=new MockMultiClusterController[n];
+  CountDownLatch startCountdown=new CountDownLatch(1);
+  CountDownLatch endCountdown=new CountDownLatch(1);
+  for (int i=0; i < n; i++) {
+    String contrllerName="localhost_" + (12918 + i);
+    multiClusterControllers[i]=new MockMultiClusterController(_zkaddr,clusterName,contrllerName);
+    multiClusterControllers[i].getStateMachineEngine().registerStateModelFactory(StateModelDefId.MasterSlave,new MockMSModelFactory());
+    if (i == 0) {
+      multiClusterControllers[i].addPreConnectCallback(new PreConnectTestCallback(contrllerName,startCountdown,endCountdown));
+    }
+    multiClusterControllers[i].connect();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  LOG.info("1st Expiring multiClusterController session...");
+  String oldSessionId=multiClusterControllers[0].getSessionId();
+  ZkTestHelper.asyncExpireSession(multiClusterControllers[0].getZkClient());
+  String newSessionId=multiClusterControllers[0].getSessionId();
+  LOG.info("Expried multiClusterController session. oldSessionId: " + oldSessionId + ", newSessionId: "+ newSessionId);
+  startCountdown.await();
+  LOG.info("2nd Expiring multiClusterController session...");
+  oldSessionId=multiClusterControllers[0].getSessionId();
+  ZkTestHelper.asyncExpireSession(multiClusterControllers[0].getZkClient());
+  newSessionId=multiClusterControllers[0].getSessionId();
+  LOG.info("Expried multiClusterController session. oldSessionId: " + oldSessionId + ", newSessionId: "+ newSessionId);
+  endCountdown.countDown();
+  result=ClusterStateVerifier.verifyByPolling(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  Assert.assertNotNull(HelixTestUtil.pollForProperty(LiveInstance.class,accessor,keyBuilder.liveInstance("localhost_12918"),true));
+  LiveInstance leader=HelixTestUtil.pollForProperty(LiveInstance.class,accessor,keyBuilder.controllerLeader(),true);
+  Assert.assertNotNull(leader);
+  Assert.assertEquals(leader.getId(),"localhost_12919");
+  TestHelper.printHandlers(multiClusterControllers[0],multiClusterControllers[0].getHandlers());
+  List<ZkCallbackHandler> handlers=multiClusterControllers[0].getHandlers();
+  Assert.assertEquals(handlers.size(),2,"MultiCluster controller should have 2 handler (message and leader election) after lose leadership, but was " + handlers.size());
+  multiClusterControllers[0].disconnect();
+  multiClusterControllers[1].disconnect();
+  Assert.assertNull(HelixTestUtil.pollForProperty(LiveInstance.class,accessor,keyBuilder.liveInstance("localhost_12918"),false));
+  Assert.assertNull(HelixTestUtil.pollForProperty(LiveInstance.class,accessor,keyBuilder.liveInstance("localhost_12919"),false));
+  Assert.assertNull(HelixTestUtil.pollForProperty(LiveInstance.class,accessor,keyBuilder.controllerLeader(),false));
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testParticipant() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  final int n=2;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,32,n,2,"MasterSlave",true);
+  final MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  CountDownLatch startCountdown=new CountDownLatch(1);
+  CountDownLatch endCountdown=new CountDownLatch(1);
+  MockParticipant[] participants=new MockParticipant[n];
+  for (int i=0; i < n; i++) {
+    final String instanceName="localhost_" + (12918 + i);
+    participants[i]=new MockParticipant(_zkaddr,clusterName,instanceName);
+    if (i == 0) {
+      participants[i].addPreConnectCallback(new PreConnectTestCallback(instanceName,startCountdown,endCountdown));
+    }
+    participants[i].syncStart();
+  }
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  LOG.info("1st Expiring participant session...");
+  String oldSessionId=participants[0].getSessionId();
+  ZkTestHelper.asyncExpireSession(participants[0].getZkClient());
+  String newSessionId=participants[0].getSessionId();
+  LOG.info("Expried participant session. oldSessionId: " + oldSessionId + ", newSessionId: "+ newSessionId);
+  startCountdown.await();
+  LOG.info("2nd Expiring participant session...");
+  oldSessionId=participants[0].getSessionId();
+  ZkTestHelper.asyncExpireSession(participants[0].getZkClient());
+  newSessionId=participants[0].getSessionId();
+  LOG.info("Expried participant session. oldSessionId: " + oldSessionId + ", newSessionId: "+ newSessionId);
+  endCountdown.countDown();
+  result=ClusterStateVerifier.verifyByPolling(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  controller.syncStop();
+  for (int i=0; i < n; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

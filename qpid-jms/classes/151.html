@@ -1,0 +1,452 @@
+<h3 style="margin:0px">Class: org.apache.qpid.jms.transactions.JmsTransactedConsumerTest (13 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(11)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-5 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=30000) public void testSessionTransactedCommitWithLocalPriorityReordering() throws Exception {
+  connection=createAmqpConnection();
+  ((JmsConnection)connection).setLocalMessagePriority(true);
+  Session session=connection.createSession(true,Session.AUTO_ACKNOWLEDGE);
+  Queue queue=session.createQueue(getDestinationName());
+  connection.start();
+  final CountDownLatch messagesArrived=new CountDownLatch(4);
+  ((JmsConnection)connection).addConnectionListener(new JmsConnectionListener(){
+    @Override public void onInboundMessage(    JmsInboundMessageDispatch envelope){
+      messagesArrived.countDown();
+    }
+    @Override public void onConnectionRestored(    URI remoteURI){
+    }
+    @Override public void onConnectionInterrupted(    URI remoteURI){
+    }
+    @Override public void onConnectionFailure(    Throwable error){
+    }
+    @Override public void onConnectionEstablished(    URI remoteURI){
+    }
+  }
+);
+  MessageProducer pr=session.createProducer(queue);
+  for (int i=1; i <= 2; i++) {
+    Message m=session.createTextMessage("TestMessage" + i);
+    m.setIntProperty(MSG_NUM,i);
+    pr.send(m,DeliveryMode.NON_PERSISTENT,Message.DEFAULT_PRIORITY,Message.DEFAULT_TIME_TO_LIVE);
+  }
+  session.commit();
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message msg=consumer.receive(5000);
+  assertNotNull(msg);
+  assertEquals(1,msg.getIntProperty(MSG_NUM));
+  assertEquals(Message.DEFAULT_PRIORITY,msg.getJMSPriority());
+  for (int i=3; i <= 4; i++) {
+    Message m=session.createTextMessage("TestMessage" + i);
+    m.setIntProperty(MSG_NUM,i);
+    pr.send(m,DeliveryMode.NON_PERSISTENT,5,Message.DEFAULT_TIME_TO_LIVE);
+  }
+  session.commit();
+  assertTrue("Messages didnt all arrive in given time.",messagesArrived.await(5,TimeUnit.SECONDS));
+  msg=consumer.receive(3000);
+  assertNotNull(msg);
+  assertEquals(3,msg.getIntProperty(MSG_NUM));
+  assertEquals(5,msg.getJMSPriority());
+  msg=consumer.receive(3000);
+  assertNotNull(msg);
+  assertEquals(4,msg.getIntProperty(MSG_NUM));
+  assertEquals(5,msg.getJMSPriority());
+  msg=consumer.receive(3000);
+  assertNotNull(msg);
+  assertEquals(2,msg.getIntProperty(MSG_NUM));
+  assertEquals(Message.DEFAULT_PRIORITY,msg.getJMSPriority());
+  session.commit();
+  for (int i=5; i <= 6; i++) {
+    Message m=session.createTextMessage("TestMessage" + i);
+    m.setIntProperty(MSG_NUM,i);
+    pr.send(m,DeliveryMode.NON_PERSISTENT,Message.DEFAULT_PRIORITY,Message.DEFAULT_TIME_TO_LIVE);
+  }
+  session.commit();
+  session.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testCreateConsumerFromTxSession() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  assertNotNull(session);
+  assertTrue(session.getTransacted());
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  assertNotNull(consumer);
+}
+
+</code></pre>
+
+<pre class="type-13 type-20 type-4 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=60000) public void testSingleConsumedMessagePerTxCase() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+  Destination queue=session.createQueue(getTestName());
+  MessageProducer messageProducer=session.createProducer(queue);
+  for (int i=0; i < MSG_COUNT; i++) {
+    TextMessage message=session.createTextMessage();
+    message.setText("test" + i);
+    messageProducer.send(message,DeliveryMode.PERSISTENT,javax.jms.Message.DEFAULT_PRIORITY,javax.jms.Message.DEFAULT_TIME_TO_LIVE);
+  }
+  session.close();
+  QueueViewMBean queueView=getProxyToQueue(getTestName());
+  assertEquals(MSG_COUNT,queueView.getQueueSize());
+  int counter=0;
+  session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  MessageConsumer messageConsumer=session.createConsumer(queue);
+  do {
+    TextMessage message=(TextMessage)messageConsumer.receive(1000);
+    if (message != null) {
+      counter++;
+      LOG.info("Message n. {} with content '{}' has been recieved.",counter,message.getText());
+      session.commit();
+      LOG.info("Transaction has been committed.");
+      assertEquals(MSG_COUNT - counter,queueView.getQueueSize());
+    }
+  }
+ while (counter < MSG_COUNT);
+  assertEquals(0,queueView.getQueueSize());
+  session.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReceiveTwoThenCloseSessionToRollback() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  sendToAmqQueue(2);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(2,proxy.getQueueSize());
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message message=consumer.receive(3000);
+  assertNotNull(message);
+  message=consumer.receive(3000);
+  assertNotNull(message);
+  session.rollback();
+  assertEquals(2,proxy.getQueueSize());
+  message=consumer.receive(5000);
+  assertNotNull("Should have re-received the message again!",message);
+  message=consumer.receive(5000);
+  assertNotNull("Should have re-received the message again!",message);
+  session.close();
+  assertEquals(2,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=60000) public void testConsumeAllMessagesInSingleTxCase() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  Session session=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+  Destination queue=session.createQueue(getTestName());
+  MessageProducer messageProducer=session.createProducer(queue);
+  for (int i=0; i < MSG_COUNT; i++) {
+    TextMessage message=session.createTextMessage();
+    message.setText("test" + i);
+    messageProducer.send(message,DeliveryMode.PERSISTENT,javax.jms.Message.DEFAULT_PRIORITY,javax.jms.Message.DEFAULT_TIME_TO_LIVE);
+  }
+  session.close();
+  QueueViewMBean queueView=getProxyToQueue(getTestName());
+  assertEquals(MSG_COUNT,queueView.getQueueSize());
+  int counter=0;
+  session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  MessageConsumer messageConsumer=session.createConsumer(queue);
+  do {
+    TextMessage message=(TextMessage)messageConsumer.receive(1000);
+    if (message != null) {
+      counter++;
+      LOG.info("Message n. {} with content '{}' has been recieved.",counter,message.getText());
+    }
+  }
+ while (counter < MSG_COUNT);
+  LOG.info("Transaction has been committed.");
+  session.commit();
+  assertEquals(0,queueView.getQueueSize());
+  session.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReceiveAndRollback() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  sendToAmqQueue(2);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(2,proxy.getQueueSize());
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message message=consumer.receive(3000);
+  assertNotNull(message);
+  session.commit();
+  assertEquals(1,proxy.getQueueSize());
+  message=consumer.receive(3000);
+  assertNotNull(message);
+  session.rollback();
+  assertEquals(1,proxy.getQueueSize());
+  message=consumer.receive(5000);
+  assertNotNull("Should have re-received the message again!",message);
+  session.commit();
+  assertEquals(0,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testConsumedInTxAreAcked() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  sendToAmqQueue(1);
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message message=consumer.receive(5000);
+  assertNotNull(message);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(1,proxy.getQueueSize());
+  session.commit();
+  assertEquals(0,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<pre class="type-13 type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReceiveSomeThenRollback() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  int totalCount=5;
+  int consumeBeforeRollback=2;
+  sendToAmqQueue(totalCount);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(totalCount,proxy.getQueueSize());
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  for (int i=1; i <= consumeBeforeRollback; i++) {
+    Message message=consumer.receive(3000);
+    assertNotNull(message);
+    assertEquals("Unexpected message number",i,message.getIntProperty(QpidJmsTestSupport.MESSAGE_NUMBER));
+  }
+  session.rollback();
+  assertEquals(totalCount,proxy.getQueueSize());
+  List<Integer> messageNumbers=new ArrayList<Integer>();
+  for (int i=1; i <= totalCount; i++) {
+    Message message=consumer.receive(3000);
+    assertNotNull("Failed to receive message: " + i,message);
+    int msgNum=message.getIntProperty(QpidJmsTestSupport.MESSAGE_NUMBER);
+    messageNumbers.add(msgNum);
+  }
+  session.commit();
+  assertEquals("Unexpected size of list",totalCount,messageNumbers.size());
+  for (int i=0; i < messageNumbers.size(); i++) {
+    assertEquals("Unexpected order of messages: " + messageNumbers,Integer.valueOf(i + 1),messageNumbers.get(i));
+  }
+  assertEquals(0,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testJMSXDeliveryCount() throws Exception {
+  sendToAmqQueue(1);
+  connection=createAmqpConnection();
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  assertEquals(true,session.getTransacted());
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  connection.start();
+  Message message=consumer.receive(5000);
+  assertNotNull(message);
+  assertEquals(false,message.getJMSRedelivered());
+  int jmsxDeliveryCount=message.getIntProperty("JMSXDeliveryCount");
+  LOG.info("Incoming message has delivery count: {}",jmsxDeliveryCount);
+  assertEquals(1,jmsxDeliveryCount);
+  session.rollback();
+  message=consumer.receive(5000);
+  assertNotNull(message);
+  assertEquals(true,message.getJMSRedelivered());
+  jmsxDeliveryCount=message.getIntProperty("JMSXDeliveryCount");
+  LOG.info("Redelivered message has delivery count: {}",jmsxDeliveryCount);
+  assertEquals(2,jmsxDeliveryCount);
+  session.rollback();
+  message=consumer.receive(5000);
+  assertNotNull(message);
+  assertEquals(true,message.getJMSRedelivered());
+  jmsxDeliveryCount=message.getIntProperty("JMSXDeliveryCount");
+  LOG.info("Redelivered message has delivery count: {}",jmsxDeliveryCount);
+  assertEquals(3,jmsxDeliveryCount);
+  session.commit();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test(timeout=60000) public void testConsumerClosesAfterItsTXCommits() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  Session mgmtSession=connection.createSession(true,Session.AUTO_ACKNOWLEDGE);
+  Queue queue=mgmtSession.createQueue(name.getMethodName());
+  Session senderSession=connection.createSession(true,Session.AUTO_ACKNOWLEDGE);
+  MessageProducer producer=senderSession.createProducer(queue);
+  producer.send(senderSession.createMessage());
+  senderSession.commit();
+  senderSession.close();
+  Session txSession=connection.createSession(true,Session.AUTO_ACKNOWLEDGE);
+  MessageConsumer consumer=txSession.createConsumer(queue);
+  Message received=consumer.receive(1000);
+  assertNotNull("Consumer didn't receive the message",received);
+  txSession.rollback();
+  consumer.close();
+  Session nonTxSession=connection.createSession(false,Session.AUTO_ACKNOWLEDGE);
+  consumer=nonTxSession.createConsumer(queue);
+  received=consumer.receive(1000);
+  assertNotNull("receiver3 didn't received the message",received);
+  consumer.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testCloseConsumerBeforeCommit() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  sendToAmqQueue(2);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(2,proxy.getQueueSize());
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  TextMessage message=(TextMessage)consumer.receive(5000);
+  assertNotNull(message);
+  consumer.close();
+  assertEquals(2,proxy.getQueueSize());
+  session.commit();
+  assertEquals(1,proxy.getQueueSize());
+  consumer=session.createConsumer(queue);
+  message=(TextMessage)consumer.receive(5000);
+  assertNotNull(message);
+  session.commit();
+  assertEquals(0,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test(timeout=30000) public void testRollbackRececeivedMessageAndClose() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  Session session=connection.createSession(true,Session.AUTO_ACKNOWLEDGE);
+  Queue queue=session.createQueue(getDestinationName());
+  MessageProducer producer=session.createProducer(queue);
+  producer.send(session.createTextMessage("TestMessage-0"));
+  producer.close();
+  session.commit();
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message msg=consumer.receive(3000);
+  assertNotNull(msg);
+  session.rollback();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-9 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReceiveTwoThenRollback() throws Exception {
+  connection=createAmqpConnection();
+  connection.start();
+  sendToAmqQueue(2);
+  QueueViewMBean proxy=getProxyToQueue(name.getMethodName());
+  assertEquals(2,proxy.getQueueSize());
+  Session session=connection.createSession(true,Session.SESSION_TRANSACTED);
+  Queue queue=session.createQueue(name.getMethodName());
+  MessageConsumer consumer=session.createConsumer(queue);
+  Message message=consumer.receive(3000);
+  assertNotNull(message);
+  message=consumer.receive(3000);
+  assertNotNull(message);
+  session.rollback();
+  assertEquals(2,proxy.getQueueSize());
+  message=consumer.receive(5000);
+  assertNotNull("Should have re-received the message again!",message);
+  message=consumer.receive(5000);
+  assertNotNull("Should have re-received the message again!",message);
+  session.commit();
+  assertEquals(0,proxy.getQueueSize());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

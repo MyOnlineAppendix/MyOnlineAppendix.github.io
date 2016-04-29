@@ -1,0 +1,1335 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.flume.channel.TestBasicChannelSemantics </h4><pre class="type-12 type-13 type-11 type-14 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultiThreadedHappyPath() throws Exception {
+  final int testLength=1000;
+  Future<?> producer=executor.submit(new Runnable(){
+    @Override public void run(){
+      try {
+        Thread.sleep(500);
+        for (int i=0; i < testLength; ++i) {
+          Transaction transaction=channel.getTransaction();
+          transaction.begin();
+          channel.put(events.get(i % events.size()));
+          transaction.commit();
+          transaction.close();
+          Thread.sleep(1);
+        }
+        Thread.sleep(500);
+      }
+ catch (      InterruptedException e) {
+        Assert.fail();
+      }
+    }
+  }
+);
+  int i=0;
+  while (!producer.isDone()) {
+    Transaction transaction=channel.getTransaction();
+    transaction.begin();
+    Event event=channel.take();
+    if (event != null) {
+      Assert.assertSame(events.get(i % events.size()),event);
+      ++i;
+    }
+    transaction.commit();
+    transaction.close();
+  }
+  Assert.assertEquals(testLength,i);
+  producer.get();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.channel.TestMemoryChannelConcurrency </h4><pre class="type-13 type-11 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTransactionConcurrency() throws InterruptedException {
+  final Channel channel=new MemoryChannel();
+  barrier=new CyclicBarrier(2);
+  Configurables.configure(channel,new Context());
+  Thread t1=new Thread(new Runnable(){
+    @Override public void run(){
+      Transaction tx=channel.getTransaction();
+      tx.begin();
+      channel.put(EventBuilder.withBody("first event".getBytes()));
+      try {
+        barrier.await();
+        barrier.await();
+        tx.rollback();
+        barrier.await();
+        tx.close();
+        barrier.await();
+      }
+ catch (      InterruptedException e) {
+        Assert.fail();
+      }
+catch (      BrokenBarrierException e) {
+        Assert.fail();
+      }
+    }
+  }
+);
+  Thread t2=new Thread(new Runnable(){
+    @Override public void run(){
+      Transaction tx=channel.getTransaction();
+      try {
+        barrier.await();
+        tx.begin();
+        channel.put(EventBuilder.withBody("second event".getBytes()));
+        barrier.await();
+        barrier.await();
+        tx.commit();
+        tx.close();
+        barrier.await();
+      }
+ catch (      InterruptedException e) {
+        Assert.fail();
+      }
+catch (      BrokenBarrierException e) {
+        Assert.fail();
+      }
+    }
+  }
+);
+  t1.start();
+  t2.start();
+  t1.join(1000);
+  if (t1.isAlive()) {
+    Assert.fail("Thread1 failed to finish");
+    t1.interrupt();
+  }
+  t2.join(1000);
+  if (t2.isAlive()) {
+    Assert.fail("Thread2 failed to finish");
+    t2.interrupt();
+  }
+  Transaction tx=channel.getTransaction();
+  tx.begin();
+  Event e=channel.take();
+  Assert.assertEquals("second event",new String(e.getBody()));
+  Assert.assertNull(channel.take());
+  tx.commit();
+  tx.close();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-13 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testConcurrentSinksAndSources() throws InterruptedException {
+  final Channel channel=new MemoryChannel();
+  Context context=new Context();
+  context.put("keep-alive","1");
+  context.put("capacity","100");
+  context.put("transactionCapacity","100");
+  Configurables.configure(channel,context);
+  final ConcurrentHashMap<String,AtomicInteger> committedPuts=new ConcurrentHashMap<String,AtomicInteger>();
+  final ConcurrentHashMap<String,AtomicInteger> committedTakes=new ConcurrentHashMap<String,AtomicInteger>();
+  final int threadCount=100;
+  final CountDownLatch startGate=new CountDownLatch(1);
+  final CountDownLatch endGate=new CountDownLatch(threadCount);
+  for (int i=0; i < threadCount / 2; i++) {
+    Thread t=new Thread(){
+      @Override public void run(){
+        Long tid=Thread.currentThread().getId();
+        String strtid=tid.toString();
+        Random rng=new Random(tid);
+        try {
+          startGate.await();
+        }
+ catch (        InterruptedException e1) {
+          Thread.currentThread().interrupt();
+        }
+        for (int j=0; j < 10; j++) {
+          int events=rng.nextInt(5) + 1;
+          Transaction tx=channel.getTransaction();
+          tx.begin();
+          for (int k=0; k < events; k++) {
+            channel.put(EventBuilder.withBody(strtid.getBytes()));
+          }
+          if (rng.nextBoolean()) {
+            try {
+              tx.commit();
+              AtomicInteger tcount=committedPuts.get(strtid);
+              if (tcount == null) {
+                committedPuts.put(strtid,new AtomicInteger(events));
+              }
+ else {
+                tcount.addAndGet(events);
+              }
+            }
+ catch (            ChannelException e) {
+              System.out.print("puts commit failed");
+              tx.rollback();
+            }
+          }
+ else {
+            tx.rollback();
+          }
+          tx.close();
+        }
+        endGate.countDown();
+      }
+    }
+;
+    t.start();
+    final Integer takeMapLock=0;
+    t=new Thread(){
+      @Override public void run(){
+        Random rng=new Random(Thread.currentThread().getId());
+        try {
+          startGate.await();
+        }
+ catch (        InterruptedException e1) {
+          Thread.currentThread().interrupt();
+        }
+        for (int j=0; j < 10; j++) {
+          int events=rng.nextInt(5) + 1;
+          Transaction tx=channel.getTransaction();
+          tx.begin();
+          Event[] taken=new Event[events];
+          int k;
+          for (k=0; k < events; k++) {
+            taken[k]=channel.take();
+            if (taken[k] == null)             break;
+          }
+          if (rng.nextBoolean()) {
+            try {
+              tx.commit();
+              for (              Event e : taken) {
+                if (e == null)                 break;
+                String index=new String(e.getBody());
+synchronized (takeMapLock) {
+                  AtomicInteger remain=committedTakes.get(index);
+                  if (remain == null) {
+                    committedTakes.put(index,new AtomicInteger(1));
+                  }
+ else {
+                    remain.incrementAndGet();
+                  }
+                }
+              }
+            }
+ catch (            ChannelException e) {
+              System.out.print("takes commit failed");
+              tx.rollback();
+            }
+          }
+ else {
+            tx.rollback();
+          }
+          tx.close();
+        }
+        endGate.countDown();
+      }
+    }
+;
+    t.start();
+  }
+  startGate.countDown();
+  if (!endGate.await(20,TimeUnit.SECONDS)) {
+    Assert.fail("Not all threads ended succesfully");
+  }
+  Transaction tx=channel.getTransaction();
+  tx.begin();
+  Event e;
+  while ((e=channel.take()) != null) {
+    String index=new String(e.getBody());
+    AtomicInteger remain=committedPuts.get(index);
+    int post=remain.decrementAndGet();
+    if (post == 0) {
+      committedPuts.remove(index);
+    }
+  }
+  tx.commit();
+  tx.close();
+  for (  Entry<String,AtomicInteger> takes : committedTakes.entrySet()) {
+    AtomicInteger count=committedPuts.get(takes.getKey());
+    if (count == null)     Assert.fail("Putted data doesn't exist");
+    if (count.get() != takes.getValue().get())     Assert.fail(String.format("Mismatched put and take counts expected %d had %d",count.get(),takes.getValue().get()));
+    committedPuts.remove(takes.getKey());
+  }
+  if (!committedPuts.isEmpty())   Assert.fail("Puts still has entries remaining");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Works with a startgate/endgate latches to make sure all threads run at the same time. Threads randomly
+ * choose to commit or rollback random numbers of actions, tagging them with the thread no.
+ * The correctness check is made by recording committed entries into a map, and verifying the count
+ * after the endgate
+ * Since nothing is taking the puts out, allow for a big capacity
+ * @throws InterruptedException
+ */
+@Test public void testManyThreads() throws InterruptedException {
+  final Channel channel=new MemoryChannel();
+  Context context=new Context();
+  context.put("keep-alive","1");
+  context.put("capacity","5000");
+  context.put("transactionCapacity","5000");
+  Configurables.configure(channel,context);
+  final ConcurrentHashMap<String,AtomicInteger> committedPuts=new ConcurrentHashMap<String,AtomicInteger>();
+  final int threadCount=100;
+  final CountDownLatch startGate=new CountDownLatch(1);
+  final CountDownLatch endGate=new CountDownLatch(threadCount);
+  for (int i=0; i < threadCount; i++) {
+    Thread t=new Thread(){
+      @Override public void run(){
+        Long tid=Thread.currentThread().getId();
+        String strtid=tid.toString();
+        Random rng=new Random(tid);
+        try {
+          startGate.await();
+        }
+ catch (        InterruptedException e1) {
+          Thread.currentThread().interrupt();
+        }
+        for (int j=0; j < 10; j++) {
+          int events=rng.nextInt(5) + 1;
+          Transaction tx=channel.getTransaction();
+          tx.begin();
+          for (int k=0; k < events; k++) {
+            channel.put(EventBuilder.withBody(strtid.getBytes()));
+          }
+          if (rng.nextBoolean()) {
+            tx.commit();
+            AtomicInteger tcount=committedPuts.get(strtid);
+            if (tcount == null) {
+              committedPuts.put(strtid,new AtomicInteger(events));
+            }
+ else {
+              tcount.addAndGet(events);
+            }
+          }
+ else {
+            tx.rollback();
+          }
+          tx.close();
+        }
+        endGate.countDown();
+      }
+    }
+;
+    t.start();
+  }
+  startGate.countDown();
+  endGate.await();
+  if (committedPuts.isEmpty()) {
+    Assert.fail();
+  }
+  Transaction tx=channel.getTransaction();
+  tx.begin();
+  Event e;
+  while ((e=channel.take()) != null) {
+    String index=new String(e.getBody());
+    AtomicInteger remain=committedPuts.get(index);
+    int post=remain.decrementAndGet();
+    if (post == 0) {
+      committedPuts.remove(index);
+    }
+  }
+  tx.commit();
+  tx.close();
+  if (!committedPuts.isEmpty()) {
+    Assert.fail();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.channel.file.TestLogFile </h4><pre class="type-12 type-9 type-13 type-11 type-10 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReaderTempMetaFile() throws InterruptedException, IOException, CorruptEventException {
+  Map<Integer,Put> puts=Maps.newHashMap();
+  for (int i=0; i < 1000; i++) {
+    FlumeEvent eventIn=TestUtils.newPersistableEvent();
+    Put put=new Put(++transactionID,WriteOrderOracle.next(),eventIn);
+    ByteBuffer bytes=TransactionEventRecord.toByteBuffer(put);
+    FlumeEventPointer ptr=logFileWriter.put(bytes);
+    puts.put(ptr.getOffset(),put);
+  }
+  File metadataFile=Serialization.getMetaDataFile(dataFile);
+  File tempMetadataFile=Serialization.getMetaDataTempFile(dataFile);
+  File oldMetadataFile=Serialization.getOldMetaDataFile(dataFile);
+  oldMetadataFile.createNewFile();
+  if (!metadataFile.renameTo(tempMetadataFile)) {
+    Assert.fail("Renaming to meta.temp failed");
+  }
+  LogFile.SequentialReader reader=LogFileFactory.getSequentialReader(dataFile,null,true);
+  Assert.assertTrue(metadataFile.exists());
+  Assert.assertFalse(tempMetadataFile.exists());
+  Assert.assertFalse(oldMetadataFile.exists());
+  LogRecord entry;
+  while ((entry=reader.next()) != null) {
+    Integer offset=entry.getOffset();
+    TransactionEventRecord record=entry.getEvent();
+    Put put=puts.get(offset);
+    FlumeEvent eventIn=put.getEvent();
+    Assert.assertEquals(put.getTransactionID(),record.getTransactionID());
+    Assert.assertTrue(record instanceof Put);
+    FlumeEvent eventOut=((Put)record).getEvent();
+    Assert.assertEquals(eventIn.getHeaders(),eventOut.getHeaders());
+    Assert.assertTrue(Arrays.equals(eventIn.getBody(),eventOut.getBody()));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-12 type-9 type-13 type-11 type-10 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReaderOldMetaFile() throws InterruptedException, IOException, CorruptEventException {
+  Map<Integer,Put> puts=Maps.newHashMap();
+  for (int i=0; i < 1000; i++) {
+    FlumeEvent eventIn=TestUtils.newPersistableEvent();
+    Put put=new Put(++transactionID,WriteOrderOracle.next(),eventIn);
+    ByteBuffer bytes=TransactionEventRecord.toByteBuffer(put);
+    FlumeEventPointer ptr=logFileWriter.put(bytes);
+    puts.put(ptr.getOffset(),put);
+  }
+  File metadataFile=Serialization.getMetaDataFile(dataFile);
+  File oldMetadataFile=Serialization.getOldMetaDataFile(dataFile);
+  if (!metadataFile.renameTo(oldMetadataFile)) {
+    Assert.fail("Renaming to meta.old failed");
+  }
+  LogFile.SequentialReader reader=LogFileFactory.getSequentialReader(dataFile,null,true);
+  Assert.assertTrue(metadataFile.exists());
+  Assert.assertFalse(oldMetadataFile.exists());
+  LogRecord entry;
+  while ((entry=reader.next()) != null) {
+    Integer offset=entry.getOffset();
+    TransactionEventRecord record=entry.getEvent();
+    Put put=puts.get(offset);
+    FlumeEvent eventIn=put.getEvent();
+    Assert.assertEquals(put.getTransactionID(),record.getTransactionID());
+    Assert.assertTrue(record instanceof Put);
+    FlumeEvent eventOut=((Put)record).getEvent();
+    Assert.assertEquals(eventIn.getHeaders(),eventOut.getHeaders());
+    Assert.assertTrue(Arrays.equals(eventIn.getBody(),eventOut.getBody()));
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-10 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testWriteDelimitedTo() throws IOException {
+  if (dataFile.isFile()) {
+    Assert.assertTrue(dataFile.delete());
+  }
+  Assert.assertTrue(dataFile.createNewFile());
+  ProtosFactory.LogFileMetaData.Builder metaDataBuilder=ProtosFactory.LogFileMetaData.newBuilder();
+  metaDataBuilder.setVersion(1);
+  metaDataBuilder.setLogFileID(2);
+  metaDataBuilder.setCheckpointPosition(3);
+  metaDataBuilder.setCheckpointWriteOrderID(4);
+  LogFileV3.writeDelimitedTo(metaDataBuilder.build(),dataFile);
+  ProtosFactory.LogFileMetaData metaData=ProtosFactory.LogFileMetaData.parseDelimitedFrom(new FileInputStream(dataFile));
+  Assert.assertEquals(1,metaData.getVersion());
+  Assert.assertEquals(2,metaData.getLogFileID());
+  Assert.assertEquals(3,metaData.getCheckpointPosition());
+  Assert.assertEquals(4,metaData.getCheckpointWriteOrderID());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.channel.file.encryption.TestFileChannelEncryption </h4><pre class="type-13 type-11 type-10 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEncryptedChannelWithoutEncryptionConfigFails() throws Exception {
+  Map<String,String> overrides=getOverridesForEncryption();
+  channel=createFileChannel(overrides);
+  channel.start();
+  Assert.assertTrue(channel.isOpen());
+  fillChannel(channel,"will-not-restart");
+  channel.stop();
+  Map<String,String> noEncryptionOverrides=getOverrides();
+  channel=createFileChannel(noEncryptionOverrides);
+  channel.start();
+  if (channel.isOpen()) {
+    try {
+      takeEvents(channel,1,1);
+      Assert.fail("Channel was opened and take did not throw exception");
+    }
+ catch (    ChannelException ex) {
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.channel.jdbc.BaseJdbcChannelProviderTest </h4><pre class="type-12 type-9 type-13 type-11 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDerbyChannelCapacity(){
+  provider=new JdbcChannelProviderImpl();
+  derbyCtx.put(ConfigurationConstants.CONFIG_MAX_CAPACITY,"10");
+  provider.initialize(derbyCtx);
+  Set<MockEvent> events=new HashSet<MockEvent>();
+  for (int i=1; i < 12; i++) {
+    events.add(MockEventUtils.generateMockEvent(i,i,i,61 % i,1));
+  }
+  Iterator<MockEvent> meIt=events.iterator();
+  int count=0;
+  while (meIt.hasNext()) {
+    count++;
+    MockEvent me=meIt.next();
+    String chName=me.getChannel();
+    try {
+      provider.persistEvent(chName,me);
+      if (count == 11) {
+        Assert.fail();
+      }
+    }
+ catch (    JdbcChannelException ex) {
+      Assert.assertEquals(11,count);
+    }
+    Event e=provider.removeEvent(chName);
+    Assert.assertNotNull(e);
+    provider.persistEvent(chName,me);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.client.avro.TestReliableSpoolingFileEventReader </h4><pre class="type-12 type-9 type-13 type-10 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRepeatedCallsWithCommitOnSuccess() throws IOException {
+  String trackerDirPath=SpoolDirectorySourceConfigurationConstants.DEFAULT_TRACKER_DIR;
+  File trackerDir=new File(WORK_DIR,trackerDirPath);
+  ReliableEventReader reader=new ReliableSpoolingFileEventReader.Builder().spoolDirectory(WORK_DIR).trackerDirPath(trackerDirPath).build();
+  final int expectedLines=0 + 1 + 2+ 3+ 1;
+  int seenLines=0;
+  for (int i=0; i < 10; i++) {
+    List<Event> events=reader.readEvents(10);
+    int numEvents=events.size();
+    if (numEvents > 0) {
+      seenLines+=numEvents;
+      reader.commit();
+      File[] files=trackerDir.listFiles();
+      Assert.assertNotNull(files);
+      Assert.assertTrue("Expected tracker files in tracker dir " + trackerDir.getAbsolutePath(),files.length > 0);
+    }
+  }
+  Assert.assertEquals(expectedLines,seenLines);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.serialization.TestResettableFileInputStream </h4><pre class="type-13 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+@Test public void testUtf8DecodeErrorHandlingReplace() throws IOException {
+  ResettableInputStream in=initUtf8DecodeTest(DecodeErrorPolicy.REPLACE);
+  int c;
+  StringBuilder sb=new StringBuilder();
+  while ((c=in.readChar()) != -1) {
+    sb.append((char)c);
+  }
+  String preJdk8ExpectedStr="Latin1: (X)\nLong: (XXX)\nNonUnicode: (X)\n";
+  String expectedStr="Latin1: (X)\nLong: (XXX)\nNonUnicode: (XXXXX)\n";
+  String javaVersionStr=System.getProperty("java.version");
+  double javaVersion=Double.parseDouble(javaVersionStr.substring(0,3));
+  if (javaVersion < 1.8) {
+    assertTrue(preJdk8ExpectedStr.replaceAll("X","\ufffd").equals(sb.toString()));
+  }
+ else {
+    assertTrue(expectedStr.replaceAll("X","\ufffd").equals(sb.toString()));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.sink.TestAvroSink </h4><pre class="type-13 type-11 type-10 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSslSinkWithNonSslServer() throws InterruptedException, EventDeliveryException, InstantiationException, IllegalAccessException {
+  setUp();
+  Event event=EventBuilder.withBody("test event 1",Charsets.UTF_8);
+  Server server=createServer(new MockAvroServer());
+  server.start();
+  Context context=new Context();
+  context.put("hostname",hostname);
+  context.put("port",String.valueOf(port));
+  context.put("ssl",String.valueOf(true));
+  context.put("trust-all-certs",String.valueOf(true));
+  context.put("batch-size",String.valueOf(2));
+  context.put("connect-timeout",String.valueOf(2000L));
+  context.put("request-timeout",String.valueOf(3000L));
+  Configurables.configure(sink,context);
+  sink.start();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.START_OR_ERROR,5000));
+  Transaction transaction=channel.getTransaction();
+  transaction.begin();
+  for (int i=0; i < 10; i++) {
+    channel.put(event);
+  }
+  transaction.commit();
+  transaction.close();
+  boolean failed=false;
+  try {
+    for (int i=0; i < 5; i++) {
+      sink.process();
+      failed=true;
+    }
+  }
+ catch (  EventDeliveryException ex) {
+    logger.info("Correctly failed to send event",ex);
+  }
+  sink.stop();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.STOP_OR_ERROR,5000));
+  server.close();
+  if (failed) {
+    Assert.fail("SSL-enabled sink successfully connected to a non-SSL-enabled server, that's wrong.");
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 type-10 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSslSinkWithNonTrustedCert() throws InterruptedException, EventDeliveryException, InstantiationException, IllegalAccessException {
+  setUp();
+  Event event=EventBuilder.withBody("test event 1",Charsets.UTF_8);
+  Server server=createSslServer(new MockAvroServer());
+  server.start();
+  Context context=new Context();
+  context.put("hostname",hostname);
+  context.put("port",String.valueOf(port));
+  context.put("ssl",String.valueOf(true));
+  context.put("batch-size",String.valueOf(2));
+  context.put("connect-timeout",String.valueOf(2000L));
+  context.put("request-timeout",String.valueOf(3000L));
+  Configurables.configure(sink,context);
+  sink.start();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.START_OR_ERROR,5000));
+  Transaction transaction=channel.getTransaction();
+  transaction.begin();
+  for (int i=0; i < 10; i++) {
+    channel.put(event);
+  }
+  transaction.commit();
+  transaction.close();
+  boolean failed=false;
+  try {
+    for (int i=0; i < 5; i++) {
+      sink.process();
+      failed=true;
+    }
+  }
+ catch (  EventDeliveryException ex) {
+    logger.info("Correctly failed to send event",ex);
+  }
+  sink.stop();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.STOP_OR_ERROR,5000));
+  server.close();
+  if (failed) {
+    Assert.fail("SSL-enabled sink successfully connected to a server with an untrusted certificate when it should have failed");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.sink.TestThriftSink </h4><pre class="type-13 type-11 type-10 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSslSinkWithNonSslServer() throws Exception {
+  Event event=EventBuilder.withBody("test event 1",Charsets.UTF_8);
+  src=new ThriftTestingSource(ThriftTestingSource.HandlerType.OK.name(),port,ThriftRpcClient.COMPACT_PROTOCOL);
+  Context context=new Context();
+  context.put("hostname",hostname);
+  context.put("port",String.valueOf(port));
+  context.put("ssl",String.valueOf(true));
+  context.put("batch-size",String.valueOf(2));
+  context.put("connect-timeout",String.valueOf(2000L));
+  context.put("request-timeout",String.valueOf(3000L));
+  context.put("truststore","src/test/resources/truststorefile.jks");
+  context.put("truststore-password","password");
+  context.put("trustmanager-type",TrustManagerFactory.getDefaultAlgorithm());
+  Configurables.configure(sink,context);
+  channel.start();
+  sink.start();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.START_OR_ERROR,5000));
+  Transaction transaction=channel.getTransaction();
+  transaction.begin();
+  for (int i=0; i < 11; i++) {
+    channel.put(event);
+  }
+  transaction.commit();
+  transaction.close();
+  boolean failed=false;
+  try {
+    for (int i=0; i < 6; i++) {
+      Sink.Status status=sink.process();
+      failed=true;
+    }
+  }
+ catch (  EventDeliveryException ex) {
+  }
+  sink.stop();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.STOP_OR_ERROR,5000));
+  if (failed) {
+    Assert.fail("SSL-enabled sink successfully connected to a non-SSL-enabled server, that's wrong.");
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 type-10 type-1 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSslSinkWithNonTrustedCert() throws Exception {
+  Event event=EventBuilder.withBody("test event 1",Charsets.UTF_8);
+  src=new ThriftTestingSource(ThriftTestingSource.HandlerType.OK.name(),port,ThriftRpcClient.COMPACT_PROTOCOL,"src/test/resources/keystorefile.jks","password",KeyManagerFactory.getDefaultAlgorithm(),"JKS");
+  Context context=new Context();
+  context.put("hostname",hostname);
+  context.put("port",String.valueOf(port));
+  context.put("ssl",String.valueOf(true));
+  context.put("batch-size",String.valueOf(2));
+  context.put("connect-timeout",String.valueOf(2000L));
+  context.put("request-timeout",String.valueOf(3000L));
+  Configurables.configure(sink,context);
+  channel.start();
+  sink.start();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.START_OR_ERROR,5000));
+  Transaction transaction=channel.getTransaction();
+  transaction.begin();
+  for (int i=0; i < 11; i++) {
+    channel.put(event);
+  }
+  transaction.commit();
+  transaction.close();
+  boolean failed=false;
+  try {
+    for (int i=0; i < 6; i++) {
+      Sink.Status status=sink.process();
+      failed=true;
+    }
+  }
+ catch (  EventDeliveryException ex) {
+  }
+  sink.stop();
+  Assert.assertTrue(LifecycleController.waitForOneOf(sink,LifecycleState.STOP_OR_ERROR,5000));
+  if (failed) {
+    Assert.fail("SSL-enabled sink successfully connected to a server with an untrusted certificate when it should have failed");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.sink.irc.TestIRCSink </h4><pre class="type-13 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testIRCSinkMissingSplitLineProperty(){
+  Sink ircSink=new IRCSink();
+  ircSink.setName("IRC Sink - " + UUID.randomUUID().toString());
+  Context context=new Context();
+  context.put("hostname","localhost");
+  context.put("port",String.valueOf(ircServerPort));
+  context.put("nick","flume");
+  context.put("password","flume");
+  context.put("user","flume");
+  context.put("name","flume-dev");
+  context.put("chan","flume");
+  context.put("splitchars","false");
+  Configurables.configure(ircSink,context);
+  Channel memoryChannel=new MemoryChannel();
+  Configurables.configure(memoryChannel,context);
+  ircSink.setChannel(memoryChannel);
+  ircSink.start();
+  Transaction txn=memoryChannel.getTransaction();
+  txn.begin();
+  Event event=EventBuilder.withBody("Dummy Event".getBytes());
+  memoryChannel.put(event);
+  txn.commit();
+  txn.close();
+  try {
+    Sink.Status status=ircSink.process();
+    if (status == Sink.Status.BACKOFF) {
+      fail("Error occured");
+    }
+  }
+ catch (  EventDeliveryException eDelExcp) {
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.sink.kafka.TestKafkaSink </h4><pre class="type-13 type-11 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStaticTopic(){
+  Context context=prepareDefaultContext();
+  context.put(KafkaSinkConstants.TOPIC,TestConstants.STATIC_TOPIC);
+  String msg="static-topic-test";
+  try {
+    Sink.Status status=prepareAndSend(context,msg);
+    if (status == Sink.Status.BACKOFF) {
+      fail("Error Occurred");
+    }
+  }
+ catch (  EventDeliveryException ex) {
+  }
+  String fetchedMsg=new String((byte[])testUtil.getNextMessageFromConsumer(TestConstants.STATIC_TOPIC).message());
+  assertEquals(msg,fetchedMsg);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTopicAndKeyFromHeader() throws UnsupportedEncodingException {
+  Sink kafkaSink=new KafkaSink();
+  Context context=prepareDefaultContext();
+  Configurables.configure(kafkaSink,context);
+  Channel memoryChannel=new MemoryChannel();
+  Configurables.configure(memoryChannel,context);
+  kafkaSink.setChannel(memoryChannel);
+  kafkaSink.start();
+  String msg="test-topic-and-key-from-header";
+  Map<String,String> headers=new HashMap<String,String>();
+  headers.put("topic",TestConstants.CUSTOM_TOPIC);
+  headers.put("key",TestConstants.CUSTOM_KEY);
+  Transaction tx=memoryChannel.getTransaction();
+  tx.begin();
+  Event event=EventBuilder.withBody(msg.getBytes(),headers);
+  memoryChannel.put(event);
+  tx.commit();
+  tx.close();
+  try {
+    Sink.Status status=kafkaSink.process();
+    if (status == Sink.Status.BACKOFF) {
+      fail("Error Occurred");
+    }
+  }
+ catch (  EventDeliveryException ex) {
+  }
+  MessageAndMetadata fetchedMsg=testUtil.getNextMessageFromConsumer(TestConstants.CUSTOM_TOPIC);
+  assertEquals(msg,new String((byte[])fetchedMsg.message(),"UTF-8"));
+  assertEquals(TestConstants.CUSTOM_KEY,new String((byte[])fetchedMsg.key(),"UTF-8"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEmptyChannel() throws UnsupportedEncodingException, EventDeliveryException {
+  Sink kafkaSink=new KafkaSink();
+  Context context=prepareDefaultContext();
+  Configurables.configure(kafkaSink,context);
+  Channel memoryChannel=new MemoryChannel();
+  Configurables.configure(memoryChannel,context);
+  kafkaSink.setChannel(memoryChannel);
+  kafkaSink.start();
+  Sink.Status status=kafkaSink.process();
+  if (status != Sink.Status.BACKOFF) {
+    fail("Error Occurred");
+  }
+  assertNull(testUtil.getNextMessageFromConsumer(KafkaSinkConstants.DEFAULT_TOPIC));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-11 type-1 type-3 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDefaultTopic(){
+  Sink kafkaSink=new KafkaSink();
+  Context context=prepareDefaultContext();
+  Configurables.configure(kafkaSink,context);
+  Channel memoryChannel=new MemoryChannel();
+  Configurables.configure(memoryChannel,context);
+  kafkaSink.setChannel(memoryChannel);
+  kafkaSink.start();
+  String msg="default-topic-test";
+  Transaction tx=memoryChannel.getTransaction();
+  tx.begin();
+  Event event=EventBuilder.withBody(msg.getBytes());
+  memoryChannel.put(event);
+  tx.commit();
+  tx.close();
+  try {
+    Sink.Status status=kafkaSink.process();
+    if (status == Sink.Status.BACKOFF) {
+      fail("Error Occurred");
+    }
+  }
+ catch (  EventDeliveryException ex) {
+  }
+  String fetchedMsg=new String((byte[])testUtil.getNextMessageFromConsumer(KafkaSinkConstants.DEFAULT_TOPIC).message());
+  assertEquals(msg,fetchedMsg);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.TestExecSource </h4><pre class="type-13 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Tests to make sure that the shutdown mechanism works. There are races
+ * in this test if the system has another sleep command running with the
+ * same sleep interval but we pick rarely used sleep times and make an
+ * effort to detect if our sleep time is already in use. Note the
+ * ps -ef command should work on both macs and linux.
+ */
+@Test public void testShutdown() throws Exception {
+  int seconds=272;
+  boolean searchForCommand=true;
+  while (searchForCommand) {
+    searchForCommand=false;
+    String command=SystemUtils.IS_OS_WINDOWS ? ("cmd /c sleep " + seconds) : ("sleep " + seconds);
+    String searchTxt=SystemUtils.IS_OS_WINDOWS ? ("sleep.exe") : ("\b" + command + "\b");
+    Pattern pattern=Pattern.compile(searchTxt);
+    for (    String line : exec(SystemUtils.IS_OS_WINDOWS ? "cmd /c tasklist /FI \"SESSIONNAME eq Console\"" : "ps -ef")) {
+      if (pattern.matcher(line).find()) {
+        seconds++;
+        searchForCommand=true;
+        break;
+      }
+    }
+  }
+  String command="sleep " + seconds;
+  Pattern pattern=Pattern.compile("\b" + command + "\b");
+  context.put(ExecSourceConfigurationConstants.CONFIG_RESTART,"false");
+  context.put("command",command);
+  Configurables.configure(source,context);
+  source.start();
+  Thread.sleep(1000L);
+  source.stop();
+  Thread.sleep(1000L);
+  for (  String line : exec(SystemUtils.IS_OS_WINDOWS ? "cmd /c tasklist /FI \"SESSIONNAME eq Console\"" : "ps -ef")) {
+    if (pattern.matcher(line).find()) {
+      Assert.fail("Found [" + line + "]");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.TestMultiportSyslogTCPSource </h4><pre class="type-12 type-9 type-13 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Basic test to exercise multiple-port parsing.
+ */
+@Test public void testMultiplePorts() throws IOException, ParseException {
+  MultiportSyslogTCPSource source=new MultiportSyslogTCPSource();
+  Channel channel=new MemoryChannel();
+  Context channelContext=new Context();
+  channelContext.put("capacity",String.valueOf(2000));
+  channelContext.put("transactionCapacity",String.valueOf(2000));
+  Configurables.configure(channel,channelContext);
+  List<Channel> channels=Lists.newArrayList();
+  channels.add(channel);
+  ChannelSelector rcs=new ReplicatingChannelSelector();
+  rcs.setChannels(channels);
+  source.setChannelProcessor(new ChannelProcessor(rcs));
+  Context context=new Context();
+  StringBuilder ports=new StringBuilder();
+  for (int i=0; i < 1000; i++) {
+    ports.append(String.valueOf(BASE_TEST_SYSLOG_PORT + i)).append(" ");
+  }
+  context.put(SyslogSourceConfigurationConstants.CONFIG_PORTS,ports.toString().trim());
+  source.configure(context);
+  source.start();
+  Socket syslogSocket;
+  for (int i=0; i < 1000; i++) {
+    syslogSocket=new Socket(InetAddress.getLocalHost(),BASE_TEST_SYSLOG_PORT + i);
+    syslogSocket.getOutputStream().write(getEvent(i));
+    syslogSocket.close();
+  }
+  List<Event> channelEvents=new ArrayList<Event>();
+  Transaction txn=channel.getTransaction();
+  txn.begin();
+  for (int i=0; i < 1000; i++) {
+    Event e=channel.take();
+    if (e == null) {
+      throw new NullPointerException("Event is null");
+    }
+    channelEvents.add(e);
+  }
+  try {
+    txn.commit();
+  }
+ catch (  Throwable t) {
+    txn.rollback();
+  }
+ finally {
+    txn.close();
+  }
+  for (int i=0; i < 1000; i++) {
+    Iterator<Event> iter=channelEvents.iterator();
+    while (iter.hasNext()) {
+      Event e=iter.next();
+      Map<String,String> headers=e.getHeaders();
+      Integer port=null;
+      if (headers.containsKey(SyslogSourceConfigurationConstants.DEFAULT_PORT_HEADER)) {
+        port=Integer.parseInt(headers.get(SyslogSourceConfigurationConstants.DEFAULT_PORT_HEADER));
+      }
+      iter.remove();
+      Assert.assertEquals("Timestamps must match",String.valueOf(time.getMillis()),headers.get("timestamp"));
+      String host2=headers.get("host");
+      Assert.assertEquals(host1,host2);
+      if (port != null) {
+        int num=port - BASE_TEST_SYSLOG_PORT;
+        Assert.assertEquals(data1 + " " + String.valueOf(num),new String(e.getBody()));
+      }
+    }
+  }
+  source.stop();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.TestNetcatSource </h4><pre class="type-12 type-9 type-13 type-10 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLifecycle() throws InterruptedException, LifecycleException, EventDeliveryException {
+  ExecutorService executor=Executors.newFixedThreadPool(3);
+  boolean bound=false;
+  for (int i=0; i < 100 && !bound; i++) {
+    try {
+      Context context=new Context();
+      context.put("bind","0.0.0.0");
+      context.put("port","41414");
+      context.put("ack-every-event",String.valueOf(ackEveryEvent));
+      Configurables.configure(source,context);
+      source.start();
+      bound=true;
+    }
+ catch (    FlumeException e) {
+    }
+  }
+  Runnable clientRequestRunnable=new Runnable(){
+    @Override public void run(){
+      try {
+        SocketChannel clientChannel=SocketChannel.open(new InetSocketAddress(41414));
+        Writer writer=Channels.newWriter(clientChannel,"utf-8");
+        BufferedReader reader=new BufferedReader(Channels.newReader(clientChannel,"utf-8"));
+        writer.write("Test message\n");
+        writer.flush();
+        if (ackEveryEvent) {
+          String response=reader.readLine();
+          Assert.assertEquals("Server should return OK","OK",response);
+        }
+ else {
+          Assert.assertFalse("Server should not return anything",reader.ready());
+        }
+        clientChannel.close();
+      }
+ catch (      IOException e) {
+        logger.error("Caught exception: ",e);
+      }
+    }
+  }
+;
+  ChannelSelector selector=source.getChannelProcessor().getSelector();
+  Transaction tx=selector.getAllChannels().get(0).getTransaction();
+  tx.begin();
+  for (int i=0; i < 100; i++) {
+    logger.info("Sending request");
+    executor.submit(clientRequestRunnable);
+    Event event=channel.take();
+    Assert.assertNotNull(event);
+    Assert.assertArrayEquals("Test message".getBytes(),event.getBody());
+  }
+  tx.commit();
+  tx.close();
+  executor.shutdown();
+  while (!executor.isTerminated()) {
+    executor.awaitTermination(500,TimeUnit.MILLISECONDS);
+  }
+  source.stop();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.TestStressSource </h4><pre class="type-12 type-9 type-13 type-10 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testBatchEvents() throws InterruptedException, EventDeliveryException {
+  StressSource source=new StressSource();
+  source.setChannelProcessor(mockProcessor);
+  Context context=new Context();
+  context.put("maxTotalEvents","35");
+  context.put("batchSize","10");
+  source.configure(context);
+  source.start();
+  for (int i=0; i < 50; i++) {
+    if (source.process() == Status.BACKOFF) {
+      TestCase.assertTrue("Source should have sent all events in 4 batches",i == 4);
+      break;
+    }
+    if (i < 3) {
+      verify(mockProcessor,times(i + 1)).processEventBatch(getLastProcessedEventList(source));
+    }
+ else {
+      verify(mockProcessor,times(1)).processEventBatch(getLastProcessedEventList(source));
+    }
+  }
+  long successfulEvents=getCounterGroup(source).get("events.successful");
+  TestCase.assertTrue("Number of successful events should be 35 but was " + successfulEvents,successfulEvents == 35);
+  long failedEvents=getCounterGroup(source).get("events.failed");
+  TestCase.assertTrue("Number of failure events should be 0 but was " + failedEvents,failedEvents == 0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.taildir.TestTaildirEventReader </h4><pre class="type-13 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSkipToEndPosition() throws IOException {
+  ReliableTaildirEventReader reader=getReader();
+  File f1=new File(tmpDir,"file1");
+  Files.write("file1line1\nfile1line2\n",f1,Charsets.UTF_8);
+  reader.updateTailFiles();
+  for (  TailFile tf : reader.getTailFiles().values()) {
+    if (tf.getPath().equals(tmpDir + "file1")) {
+      assertEquals(0,tf.getPos());
+    }
+  }
+  File f2=new File(tmpDir,"file2");
+  Files.write("file2line1\nfile2line2\n",f2,Charsets.UTF_8);
+  reader.updateTailFiles(true);
+  for (  TailFile tf : reader.getTailFiles().values()) {
+    if (tf.getPath().equals(tmpDir + "file2")) {
+      assertEquals(f2.length(),tf.getPos());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-13 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testLoadPositionFile() throws IOException {
+  File f1=new File(tmpDir,"file1");
+  File f2=new File(tmpDir,"file2");
+  File f3=new File(tmpDir,"file3");
+  Files.write("file1line1\nfile1line2\nfile1line3\n",f1,Charsets.UTF_8);
+  Files.write("file2line1\nfile2line2\n",f2,Charsets.UTF_8);
+  Files.write("file3line1\n",f3,Charsets.UTF_8);
+  ReliableTaildirEventReader reader=getReader();
+  Map<Long,TailFile> tailFiles=reader.getTailFiles();
+  long pos=f2.length();
+  int i=1;
+  File posFile=new File(posFilePath);
+  for (  TailFile tf : tailFiles.values()) {
+    Files.append(i == 1 ? "[" : "",posFile,Charsets.UTF_8);
+    Files.append(String.format("{\"inode\":%s,\"pos\":%s,\"file\":\"%s\"}",tf.getInode(),pos,tf.getPath()),posFile,Charsets.UTF_8);
+    Files.append(i == 3 ? "]" : ",",posFile,Charsets.UTF_8);
+    i++;
+  }
+  reader.loadPositionFile(posFilePath);
+  for (  TailFile tf : tailFiles.values()) {
+    if (tf.getPath().equals(tmpDir + "file3")) {
+      assertEquals(0,tf.getPos());
+    }
+ else {
+      assertEquals(pos,tf.getPos());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.flume.source.taildir.TestTaildirSource </h4><pre class="type-12 type-13 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHeaderMapping() throws IOException {
+  File f1=new File(tmpDir,"file1");
+  File f2=new File(tmpDir,"file2");
+  File f3=new File(tmpDir,"file3");
+  Files.write("file1line1\nfile1line2\n",f1,Charsets.UTF_8);
+  Files.write("file2line1\nfile2line2\n",f2,Charsets.UTF_8);
+  Files.write("file3line1\nfile3line2\n",f3,Charsets.UTF_8);
+  Context context=new Context();
+  context.put(POSITION_FILE,posFilePath);
+  context.put(FILE_GROUPS,"f1 f2 f3");
+  context.put(FILE_GROUPS_PREFIX + "f1",tmpDir.getAbsolutePath() + "/file1$");
+  context.put(FILE_GROUPS_PREFIX + "f2",tmpDir.getAbsolutePath() + "/file2$");
+  context.put(FILE_GROUPS_PREFIX + "f3",tmpDir.getAbsolutePath() + "/file3$");
+  context.put(HEADERS_PREFIX + "f1.headerKeyTest","value1");
+  context.put(HEADERS_PREFIX + "f2.headerKeyTest","value2");
+  context.put(HEADERS_PREFIX + "f2.headerKeyTest2","value2-2");
+  Configurables.configure(source,context);
+  source.start();
+  source.process();
+  Transaction txn=channel.getTransaction();
+  txn.begin();
+  for (int i=0; i < 6; i++) {
+    Event e=channel.take();
+    String body=new String(e.getBody(),Charsets.UTF_8);
+    String headerValue=e.getHeaders().get("headerKeyTest");
+    String headerValue2=e.getHeaders().get("headerKeyTest2");
+    if (body.startsWith("file1")) {
+      assertEquals("value1",headerValue);
+      assertNull(headerValue2);
+    }
+ else     if (body.startsWith("file2")) {
+      assertEquals("value2",headerValue);
+      assertEquals("value2-2",headerValue2);
+    }
+ else     if (body.startsWith("file3")) {
+      assertNull(headerValue);
+      assertNull(headerValue2);
+    }
+  }
+  txn.commit();
+  txn.close();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

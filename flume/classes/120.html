@@ -1,0 +1,336 @@
+<h3 style="margin:0px">Class: org.apache.flume.sink.hdfs.TestHDFSEventSinkOnMiniCluster (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="16"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('16')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-16"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void teardownClass(){
+  if (oldTestBuildDataProp != null) {
+    System.setProperty(TEST_BUILD_DATA_KEY,oldTestBuildDataProp);
+  }
+  if (!KEEP_DATA) {
+    FileUtils.deleteQuietly(new File(DFS_DIR));
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This is a very basic test that writes one event to HDFS and reads it back.
+ */
+@Test public void simpleHDFSTest() throws EventDeliveryException, IOException {
+  cluster=new MiniDFSCluster(new Configuration(),1,true,null);
+  cluster.waitActive();
+  String outputDir="/flume/simpleHDFSTest";
+  Path outputDirPath=new Path(outputDir);
+  logger.info("Running test with output dir: {}",outputDir);
+  FileSystem fs=cluster.getFileSystem();
+  if (fs.exists(outputDirPath)) {
+    fs.delete(outputDirPath,true);
+  }
+  String nnURL=getNameNodeURL(cluster);
+  logger.info("Namenode address: {}",nnURL);
+  Context chanCtx=new Context();
+  MemoryChannel channel=new MemoryChannel();
+  channel.setName("simpleHDFSTest-mem-chan");
+  channel.configure(chanCtx);
+  channel.start();
+  Context sinkCtx=new Context();
+  sinkCtx.put("hdfs.path",nnURL + outputDir);
+  sinkCtx.put("hdfs.fileType",HDFSWriterFactory.DataStreamType);
+  sinkCtx.put("hdfs.batchSize",Integer.toString(1));
+  HDFSEventSink sink=new HDFSEventSink();
+  sink.setName("simpleHDFSTest-hdfs-sink");
+  sink.configure(sinkCtx);
+  sink.setChannel(channel);
+  sink.start();
+  String EVENT_BODY="yarg!";
+  channel.getTransaction().begin();
+  try {
+    channel.put(EventBuilder.withBody(EVENT_BODY,Charsets.UTF_8));
+    channel.getTransaction().commit();
+  }
+  finally {
+    channel.getTransaction().close();
+  }
+  sink.process();
+  sink.stop();
+  channel.stop();
+  FileStatus[] statuses=fs.listStatus(outputDirPath);
+  Assert.assertNotNull("No files found written to HDFS",statuses);
+  Assert.assertEquals("Only one file expected",1,statuses.length);
+  for (  FileStatus status : statuses) {
+    Path filePath=status.getPath();
+    logger.info("Found file on DFS: {}",filePath);
+    FSDataInputStream stream=fs.open(filePath);
+    BufferedReader reader=new BufferedReader(new InputStreamReader(stream));
+    String line=reader.readLine();
+    logger.info("First line in file {}: {}",filePath,line);
+    Assert.assertEquals(EVENT_BODY,line);
+  }
+  if (!KEEP_DATA) {
+    fs.delete(outputDirPath,true);
+  }
+  cluster.shutdown();
+  cluster=null;
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-1 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This is a very basic test that writes one event to HDFS and reads it back.
+ */
+@Test public void underReplicationTest() throws EventDeliveryException, IOException {
+  Configuration conf=new Configuration();
+  conf.set("dfs.replication",String.valueOf(3));
+  cluster=new MiniDFSCluster(conf,3,true,null);
+  cluster.waitActive();
+  String outputDir="/flume/underReplicationTest";
+  Path outputDirPath=new Path(outputDir);
+  logger.info("Running test with output dir: {}",outputDir);
+  FileSystem fs=cluster.getFileSystem();
+  if (fs.exists(outputDirPath)) {
+    fs.delete(outputDirPath,true);
+  }
+  String nnURL=getNameNodeURL(cluster);
+  logger.info("Namenode address: {}",nnURL);
+  Context chanCtx=new Context();
+  MemoryChannel channel=new MemoryChannel();
+  channel.setName("simpleHDFSTest-mem-chan");
+  channel.configure(chanCtx);
+  channel.start();
+  Context sinkCtx=new Context();
+  sinkCtx.put("hdfs.path",nnURL + outputDir);
+  sinkCtx.put("hdfs.fileType",HDFSWriterFactory.DataStreamType);
+  sinkCtx.put("hdfs.batchSize",Integer.toString(1));
+  HDFSEventSink sink=new HDFSEventSink();
+  sink.setName("simpleHDFSTest-hdfs-sink");
+  sink.configure(sinkCtx);
+  sink.setChannel(channel);
+  sink.start();
+  channel.getTransaction().begin();
+  try {
+    channel.put(EventBuilder.withBody("yarg 1",Charsets.UTF_8));
+    channel.put(EventBuilder.withBody("yarg 2",Charsets.UTF_8));
+    channel.put(EventBuilder.withBody("yarg 3",Charsets.UTF_8));
+    channel.put(EventBuilder.withBody("yarg 4",Charsets.UTF_8));
+    channel.put(EventBuilder.withBody("yarg 5",Charsets.UTF_8));
+    channel.put(EventBuilder.withBody("yarg 5",Charsets.UTF_8));
+    channel.getTransaction().commit();
+  }
+  finally {
+    channel.getTransaction().close();
+  }
+  logger.info("Running process(). Create new file.");
+  sink.process();
+  logger.info("Running process(). Same file.");
+  sink.process();
+  logger.info("Killing datanode #1...");
+  cluster.stopDataNode(0);
+  logger.info("Running process(). Create new file? (racy)");
+  sink.process();
+  logger.info("Running process(). Create new file.");
+  sink.process();
+  logger.info("Running process(). Create new file.");
+  sink.process();
+  logger.info("Running process(). Create new file.");
+  sink.process();
+  sink.stop();
+  channel.stop();
+  FileStatus[] statuses=fs.listStatus(outputDirPath);
+  Assert.assertNotNull("No files found written to HDFS",statuses);
+  for (  FileStatus status : statuses) {
+    Path filePath=status.getPath();
+    logger.info("Found file on DFS: {}",filePath);
+    FSDataInputStream stream=fs.open(filePath);
+    BufferedReader reader=new BufferedReader(new InputStreamReader(stream));
+    String line=reader.readLine();
+    logger.info("First line in file {}: {}",filePath,line);
+    Assert.assertTrue(line.startsWith("yarg"));
+  }
+  Assert.assertTrue("4 or 5 files expected, found " + statuses.length,statuses.length == 4 || statuses.length == 5);
+  System.out.println("There are " + statuses.length + " files.");
+  if (!KEEP_DATA) {
+    fs.delete(outputDirPath,true);
+  }
+  cluster.shutdown();
+  cluster=null;
+}
+
+</code></pre>
+
+<pre class="type-9 type-1 type-3 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Writes two events in GZIP-compressed serialize.
+ */
+@Test public void simpleHDFSGZipCompressedTest() throws EventDeliveryException, IOException {
+  cluster=new MiniDFSCluster(new Configuration(),1,true,null);
+  cluster.waitActive();
+  String outputDir="/flume/simpleHDFSGZipCompressedTest";
+  Path outputDirPath=new Path(outputDir);
+  logger.info("Running test with output dir: {}",outputDir);
+  FileSystem fs=cluster.getFileSystem();
+  if (fs.exists(outputDirPath)) {
+    fs.delete(outputDirPath,true);
+  }
+  String nnURL=getNameNodeURL(cluster);
+  logger.info("Namenode address: {}",nnURL);
+  Context chanCtx=new Context();
+  MemoryChannel channel=new MemoryChannel();
+  channel.setName("simpleHDFSTest-mem-chan");
+  channel.configure(chanCtx);
+  channel.start();
+  Context sinkCtx=new Context();
+  sinkCtx.put("hdfs.path",nnURL + outputDir);
+  sinkCtx.put("hdfs.fileType",HDFSWriterFactory.CompStreamType);
+  sinkCtx.put("hdfs.batchSize",Integer.toString(1));
+  sinkCtx.put("hdfs.codeC","gzip");
+  HDFSEventSink sink=new HDFSEventSink();
+  sink.setName("simpleHDFSTest-hdfs-sink");
+  sink.configure(sinkCtx);
+  sink.setChannel(channel);
+  sink.start();
+  String EVENT_BODY_1="yarg1";
+  String EVENT_BODY_2="yarg2";
+  channel.getTransaction().begin();
+  try {
+    channel.put(EventBuilder.withBody(EVENT_BODY_1,Charsets.UTF_8));
+    channel.put(EventBuilder.withBody(EVENT_BODY_2,Charsets.UTF_8));
+    channel.getTransaction().commit();
+  }
+  finally {
+    channel.getTransaction().close();
+  }
+  sink.process();
+  sink.stop();
+  channel.stop();
+  FileStatus[] statuses=fs.listStatus(outputDirPath);
+  Assert.assertNotNull("No files found written to HDFS",statuses);
+  Assert.assertEquals("Only one file expected",1,statuses.length);
+  for (  FileStatus status : statuses) {
+    Path filePath=status.getPath();
+    logger.info("Found file on DFS: {}",filePath);
+    FSDataInputStream stream=fs.open(filePath);
+    BufferedReader reader=new BufferedReader(new InputStreamReader(new GZIPInputStream(stream)));
+    String line=reader.readLine();
+    logger.info("First line in file {}: {}",filePath,line);
+    Assert.assertEquals(EVENT_BODY_1,line);
+  }
+  if (!KEEP_DATA) {
+    fs.delete(outputDirPath,true);
+  }
+  cluster.shutdown();
+  cluster=null;
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-1 type-3 type-2 type-5 type-16 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+- Is not executed with the test suite
+"></span><br>
+/** 
+ * This is a very basic test that writes one event to HDFS and reads it back.
+ */
+@Ignore("This test is flakey and causes tests to fail pretty often.") @Test public void maxUnderReplicationTest() throws EventDeliveryException, IOException {
+  Configuration conf=new Configuration();
+  conf.set("dfs.replication",String.valueOf(3));
+  cluster=new MiniDFSCluster(conf,3,true,null);
+  cluster.waitActive();
+  String outputDir="/flume/underReplicationTest";
+  Path outputDirPath=new Path(outputDir);
+  logger.info("Running test with output dir: {}",outputDir);
+  FileSystem fs=cluster.getFileSystem();
+  if (fs.exists(outputDirPath)) {
+    fs.delete(outputDirPath,true);
+  }
+  String nnURL=getNameNodeURL(cluster);
+  logger.info("Namenode address: {}",nnURL);
+  Context chanCtx=new Context();
+  MemoryChannel channel=new MemoryChannel();
+  channel.setName("simpleHDFSTest-mem-chan");
+  channel.configure(chanCtx);
+  channel.start();
+  Context sinkCtx=new Context();
+  sinkCtx.put("hdfs.path",nnURL + outputDir);
+  sinkCtx.put("hdfs.fileType",HDFSWriterFactory.DataStreamType);
+  sinkCtx.put("hdfs.batchSize",Integer.toString(1));
+  HDFSEventSink sink=new HDFSEventSink();
+  sink.setName("simpleHDFSTest-hdfs-sink");
+  sink.configure(sinkCtx);
+  sink.setChannel(channel);
+  sink.start();
+  channel.getTransaction().begin();
+  try {
+    for (int i=0; i < 50; i++) {
+      channel.put(EventBuilder.withBody("yarg " + i,Charsets.UTF_8));
+    }
+    channel.getTransaction().commit();
+  }
+  finally {
+    channel.getTransaction().close();
+  }
+  logger.info("Running process(). Create new file.");
+  sink.process();
+  logger.info("Running process(). Same file.");
+  sink.process();
+  logger.info("Killing datanode #1...");
+  cluster.stopDataNode(0);
+  logger.info("Running process(). Create new file? (racy)");
+  sink.process();
+  for (int i=3; i < 50; i++) {
+    logger.info("Running process().");
+    sink.process();
+  }
+  sink.stop();
+  channel.stop();
+  FileStatus[] statuses=fs.listStatus(outputDirPath);
+  Assert.assertNotNull("No files found written to HDFS",statuses);
+  for (  FileStatus status : statuses) {
+    Path filePath=status.getPath();
+    logger.info("Found file on DFS: {}",filePath);
+    FSDataInputStream stream=fs.open(filePath);
+    BufferedReader reader=new BufferedReader(new InputStreamReader(stream));
+    String line=reader.readLine();
+    logger.info("First line in file {}: {}",filePath,line);
+    Assert.assertTrue(line.startsWith("yarg"));
+  }
+  System.out.println("There are " + statuses.length + " files.");
+  Assert.assertEquals("31 files expected, found " + statuses.length,31,statuses.length);
+  if (!KEEP_DATA) {
+    fs.delete(outputDirPath,true);
+  }
+  cluster.shutdown();
+  cluster=null;
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

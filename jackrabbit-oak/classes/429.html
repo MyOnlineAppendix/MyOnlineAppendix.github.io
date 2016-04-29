@@ -1,0 +1,138 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.segment.SegmentSizeTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAccessControlNodes() throws IOException {
+  NodeBuilder builder=EMPTY_NODE.builder();
+  builder.setProperty("jcr:primaryType","rep:ACL",Type.NAME);
+  expectSize(96,builder);
+  expectAmortizedSize(4,builder);
+  NodeBuilder deny=builder.child("deny");
+  deny.setProperty("jcr:primaryType","rep:DenyACE",Type.NAME);
+  deny.setProperty("rep:principalName","everyone");
+  deny.setProperty(PropertyStates.createProperty("rep:privileges",ImmutableList.of("jcr:read"),Type.NAMES));
+  expectSize(240,builder);
+  expectAmortizedSize(32,builder);
+  NodeBuilder allow=builder.child("allow");
+  allow.setProperty("jcr:primaryType","rep:GrantACE");
+  allow.setProperty("rep:principalName","administrators");
+  allow.setProperty(PropertyStates.createProperty("rep:privileges",ImmutableList.of("jcr:all"),Type.NAMES));
+  expectSize(368,builder);
+  expectAmortizedSize(84,builder);
+  NodeBuilder deny0=builder.child("deny0");
+  deny0.setProperty("jcr:primaryType","rep:DenyACE",Type.NAME);
+  deny0.setProperty("rep:principalName","everyone");
+  deny0.setProperty("rep:glob","*/activities/*");
+  builder.setProperty(PropertyStates.createProperty("rep:privileges",ImmutableList.of("jcr:read"),Type.NAMES));
+  expectSize(464,builder);
+  expectAmortizedSize(124,builder);
+  NodeBuilder allow0=builder.child("allow0");
+  allow0.setProperty("jcr:primaryType","rep:GrantACE");
+  allow0.setProperty("rep:principalName","user-administrators");
+  allow0.setProperty(PropertyStates.createProperty("rep:privileges",ImmutableList.of("jcr:all"),Type.NAMES));
+  expectSize(528,builder);
+  expectAmortizedSize(160,builder);
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testFlatNodeUpdate() throws IOException {
+  SegmentStore store=new MemoryStore();
+  SegmentWriter writer=store.getTracker().getWriter();
+  NodeBuilder builder=EMPTY_NODE.builder();
+  for (int i=0; i < 1000; i++) {
+    builder.child("child" + i);
+  }
+  SegmentNodeState state=writer.writeNode(builder.getNodeState());
+  writer.flush();
+  Segment segment=store.readSegment(state.getRecordId().getSegmentId());
+  assertEquals(27584,segment.size());
+  writer.flush();
+  builder=state.builder();
+  builder.child("child1000");
+  state=writer.writeNode(builder.getNodeState());
+  writer.flush();
+  segment=store.readSegment(state.getRecordId().getSegmentId());
+  assertEquals(560,segment.size());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDuplicateStrings() throws IOException {
+  String string="More than just a few bytes of example content.";
+  SegmentWriter writer=new MemoryStore().getTracker().getWriter();
+  SegmentNodeBuilder builder=writer.writeNode(EMPTY_NODE).builder();
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(1,string),Type.STRINGS));
+  RecordId id1=builder.getNodeState().getRecordId();
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(12,string),Type.STRINGS));
+  RecordId id2=builder.getNodeState().getRecordId();
+  assertEquals(16 + 12 * Segment.RECORD_ID_BYTES,id1.getOffset() - id2.getOffset());
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(100,string),Type.STRINGS));
+  RecordId id3=builder.getNodeState().getRecordId();
+  assertEquals(16 + 100 * Segment.RECORD_ID_BYTES,id2.getOffset() - id3.getOffset());
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNodeSize() throws IOException {
+  NodeBuilder builder=EMPTY_NODE.builder();
+  expectSize(96,builder);
+  expectAmortizedSize(4,builder);
+  builder=EMPTY_NODE.builder();
+  builder.setProperty("foo","bar");
+  expectSize(112,builder);
+  expectAmortizedSize(8,builder);
+  builder=EMPTY_NODE.builder();
+  builder.setProperty("foo","bar");
+  builder.setProperty("baz",123);
+  expectSize(128,builder);
+  expectAmortizedSize(16,builder);
+  builder=EMPTY_NODE.builder();
+  builder.child("foo");
+  expectSize(128,builder);
+  expectAmortizedSize(12,builder);
+  builder=EMPTY_NODE.builder();
+  builder.child("foo");
+  builder.child("bar");
+  expectSize(144,builder);
+  expectAmortizedSize(40,builder);
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDuplicateDates() throws IOException {
+  String now=ISO8601.format(Calendar.getInstance());
+  SegmentWriter writer=new MemoryStore().getTracker().getWriter();
+  SegmentNodeBuilder builder=writer.writeNode(EMPTY_NODE).builder();
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(1,now),Type.DATES));
+  RecordId id1=builder.getNodeState().getRecordId();
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(12,now),Type.DATES));
+  RecordId id2=builder.getNodeState().getRecordId();
+  assertEquals(16 + 12 * Segment.RECORD_ID_BYTES,id1.getOffset() - id2.getOffset());
+  builder.setProperty(PropertyStates.createProperty("test",Collections.nCopies(100,now),Type.DATES));
+  RecordId id3=builder.getNodeState().getRecordId();
+  assertEquals(16 + 100 * Segment.RECORD_ID_BYTES,id2.getOffset() - id3.getOffset());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,112 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.coprocessor.TestRegionObserverScannerOpenHook (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Unfortunately, the easiest way to test this is to spin up a mini-cluster since we want to do
+ * the usual compaction mechanism on the region, rather than going through the backdoor to the
+ * region
+ */
+@Test public void testRegionObserverCompactionTimeStacking() throws Exception {
+  Configuration conf=UTIL.getConfiguration();
+  conf.setClass(HConstants.REGION_IMPL,CompactionCompletionNotifyingRegion.class,HRegion.class);
+  conf.setInt("hbase.hstore.compaction.min",2);
+  UTIL.startMiniCluster();
+  String tableName="testRegionObserverCompactionTimeStacking";
+  byte[] ROW=Bytes.toBytes("testRow");
+  byte[] A=Bytes.toBytes("A");
+  HTableDescriptor desc=new HTableDescriptor(TableName.valueOf(tableName));
+  desc.addFamily(new HColumnDescriptor(A));
+  desc.addCoprocessor(EmptyRegionObsever.class.getName(),null,Coprocessor.PRIORITY_USER,null);
+  desc.addCoprocessor(NoDataFromCompaction.class.getName(),null,Coprocessor.PRIORITY_HIGHEST,null);
+  Admin admin=UTIL.getHBaseAdmin();
+  admin.createTable(desc);
+  Table table=UTIL.getConnection().getTable(desc.getTableName());
+  Put put=new Put(ROW);
+  put.addColumn(A,A,A);
+  table.put(put);
+  HRegionServer rs=UTIL.getRSForFirstRegionInTable(desc.getTableName());
+  List<Region> regions=rs.getOnlineRegions(desc.getTableName());
+  assertEquals("More than 1 region serving test table with 1 row",1,regions.size());
+  Region region=regions.get(0);
+  admin.flushRegion(region.getRegionInfo().getRegionName());
+  CountDownLatch latch=((CompactionCompletionNotifyingRegion)region).getCompactionStateChangeLatch();
+  put=new Put(Bytes.toBytes("anotherrow"));
+  put.addColumn(A,A,A);
+  table.put(put);
+  admin.flushRegion(region.getRegionInfo().getRegionName());
+  latch.await();
+  Get get=new Get(ROW);
+  Result r=table.get(get);
+  assertNull("Got an unexpected number of rows - no data should be returned with the NoDataFromScan coprocessor. Found: " + r,r.listCells());
+  get=new Get(Bytes.toBytes("anotherrow"));
+  r=table.get(get);
+  assertNull("Got an unexpected number of rows - no data should be returned with the NoDataFromScan coprocessor Found: " + r,r.listCells());
+  table.close();
+  UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testRegionObserverFlushTimeStacking() throws Exception {
+  byte[] ROW=Bytes.toBytes("testRow");
+  byte[] TABLE=Bytes.toBytes(getClass().getName());
+  byte[] A=Bytes.toBytes("A");
+  byte[][] FAMILIES=new byte[][]{A};
+  Configuration conf=HBaseConfiguration.create();
+  Region region=initHRegion(TABLE,getClass().getName(),conf,FAMILIES);
+  RegionCoprocessorHost h=region.getCoprocessorHost();
+  h.load(NoDataFromFlush.class,Coprocessor.PRIORITY_HIGHEST,conf);
+  h.load(EmptyRegionObsever.class,Coprocessor.PRIORITY_USER,conf);
+  Put put=new Put(ROW);
+  put.addColumn(A,A,A);
+  region.put(put);
+  region.flush(true);
+  Get get=new Get(ROW);
+  Result r=region.get(get);
+  assertNull("Got an unexpected number of rows - no data should be returned with the NoDataFromScan coprocessor. Found: " + r,r.listCells());
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testRegionObserverScanTimeStacking() throws Exception {
+  byte[] ROW=Bytes.toBytes("testRow");
+  byte[] TABLE=Bytes.toBytes(getClass().getName());
+  byte[] A=Bytes.toBytes("A");
+  byte[][] FAMILIES=new byte[][]{A};
+  Configuration conf=HBaseConfiguration.create();
+  Region region=initHRegion(TABLE,getClass().getName(),conf,FAMILIES);
+  RegionCoprocessorHost h=region.getCoprocessorHost();
+  h.load(NoDataFromScan.class,Coprocessor.PRIORITY_HIGHEST,conf);
+  h.load(EmptyRegionObsever.class,Coprocessor.PRIORITY_USER,conf);
+  Put put=new Put(ROW);
+  put.addColumn(A,A,A);
+  region.put(put);
+  Get get=new Get(ROW);
+  Result r=region.get(get);
+  assertNull("Got an unexpected number of rows - no data should be returned with the NoDataFromScan coprocessor. Found: " + r,r.listCells());
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

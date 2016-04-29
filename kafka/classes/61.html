@@ -1,0 +1,94 @@
+<h3 style="margin:0px">Class: org.apache.kafka.connect.file.FileStreamSourceTaskTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExceptionVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies that exceptions are thrown during the test case execution
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(expected=ConnectException.class) public void testMissingTopic() throws InterruptedException {
+  replay();
+  config.remove(FileStreamSourceConnector.TOPIC_CONFIG);
+  task.start(config);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown(){
+  tempFile.delete();
+  if (verifyMocks)   PowerMock.verifyAll();
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  tempFile=File.createTempFile("file-stream-source-task-test",null);
+  config=new HashMap<>();
+  config.put(FileStreamSourceConnector.FILE_CONFIG,tempFile.getAbsolutePath());
+  config.put(FileStreamSourceConnector.TOPIC_CONFIG,TOPIC);
+  task=new FileStreamSourceTask();
+  offsetStorageReader=PowerMock.createMock(OffsetStorageReader.class);
+  context=PowerMock.createMock(SourceTaskContext.class);
+  task.initialize(context);
+}
+
+</code></pre>
+
+<pre class="type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNormalLifecycle() throws InterruptedException, IOException {
+  expectOffsetLookupReturnNone();
+  replay();
+  task.start(config);
+  FileOutputStream os=new FileOutputStream(tempFile);
+  assertEquals(null,task.poll());
+  os.write("partial line".getBytes());
+  os.flush();
+  assertEquals(null,task.poll());
+  os.write(" finished\n".getBytes());
+  os.flush();
+  List<SourceRecord> records=task.poll();
+  assertEquals(1,records.size());
+  assertEquals(TOPIC,records.get(0).topic());
+  assertEquals("partial line finished",records.get(0).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(0).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,22L),records.get(0).sourceOffset());
+  assertEquals(null,task.poll());
+  os.write("line1\rline2\r\nline3\nline4\n\r".getBytes());
+  os.flush();
+  records=task.poll();
+  assertEquals(4,records.size());
+  assertEquals("line1",records.get(0).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(0).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,28L),records.get(0).sourceOffset());
+  assertEquals("line2",records.get(1).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(1).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,35L),records.get(1).sourceOffset());
+  assertEquals("line3",records.get(2).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(2).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,41L),records.get(2).sourceOffset());
+  assertEquals("line4",records.get(3).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(3).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,47L),records.get(3).sourceOffset());
+  os.write("subsequent text".getBytes());
+  os.flush();
+  records=task.poll();
+  assertEquals(1,records.size());
+  assertEquals("",records.get(0).value());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.FILENAME_FIELD,tempFile.getAbsolutePath()),records.get(0).sourcePartition());
+  assertEquals(Collections.singletonMap(FileStreamSourceTask.POSITION_FIELD,48L),records.get(0).sourceOffset());
+  task.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

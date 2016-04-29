@@ -1,0 +1,108 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.streaming.StreamingTransferTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-4 type-5 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to make sure RangeTombstones at column index boundary transferred correctly.
+ */
+@Test public void testTransferRangeTombstones() throws Exception {
+  String ks=KEYSPACE1;
+  String cfname="StandardInteger1";
+  Keyspace keyspace=Keyspace.open(ks);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  ClusteringComparator comparator=cfs.getComparator();
+  String key="key1";
+  RowUpdateBuilder updates=new RowUpdateBuilder(cfs.metadata,FBUtilities.timestampMicros(),key);
+  updates.clustering(1).add("val",ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize() - 64])).build().apply();
+  updates=new RowUpdateBuilder(cfs.metadata,FBUtilities.timestampMicros(),key);
+  updates.clustering(6).add("val",ByteBuffer.wrap(new byte[DatabaseDescriptor.getColumnIndexSize()])).build().apply();
+  updates=new RowUpdateBuilder(cfs.metadata,FBUtilities.timestampMicros() + 1,key);
+  updates.addRangeTombstone(Slice.make(comparator.make(5),comparator.make(7))).build().apply();
+  cfs.forceBlockingFlush();
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  cfs.clearUnsafe();
+  transferSSTables(sstable);
+  assertEquals(1,cfs.getLiveSSTables().size());
+  Row r=Util.getOnlyRow(Util.cmd(cfs).build());
+  Assert.assertFalse(r.isEmpty());
+  Assert.assertTrue(1 == Int32Type.instance.compose(r.clustering().get(0)));
+}
+
+</code></pre>
+
+<pre class="type-15 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Test if empty {@link StreamPlan} returns success with empty result.
+ */
+@Test public void testEmptyStreamPlan() throws Exception {
+  StreamResultFuture futureResult=new StreamPlan("StreamingTransferTest").execute();
+  final UUID planId=futureResult.planId;
+  Futures.addCallback(futureResult,new FutureCallback<StreamState>(){
+    public void onSuccess(    StreamState result){
+      assert planId.equals(result.planId);
+      assert result.description.equals("StreamingTransferTest");
+      assert result.sessions.isEmpty();
+    }
+    public void onFailure(    Throwable t){
+      fail();
+    }
+  }
+);
+  futureResult.get(100,TimeUnit.MILLISECONDS);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTransferTableViaRanges() throws Exception {
+  doTransferTable(false);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTransferTableViaSSTables() throws Exception {
+  doTransferTable(true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRequestEmpty() throws Exception {
+  IPartitioner p=Util.testPartitioner();
+  List<Range<Token>> ranges=new ArrayList<>();
+  ranges.add(new Range<>(p.getMinimumToken(),p.getToken(ByteBufferUtil.bytes("key1"))));
+  ranges.add(new Range<>(p.getToken(ByteBufferUtil.bytes("key2")),p.getMinimumToken()));
+  StreamResultFuture futureResult=new StreamPlan("StreamingTransferTest").requestRanges(LOCAL,LOCAL,KEYSPACE2,ranges).execute();
+  UUID planId=futureResult.planId;
+  StreamState result=futureResult.get();
+  assert planId.equals(result.planId);
+  assert result.description.equals("StreamingTransferTest");
+  assert result.sessions.size() == 1;
+  SessionInfo session=Iterables.get(result.sessions,0);
+  assert session.peer.equals(LOCAL);
+  assert session.getTotalFilesReceived() == 0;
+  assert session.getTotalFilesSent() == 0;
+  assert session.getTotalSizeReceived() == 0;
+  assert session.getTotalSizeSent() == 0;
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

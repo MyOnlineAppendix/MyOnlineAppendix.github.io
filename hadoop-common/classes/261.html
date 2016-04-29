@@ -1,0 +1,284 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestDFSUpgradeFromImage (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test upgrade from 0.22 image
+ */
+@Test public void testUpgradeFromRel22Image() throws IOException {
+  unpackStorage(HADOOP22_IMAGE,HADOOP_DFS_DIR_TXT);
+  upgradeAndVerify(new MiniDFSCluster.Builder(upgradeConf).numDataNodes(4));
+}
+
+</code></pre>
+
+<pre class="type-13 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test upgrade from 2.0 image with a variety of .snapshot and .reserved
+ * paths to test renaming on upgrade
+ */
+@Test public void testUpgradeFromRel2ReservedImage() throws Exception {
+  unpackStorage(HADOOP2_RESERVED_IMAGE,HADOOP_DFS_DIR_TXT);
+  MiniDFSCluster cluster=null;
+  final Configuration conf=new Configuration();
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).format(false).startupOption(StartupOption.UPGRADE).numDataNodes(0).build();
+  }
+ catch (  IllegalArgumentException e) {
+    GenericTestUtils.assertExceptionContains("reserved path component in this version",e);
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+  try {
+    FSImageFormat.setRenameReservedPairs(".snapshot=.user-snapshot," + ".reserved=.my-reserved");
+    cluster=new MiniDFSCluster.Builder(conf).format(false).startupOption(StartupOption.UPGRADE).numDataNodes(0).build();
+    DistributedFileSystem dfs=cluster.getFileSystem();
+    final String[] expected=new String[]{"/edits","/edits/.reserved","/edits/.user-snapshot","/edits/.user-snapshot/editsdir","/edits/.user-snapshot/editsdir/editscontents","/edits/.user-snapshot/editsdir/editsdir2","/image","/image/.reserved","/image/.user-snapshot","/image/.user-snapshot/imagedir","/image/.user-snapshot/imagedir/imagecontents","/image/.user-snapshot/imagedir/imagedir2","/.my-reserved","/.my-reserved/edits-touch","/.my-reserved/image-touch"};
+    for (int i=0; i < 2; i++) {
+      if (i == 1) {
+        cluster.finalizeCluster(conf);
+        cluster.restartNameNode(true);
+      }
+      ArrayList<Path> toList=new ArrayList<Path>();
+      toList.add(new Path("/"));
+      ArrayList<String> found=new ArrayList<String>();
+      while (!toList.isEmpty()) {
+        Path p=toList.remove(0);
+        FileStatus[] statuses=dfs.listStatus(p);
+        for (        FileStatus status : statuses) {
+          final String path=status.getPath().toUri().getPath();
+          System.out.println("Found path " + path);
+          found.add(path);
+          if (status.isDirectory()) {
+            toList.add(status.getPath());
+          }
+        }
+      }
+      for (      String s : expected) {
+        assertTrue("Did not find expected path " + s,found.contains(s));
+      }
+      assertEquals("Found an unexpected path while listing filesystem",found.size(),expected.length);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test upgrade from a branch-1.2 image with reserved paths
+ */
+@Test public void testUpgradeFromRel1ReservedImage() throws Exception {
+  unpackStorage(HADOOP1_RESERVED_IMAGE,HADOOP_DFS_DIR_TXT);
+  MiniDFSCluster cluster=null;
+  final Configuration conf=new Configuration();
+  try {
+    FSImageFormat.setRenameReservedPairs(".snapshot=.user-snapshot," + ".reserved=.my-reserved");
+    cluster=new MiniDFSCluster.Builder(conf).format(false).startupOption(StartupOption.UPGRADE).numDataNodes(0).build();
+    DistributedFileSystem dfs=cluster.getFileSystem();
+    final String[] expected=new String[]{"/.my-reserved","/.user-snapshot","/.user-snapshot/.user-snapshot","/.user-snapshot/open","/dir1","/dir1/.user-snapshot","/dir2","/dir2/.user-snapshot","/user","/user/andrew","/user/andrew/.user-snapshot"};
+    for (int i=0; i < 2; i++) {
+      if (i == 1) {
+        cluster.finalizeCluster(conf);
+        cluster.restartNameNode(true);
+      }
+      ArrayList<Path> toList=new ArrayList<Path>();
+      toList.add(new Path("/"));
+      ArrayList<String> found=new ArrayList<String>();
+      while (!toList.isEmpty()) {
+        Path p=toList.remove(0);
+        FileStatus[] statuses=dfs.listStatus(p);
+        for (        FileStatus status : statuses) {
+          final String path=status.getPath().toUri().getPath();
+          System.out.println("Found path " + path);
+          found.add(path);
+          if (status.isDirectory()) {
+            toList.add(status.getPath());
+          }
+        }
+      }
+      for (      String s : expected) {
+        assertTrue("Did not find expected path " + s,found.contains(s));
+      }
+      assertEquals("Found an unexpected path while listing filesystem",found.size(),expected.length);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that sets up a fake image from Hadoop 0.3.0 and tries to start a
+ * NN, verifying that the correct error message is thrown.
+ */
+@Test public void testFailOnPreUpgradeImage() throws IOException {
+  Configuration conf=new HdfsConfiguration();
+  File namenodeStorage=new File(TEST_ROOT_DIR,"nnimage-0.3.0");
+  conf.set(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_KEY,namenodeStorage.toString());
+  FileUtil.fullyDelete(namenodeStorage);
+  assertTrue("Make " + namenodeStorage,namenodeStorage.mkdirs());
+  File imageDir=new File(namenodeStorage,"image");
+  assertTrue("Make " + imageDir,imageDir.mkdirs());
+  File imageFile=new File(imageDir,"fsimage");
+  byte[] imageBytes=StringUtils.hexStringToByte("fffffffee17c0d2700000000");
+  FileOutputStream fos=new FileOutputStream(imageFile);
+  try {
+    fos.write(imageBytes);
+  }
+  finally {
+    fos.close();
+  }
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(0).format(false).manageDataDfsDirs(false).manageNameDfsDirs(false).startupOption(StartupOption.REGULAR).build();
+    fail("Was able to start NN from 0.3.0 image");
+  }
+ catch (  IOException ioe) {
+    if (!ioe.toString().contains("Old layout version is 'too old'")) {
+      throw ioe;
+    }
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test upgrade from a 1.x image with some blocksBeingWritten
+ */
+@Test public void testUpgradeFromRel1BBWImage() throws IOException {
+  unpackStorage(HADOOP1_BBW_IMAGE,HADOOP_DFS_DIR_TXT);
+  Configuration conf=new Configuration(upgradeConf);
+  conf.set(DFSConfigKeys.DFS_DATANODE_DATA_DIR_KEY,System.getProperty("test.build.data") + File.separator + "dfs"+ File.separator+ "data"+ File.separator+ "data1");
+  upgradeAndVerify(new MiniDFSCluster.Builder(conf).numDataNodes(1).enableManagedDfsDirsRedundancy(false).manageDataDfsDirs(false));
+}
+
+</code></pre>
+
+<pre class="type-13 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test upgrade from a 0.23.11 image with reserved paths
+ */
+@Test public void testUpgradeFromRel023ReservedImage() throws Exception {
+  unpackStorage(HADOOP023_RESERVED_IMAGE,HADOOP_DFS_DIR_TXT);
+  MiniDFSCluster cluster=null;
+  final Configuration conf=new Configuration();
+  try {
+    FSImageFormat.setRenameReservedPairs(".snapshot=.user-snapshot," + ".reserved=.my-reserved");
+    cluster=new MiniDFSCluster.Builder(conf).format(false).startupOption(StartupOption.UPGRADE).numDataNodes(0).build();
+    DistributedFileSystem dfs=cluster.getFileSystem();
+    final String[] expected=new String[]{"/.user-snapshot","/dir1","/dir1/.user-snapshot","/dir2","/dir2/.user-snapshot"};
+    for (int i=0; i < 2; i++) {
+      if (i == 1) {
+        cluster.finalizeCluster(conf);
+        cluster.restartNameNode(true);
+      }
+      ArrayList<Path> toList=new ArrayList<Path>();
+      toList.add(new Path("/"));
+      ArrayList<String> found=new ArrayList<String>();
+      while (!toList.isEmpty()) {
+        Path p=toList.remove(0);
+        FileStatus[] statuses=dfs.listStatus(p);
+        for (        FileStatus status : statuses) {
+          final String path=status.getPath().toUri().getPath();
+          System.out.println("Found path " + path);
+          found.add(path);
+          if (status.isDirectory()) {
+            toList.add(status.getPath());
+          }
+        }
+      }
+      for (      String s : expected) {
+        assertTrue("Did not find expected path " + s,found.contains(s));
+      }
+      assertEquals("Found an unexpected path while listing filesystem",found.size(),expected.length);
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test upgrade from 0.22 image with corrupt md5, make sure it
+ * fails to upgrade
+ */
+@Test public void testUpgradeFromCorruptRel22Image() throws IOException {
+  unpackStorage(HADOOP22_IMAGE,HADOOP_DFS_DIR_TXT);
+  File baseDir=new File(MiniDFSCluster.getBaseDirectory());
+  FSImageTestUtil.corruptVersionFile(new File(baseDir,"name1/current/VERSION"),"imageMD5Digest","22222222222222222222222222222222");
+  FSImageTestUtil.corruptVersionFile(new File(baseDir,"name2/current/VERSION"),"imageMD5Digest","22222222222222222222222222222222");
+  final LogVerificationAppender appender=new LogVerificationAppender();
+  final Logger logger=Logger.getRootLogger();
+  logger.addAppender(appender);
+  try {
+    upgradeAndVerify(new MiniDFSCluster.Builder(upgradeConf).numDataNodes(4));
+    fail("Upgrade did not fail with bad MD5");
+  }
+ catch (  IOException ioe) {
+    String msg=StringUtils.stringifyException(ioe);
+    if (!msg.contains("Failed to load an FSImage file")) {
+      throw ioe;
+    }
+    int md5failures=appender.countExceptionsWithMessage(" is corrupt with MD5 checksum of ");
+    assertEquals("Upgrade did not fail with bad MD5",1,md5failures);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

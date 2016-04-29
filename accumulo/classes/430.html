@@ -1,0 +1,74 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.master.MergeStateIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-3 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void test() throws Exception {
+  AccumuloServerContext context=EasyMock.createMock(AccumuloServerContext.class);
+  Connector connector=getConnector();
+  EasyMock.expect(context.getConnector()).andReturn(connector).anyTimes();
+  EasyMock.replay(context);
+  connector.securityOperations().grantTablePermission(connector.whoami(),MetadataTable.NAME,TablePermission.WRITE);
+  BatchWriter bw=connector.createBatchWriter(MetadataTable.NAME,new BatchWriterConfig());
+  String splits[]={"a","e","j","o","t","z"};
+  Text tableId=new Text("t");
+  Text pr=null;
+  for (  String s : splits) {
+    Text split=new Text(s);
+    Mutation prevRow=KeyExtent.getPrevRowUpdateMutation(new KeyExtent(tableId,split,pr));
+    prevRow.put(TabletsSection.CurrentLocationColumnFamily.NAME,new Text("123456"),new Value("127.0.0.1:1234".getBytes()));
+    ChoppedColumnFamily.CHOPPED_COLUMN.put(prevRow,new Value("junk".getBytes()));
+    bw.addMutation(prevRow);
+    pr=split;
+  }
+  Mutation defaultTablet=KeyExtent.getPrevRowUpdateMutation(new KeyExtent(tableId,null,pr));
+  defaultTablet.put(TabletsSection.CurrentLocationColumnFamily.NAME,new Text("123456"),new Value("127.0.0.1:1234".getBytes()));
+  bw.addMutation(defaultTablet);
+  bw.close();
+  MockCurrentState state=new MockCurrentState(new MergeInfo(new KeyExtent(tableId,new Text("p"),new Text("e")),MergeInfo.Operation.MERGE));
+  MetaDataStateStore metaDataStateStore=new MetaDataStateStore(context,state);
+  int count=0;
+  for (  TabletLocationState tss : metaDataStateStore) {
+    if (tss != null)     count++;
+  }
+  Assert.assertEquals(0,count);
+  Mutation m=new KeyExtent(tableId,new Text("t"),new Text("p")).getPrevRowUpdateMutation();
+  TabletsSection.TabletColumnFamily.SPLIT_RATIO_COLUMN.put(m,new Value("0.5".getBytes()));
+  TabletsSection.TabletColumnFamily.OLD_PREV_ROW_COLUMN.put(m,KeyExtent.encodePrevEndRow(new Text("o")));
+  update(connector,m);
+  MergeStats stats=scan(state,metaDataStateStore);
+  MergeState newState=stats.nextMergeState(connector,state);
+  Assert.assertEquals(MergeState.WAITING_FOR_OFFLINE,newState);
+  BatchDeleter deleter=connector.createBatchDeleter(MetadataTable.NAME,Authorizations.EMPTY,1000,new BatchWriterConfig());
+  deleter.fetchColumnFamily(TabletsSection.CurrentLocationColumnFamily.NAME);
+  deleter.setRanges(Collections.singletonList(new Range()));
+  deleter.delete();
+  stats=scan(state,metaDataStateStore);
+  Assert.assertEquals(MergeState.WAITING_FOR_OFFLINE,stats.nextMergeState(connector,state));
+  KeyExtent tablet=new KeyExtent(tableId,new Text("p"),new Text("o"));
+  m=tablet.getPrevRowUpdateMutation();
+  TabletsSection.TabletColumnFamily.SPLIT_RATIO_COLUMN.put(m,new Value("0.5".getBytes()));
+  update(connector,m);
+  metaDataStateStore.setLocations(Collections.singletonList(new Assignment(tablet,state.someTServer)));
+  stats=scan(state,metaDataStateStore);
+  Assert.assertEquals(MergeState.WAITING_FOR_CHOPPED,stats.nextMergeState(connector,state));
+  m=tablet.getPrevRowUpdateMutation();
+  ChoppedColumnFamily.CHOPPED_COLUMN.put(m,new Value("junk".getBytes()));
+  update(connector,m);
+  stats=scan(state,metaDataStateStore);
+  Assert.assertEquals(MergeState.WAITING_FOR_OFFLINE,stats.nextMergeState(connector,state));
+  m=tablet.getPrevRowUpdateMutation();
+  Collection<Collection<String>> walogs=Collections.emptyList();
+  metaDataStateStore.unassign(Collections.singletonList(new TabletLocationState(tablet,null,state.someTServer,null,walogs,false)),null);
+  stats=scan(state,metaDataStateStore);
+  Assert.assertEquals(MergeState.MERGING,stats.nextMergeState(connector,state));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

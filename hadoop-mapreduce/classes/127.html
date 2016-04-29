@@ -1,0 +1,177 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.raid.TestBlockFixerDistConcurrency (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * tests that we can have 2 concurrent jobs fixing files 
+ * (dist block fixer)
+ */
+@Test public void testConcurrentJobs() throws Exception {
+  LOG.info("Test testConcurrentJobs started.");
+  long blockSize=8192L;
+  int stripeLength=3;
+  mySetup(stripeLength,-1);
+  Path file1=new Path("/user/dhruba/raidtest/file1");
+  Path file2=new Path("/user/dhruba/raidtest/file2");
+  Path destPath=new Path("/destraid/user/dhruba/raidtest");
+  long crc1=TestRaidDfs.createTestFilePartialLastBlock(fileSys,file1,1,20,blockSize);
+  long crc2=TestRaidDfs.createTestFilePartialLastBlock(fileSys,file2,1,20,blockSize);
+  long file1Len=fileSys.getFileStatus(file1).getLen();
+  long file2Len=fileSys.getFileStatus(file2).getLen();
+  LOG.info("Test testConcurrentJobs created test files");
+  Configuration localConf=new Configuration(conf);
+  localConf.set(RaidNode.RAID_LOCATION_KEY,"/destraid");
+  localConf.setInt("raid.blockfix.interval",1000);
+  localConf.set("raid.blockfix.classname","org.apache.hadoop.raid.DistBlockFixer");
+  localConf.setLong("raid.blockfix.filespertask",2L);
+  try {
+    cnode=RaidNode.createRaidNode(null,localConf);
+    TestRaidDfs.waitForFileRaided(LOG,fileSys,file1,destPath);
+    TestRaidDfs.waitForFileRaided(LOG,fileSys,file2,destPath);
+    cnode.stop();
+    cnode.join();
+    FileStatus file1Stat=fileSys.getFileStatus(file1);
+    FileStatus file2Stat=fileSys.getFileStatus(file2);
+    DistributedFileSystem dfs=(DistributedFileSystem)fileSys;
+    LocatedBlocks file1Loc=RaidDFSUtil.getBlockLocations(dfs,file1.toUri().getPath(),0,file1Stat.getLen());
+    LocatedBlocks file2Loc=RaidDFSUtil.getBlockLocations(dfs,file2.toUri().getPath(),0,file2Stat.getLen());
+    String[] corruptFiles=RaidDFSUtil.getCorruptFiles(dfs);
+    assertEquals("no corrupt files expected",0,corruptFiles.length);
+    assertEquals("filesFixed() should return 0 before fixing files",0,cnode.blockFixer.filesFixed());
+    int[] corruptBlockIdxs=new int[]{0,4,6};
+    for (    int idx : corruptBlockIdxs)     corruptBlock(file1Loc.get(idx).getBlock());
+    reportCorruptBlocks(dfs,file1,corruptBlockIdxs,blockSize);
+    cnode=RaidNode.createRaidNode(null,localConf);
+    DistBlockFixer blockFixer=(DistBlockFixer)cnode.blockFixer;
+    long start=System.currentTimeMillis();
+    while (blockFixer.jobsRunning() < 1 && System.currentTimeMillis() - start < 240000) {
+      LOG.info("Test testBlockFix waiting for fixing job 1 to start");
+      Thread.sleep(10);
+    }
+    assertEquals("job 1 not running",1,blockFixer.jobsRunning());
+    for (    int idx : corruptBlockIdxs)     corruptBlock(file2Loc.get(idx).getBlock());
+    reportCorruptBlocks(dfs,file2,corruptBlockIdxs,blockSize);
+    while (blockFixer.jobsRunning() < 2 && System.currentTimeMillis() - start < 240000) {
+      LOG.info("Test testBlockFix waiting for fixing job 2 to start");
+      Thread.sleep(10);
+    }
+    assertEquals("2 jobs not running",2,blockFixer.jobsRunning());
+    while (blockFixer.filesFixed() < 2 && System.currentTimeMillis() - start < 240000) {
+      LOG.info("Test testBlockFix waiting for files to be fixed.");
+      Thread.sleep(10);
+    }
+    assertEquals("files not fixed",2,blockFixer.filesFixed());
+    dfs=getDFS(conf,dfs);
+    try {
+      Thread.sleep(5 * 1000);
+    }
+ catch (    InterruptedException ignore) {
+    }
+    assertTrue("file not fixed",TestRaidDfs.validateFile(dfs,file1,file1Len,crc1));
+    assertTrue("file not fixed",TestRaidDfs.validateFile(dfs,file2,file2Len,crc2));
+  }
+ catch (  Exception e) {
+    LOG.info("Test testConcurrentJobs exception " + e + StringUtils.stringifyException(e));
+    throw e;
+  }
+ finally {
+    myTearDown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 type-11 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * tests that the distributed block fixer obeys
+ * the limit on how many files to fix simultaneously
+ */
+@Test public void testMaxPendingFiles() throws Exception {
+  LOG.info("Test testMaxPendingFiles started.");
+  long blockSize=8192L;
+  int stripeLength=3;
+  mySetup(stripeLength,-1);
+  Path file1=new Path("/user/dhruba/raidtest/file1");
+  Path file2=new Path("/user/dhruba/raidtest/file2");
+  Path destPath=new Path("/destraid/user/dhruba/raidtest");
+  long crc1=TestRaidDfs.createTestFilePartialLastBlock(fileSys,file1,1,20,blockSize);
+  long crc2=TestRaidDfs.createTestFilePartialLastBlock(fileSys,file2,1,20,blockSize);
+  long file1Len=fileSys.getFileStatus(file1).getLen();
+  long file2Len=fileSys.getFileStatus(file2).getLen();
+  LOG.info("Test testMaxPendingFiles created test files");
+  Configuration localConf=new Configuration(conf);
+  localConf.set(RaidNode.RAID_LOCATION_KEY,"/destraid");
+  localConf.setInt("raid.blockfix.interval",1000);
+  localConf.set("raid.blockfix.classname","org.apache.hadoop.raid.DistBlockFixer");
+  localConf.setLong("raid.blockfix.filespertask",2L);
+  localConf.setLong("raid.blockfix.maxpendingfiles",1L);
+  try {
+    cnode=RaidNode.createRaidNode(null,localConf);
+    TestRaidDfs.waitForFileRaided(LOG,fileSys,file1,destPath);
+    TestRaidDfs.waitForFileRaided(LOG,fileSys,file2,destPath);
+    cnode.stop();
+    cnode.join();
+    FileStatus file1Stat=fileSys.getFileStatus(file1);
+    FileStatus file2Stat=fileSys.getFileStatus(file2);
+    DistributedFileSystem dfs=(DistributedFileSystem)fileSys;
+    LocatedBlocks file1Loc=RaidDFSUtil.getBlockLocations(dfs,file1.toUri().getPath(),0,file1Stat.getLen());
+    LocatedBlocks file2Loc=RaidDFSUtil.getBlockLocations(dfs,file2.toUri().getPath(),0,file2Stat.getLen());
+    String[] corruptFiles=RaidDFSUtil.getCorruptFiles(dfs);
+    assertEquals("no corrupt files expected",0,corruptFiles.length);
+    assertEquals("filesFixed() should return 0 before fixing files",0,cnode.blockFixer.filesFixed());
+    int[] corruptBlockIdxs=new int[]{0,4,6};
+    for (    int idx : corruptBlockIdxs)     corruptBlock(file1Loc.get(idx).getBlock());
+    reportCorruptBlocks(dfs,file1,corruptBlockIdxs,blockSize);
+    corruptFiles=RaidDFSUtil.getCorruptFiles(dfs);
+    cnode=RaidNode.createRaidNode(null,localConf);
+    DistBlockFixer blockFixer=(DistBlockFixer)cnode.blockFixer;
+    long start=System.currentTimeMillis();
+    while (blockFixer.jobsRunning() < 1 && System.currentTimeMillis() - start < 240000) {
+      LOG.info("Test testBlockFix waiting for fixing job 1 to start");
+      Thread.sleep(10);
+    }
+    assertEquals("job not running",1,blockFixer.jobsRunning());
+    for (    int idx : corruptBlockIdxs)     corruptBlock(file2Loc.get(idx).getBlock());
+    reportCorruptBlocks(dfs,file2,corruptBlockIdxs,blockSize);
+    corruptFiles=RaidDFSUtil.getCorruptFiles(dfs);
+    while (blockFixer.filesFixed() < 2 && System.currentTimeMillis() - start < 240000) {
+      assertTrue("too many jobs running",blockFixer.jobsRunning() <= 1);
+      Thread.sleep(10);
+    }
+    assertEquals("files not fixed",2,blockFixer.filesFixed());
+    dfs=getDFS(conf,dfs);
+    try {
+      Thread.sleep(5 * 1000);
+    }
+ catch (    InterruptedException ignore) {
+    }
+    assertTrue("file not fixed",TestRaidDfs.validateFile(dfs,file1,file1Len,crc1));
+    assertTrue("file not fixed",TestRaidDfs.validateFile(dfs,file2,file2Len,crc2));
+  }
+ catch (  Exception e) {
+    LOG.info("Test testMaxPendingFiles exception " + e + StringUtils.stringifyException(e));
+    throw e;
+  }
+ finally {
+    myTearDown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

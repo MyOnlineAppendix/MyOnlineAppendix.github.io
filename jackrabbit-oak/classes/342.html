@@ -1,0 +1,443 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.index.lucene.LuceneIndexAugmentTest (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void indexHookCallbackFrequency() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enablePropertyIndex(props,"foo1",false);
+  TestUtil.enablePropertyIndex(props,"foo2",false);
+  TestUtil.enablePropertyIndex(props,"subChild/foo3",false);
+  root.commit();
+  final AtomicInteger counter=new AtomicInteger(0);
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      counter.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  counter.set(0);
+  Tree test=root.getTree("/").addChild("test");
+  Tree node=createNodeWithType(test,"item",TestUtil.NT_TEST);
+  node.setProperty("foo1","bar1");
+  node.setProperty("foo2","bar2");
+  Tree subChild=node.addChild("subChild");
+  subChild.setProperty("foo3","bar3");
+  root.commit();
+  assertEquals("Number of callbacks should be same as number of changed properties",1,counter.get());
+  counter.set(0);
+  subChild=root.getTree("/test/item/subChild");
+  subChild.setProperty("foo3","bar4");
+  root.commit();
+  assertEquals("Sub child property change should make call backs for all indexed properties",1,counter.get());
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void indexAugmentorMismatchedNodeType() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,"foo1");
+  root.commit();
+  final AtomicInteger indexingCounter1=new AtomicInteger(0);
+  final AtomicInteger indexingCounter2=new AtomicInteger(0);
+  factory.registerIndexFieldProvider(new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      indexingCounter1.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(JcrConstants.NT_BASE);
+    }
+  }
+);
+  factory.registerIndexFieldProvider(new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      indexingCounter2.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+);
+  factory.useSuperBehavior=true;
+  createNodeWithType(root.getTree("/"),"node1",TestUtil.NT_TEST).setProperty("foo1","bar1");
+  root.commit();
+  assertEquals("Mismatching node type should not let index augmentor called",0,indexingCounter1.get());
+  assertEquals("Matching node type should get augmentor called",1,indexingCounter2.get());
+}
+
+</code></pre>
+
+<pre class="type-9 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void queryHook() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,"foo");
+  root.commit();
+  final String testSearchText="search this text";
+  final String realSearchText="bar";
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      assertEquals("Full text term passed to provider isn't same as the one passed in query",testSearchText,text);
+      return new TermQuery(new Term(":fulltext",realSearchText));
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  Tree test=root.getTree("/").addChild("test");
+  Tree node=createNodeWithType(test,"item",TestUtil.NT_TEST);
+  node.setProperty("foo",realSearchText);
+  root.commit();
+  String query="select [jcr:path] from [oak:TestNode] where CONTAINS(*, '" + testSearchText + "')";
+  List<String> paths=executeQuery(query,SQL2);
+  assertEquals("Augmented query wasn't used to search",1,paths.size());
+  assertEquals("/test/item",paths.get(0));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void skipDefaultOnlyUsingAugmentors() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  Tree prop=props.addChild("foo1");
+  prop.setProperty(LuceneIndexConstants.PROP_INDEX,true);
+  prop=props.addChild("foo2");
+  prop.setProperty(LuceneIndexConstants.PROP_NAME,"subChild/foo2");
+  prop.setProperty(LuceneIndexConstants.PROP_INDEX,true);
+  root.commit();
+  final AtomicInteger indexingCounter=new AtomicInteger(0);
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      indexingCounter.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  final AtomicInteger queryingCounter=new AtomicInteger(0);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      queryingCounter.set(1);
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  Tree node1=createNodeWithType(root.getTree("/"),"node1",TestUtil.NT_TEST);
+  node1.setProperty("foo1","bar1");
+  node1.addChild("subChild").setProperty("foo2","bar2");
+  root.commit();
+  assertEquals("Indexing augment should get called once",1,indexingCounter.get());
+  assertEquals("No docs should get indexed (augmentor hasn't added any field)",0,getSearcher().getIndexReader().numDocs());
+  String query="EXPLAIN SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE [foo1]='bar1'";
+  List<String> paths=executeQuery(query,SQL2);
+  assertTrue("indexed prop name shouldn't decide query plan (" + paths.get(0) + ")",paths.get(0).contains("/* no-index "));
+  query="EXPLAIN SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE [subChild/foo2]='bar2'";
+  paths=executeQuery(query,SQL2);
+  assertTrue("indexed prop name shouldn't decide query plan (" + paths.get(0) + ")",paths.get(0).contains("/* no-index "));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void propertyIndexUsingAugmentors() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enablePropertyIndex(props,"foo1",false);
+  TestUtil.enablePropertyIndex(props,"subChild/foo2",false);
+  root.commit();
+  final AtomicInteger indexingCounter=new AtomicInteger(0);
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      indexingCounter.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  final AtomicInteger queryingCounter=new AtomicInteger(0);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      queryingCounter.set(1);
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  Tree node1=createNodeWithType(root.getTree("/"),"node1",TestUtil.NT_TEST);
+  node1.setProperty("foo1","bar1");
+  node1.addChild("subChild").setProperty("foo2","bar2");
+  root.commit();
+  assertEquals("Indexing augment should get called once",1,indexingCounter.get());
+  String query="SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE [foo1]='bar1'";
+  executeQuery(query,SQL2);
+  assertEquals("Query augmentor should not get called for property constraints",0,queryingCounter.get());
+  query="EXPLAIN " + query;
+  List<String> paths=executeQuery(query,SQL2,false);
+  assertTrue("property index should have made the index selected (" + paths.get(0) + ")",paths.get(0).contains("/* lucene:test-index("));
+  query="SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE [subChild/foo2]='bar2'";
+  executeQuery(query,SQL2);
+  assertEquals("Query augmentor should not get called for property constraints",0,queryingCounter.get());
+  query="EXPLAIN " + query;
+  paths=executeQuery(query,SQL2);
+  assertTrue("property index should have made the index selected (" + paths.get(0) + ")",paths.get(0).contains("/* lucene:test-index("));
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void queryAugmentorMismatchedNodeType() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,"foo1",false);
+  root.commit();
+  final AtomicInteger indexingCounter1=new AtomicInteger(0);
+  final AtomicInteger indexingCounter2=new AtomicInteger(0);
+  factory.registerQueryTermsProvider(new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      indexingCounter1.set(1);
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(JcrConstants.NT_BASE);
+    }
+  }
+);
+  factory.registerQueryTermsProvider(new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      indexingCounter2.set(1);
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+);
+  factory.useSuperBehavior=true;
+  executeQuery("SELECT [jcr:path] FROM [" + TestUtil.NT_TEST + "] WHERE CONTAINS(*, 'test')",SQL2,false);
+  assertEquals("Mismatching node type should not let index augmentor called",0,indexingCounter1.get());
+  assertEquals("Matching node type should get augmentor called",1,indexingCounter2.get());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void fulltextIndexUsingAugmentors() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,"foo1");
+  TestUtil.enableForFullText(props,"subChild/foo2");
+  root.commit();
+  final AtomicInteger indexingCounter=new AtomicInteger(0);
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      indexingCounter.incrementAndGet();
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  final AtomicInteger queryingCounter=new AtomicInteger(0);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      queryingCounter.set(1);
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  Tree node1=createNodeWithType(root.getTree("/"),"node1",TestUtil.NT_TEST);
+  node1.setProperty("foo1","bar1");
+  node1.addChild("subChild").setProperty("foo2","bar2");
+  root.commit();
+  assertEquals("Indexing augment should get called once",1,indexingCounter.get());
+  String query="SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE CONTAINS(*, 'bar1')";
+  executeQuery(query,SQL2);
+  assertEquals("Query augmentor should get called for full text constraints",1,queryingCounter.get());
+  queryingCounter.set(0);
+  query="EXPLAIN " + query;
+  List<String> paths=executeQuery(query,SQL2,false);
+  assertEquals("Query augmentor should get called for full text constraints",1,queryingCounter.get());
+  assertTrue("property index should have made the index selected (" + paths.get(0) + ")",paths.get(0).contains("/* lucene:test-index("));
+  queryingCounter.set(0);
+  query="SELECT [jcr:path] from [" + TestUtil.NT_TEST + "] WHERE CONTAINS(*, 'bar2')";
+  executeQuery(query,SQL2);
+  assertEquals("Query augmentor should get called for full text constraints",1,queryingCounter.get());
+  queryingCounter.set(0);
+  query="EXPLAIN " + query;
+  paths=executeQuery(query,SQL2,false);
+  assertEquals("Query augmentor should get called for full text constraints",1,queryingCounter.get());
+  assertTrue("property index should have made the index selected (" + paths.get(0) + ")",paths.get(0).contains("/* lucene:test-index("));
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void nullBehavior() throws Exception {
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,"foo");
+  root.commit();
+  Tree rootTree=root.getTree("/").addChild("test");
+  int testIndex=1;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return FulltextQueryTermsProvider.DEFAULT.getSupportedTypes();
+    }
+  }
+;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.fulltextQueryTermsProvider=new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      return new TermQuery(new Term("bar","baz"));
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.fulltextQueryTermsProvider=null;
+  factory.indexFieldProvider=IndexFieldProvider.DEFAULT;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      return IndexFieldProvider.DEFAULT.getAugmentedFields(path,document,indexDefinition);
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.fulltextQueryTermsProvider=null;
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      List<Field> fields=Lists.newArrayList();
+      fields.add(new StringField("bar","baz",Field.Store.NO));
+      return fields;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  checkSimpleBehavior(rootTree,testIndex++);
+  factory.registerQueryTermsProvider(new FulltextQueryTermsProvider(){
+    @Override public Query getQueryTerm(    String text,    Analyzer analyzer,    NodeState indexDefinition){
+      return null;
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+);
+  factory.useSuperBehavior=true;
+  checkSimpleBehavior(rootTree,testIndex++);
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 type-18 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void indexHookCallbackAndStorage() throws Exception {
+  final String propName="subChild/foo";
+  NodeTypeRegistry.register(root,IOUtils.toInputStream(TestUtil.TEST_NODE_TYPE),"test nodeType");
+  Tree props=createIndex(TestUtil.NT_TEST);
+  TestUtil.enableForFullText(props,propName);
+  root.commit();
+  factory.indexFieldProvider=new IndexFieldProvider(){
+    @Nonnull @Override public Iterable<Field> getAugmentedFields(    String path,    NodeState document,    NodeState indexDefinition){
+      assertEquals("/test/item",path);
+      assertEquals(TestUtil.NT_TEST,document.getName(JcrConstants.JCR_PRIMARYTYPE));
+      assertEquals(IndexConstants.INDEX_DEFINITIONS_NODE_TYPE,indexDefinition.getName(JcrConstants.JCR_PRIMARYTYPE));
+      return Lists.<Field>newArrayList(new StringField("barbar","1",Field.Store.NO));
+    }
+    @Nonnull @Override public Set<String> getSupportedTypes(){
+      return Collections.singleton(TestUtil.NT_TEST);
+    }
+  }
+;
+  Tree test=root.getTree("/").addChild("test");
+  Tree node=createNodeWithType(test,"item",TestUtil.NT_TEST).addChild("subChild");
+  node.setProperty("foo","bar");
+  root.commit();
+  IndexSearcher searcher=getSearcher();
+  TopDocs docs=searcher.search(new TermQuery(new Term("barbar","1")),10);
+  ScoreDoc[] scoreDocs=docs.scoreDocs;
+  assertEquals("Number of results should be 1",1,scoreDocs.length);
+  Document doc=searcher.doc(scoreDocs[0].doc);
+  String path=doc.get(":path");
+  assertEquals("/test/item",path);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

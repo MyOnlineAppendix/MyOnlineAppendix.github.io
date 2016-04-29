@@ -1,0 +1,105 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.procedure.TestZKProcedureControllers (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Smaller test to just test the actuation on the cohort member
+ * @throws Exception on failure
+ */
+@Test(timeout=60000) public void testSimpleZKCohortMemberController() throws Exception {
+  ZooKeeperWatcher watcher=UTIL.getZooKeeperWatcher();
+  final String operationName="instanceTest";
+  final Subprocedure sub=Mockito.mock(Subprocedure.class);
+  Mockito.when(sub.getName()).thenReturn(operationName);
+  final byte[] data=new byte[]{1,2,3};
+  final CountDownLatch prepared=new CountDownLatch(1);
+  final CountDownLatch committed=new CountDownLatch(1);
+  final ForeignExceptionDispatcher monitor=spy(new ForeignExceptionDispatcher());
+  final ZKProcedureMemberRpcs controller=new ZKProcedureMemberRpcs(watcher,"testSimple");
+  final ProcedureMember member=Mockito.mock(ProcedureMember.class);
+  Mockito.doReturn(sub).when(member).createSubprocedure(operationName,data);
+  Mockito.doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      controller.sendMemberAcquired(sub);
+      prepared.countDown();
+      return null;
+    }
+  }
+).when(member).submitSubprocedure(sub);
+  Mockito.doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      controller.sendMemberCompleted(sub,memberData);
+      committed.countDown();
+      return null;
+    }
+  }
+).when(member).receivedReachedGlobalBarrier(operationName);
+  controller.start(COHORT_NODE_NAME,member);
+  String prepare=ZKProcedureUtil.getAcquireBarrierNode(controller.getZkController(),operationName);
+  ZKUtil.createSetData(watcher,prepare,ProtobufUtil.prependPBMagic(data));
+  prepared.await();
+  String commit=ZKProcedureUtil.getReachedBarrierNode(controller.getZkController(),operationName);
+  LOG.debug("Found prepared, posting commit node:" + commit);
+  ZKUtil.createAndFailSilent(watcher,commit);
+  LOG.debug("Commit node:" + commit + ", exists:"+ ZKUtil.checkExists(watcher,commit));
+  committed.await();
+  verify(monitor,never()).receive(Mockito.any(ForeignException.class));
+  ZKUtil.deleteNodeRecursively(watcher,controller.getZkController().getBaseZnode());
+  assertEquals("Didn't delete prepare node",-1,ZKUtil.checkExists(watcher,prepare));
+  assertEquals("Didn't delete commit node",-1,ZKUtil.checkExists(watcher,commit));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testZKCoordinatorControllerWithNoCohort() throws Exception {
+  final String operationName="no cohort controller test";
+  final byte[] data=new byte[]{1,2,3};
+  runMockCommitWithOrchestratedControllers(startCoordinatorFirst,operationName,data);
+  runMockCommitWithOrchestratedControllers(startCohortFirst,operationName,data);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testZKCoordinatorControllerMultipleCohort() throws Exception {
+  final String operationName="multi member controller test";
+  final byte[] data=new byte[]{1,2,3};
+  runMockCommitWithOrchestratedControllers(startCoordinatorFirst,operationName,data,"cohort","cohort2","cohort3");
+  runMockCommitWithOrchestratedControllers(startCohortFirst,operationName,data,"cohort","cohort2","cohort3");
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testZKCoordinatorControllerWithSingleMemberCohort() throws Exception {
+  final String operationName="single member controller test";
+  final byte[] data=new byte[]{1,2,3};
+  runMockCommitWithOrchestratedControllers(startCoordinatorFirst,operationName,data,"cohort");
+  runMockCommitWithOrchestratedControllers(startCohortFirst,operationName,data,"cohort");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void cleanupTest() throws Exception {
+  UTIL.shutdownMiniZKCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

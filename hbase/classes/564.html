@@ -1,0 +1,324 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.wal.TestLogRolling (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that logs are rolled upon detecting datanode death
+ * Requires an HDFS jar with HDFS-826 & syncFs() support (HDFS-200)
+ */
+@Test public void testLogRollOnDatanodeDeath() throws Exception {
+  TEST_UTIL.ensureSomeRegionServersAvailable(2);
+  assertTrue("This test requires WAL file replication set to 2.",fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()) == 2);
+  LOG.info("Replication=" + fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()));
+  this.server=cluster.getRegionServer(0);
+  HTableDescriptor desc=new HTableDescriptor(TableName.valueOf(getName()));
+  desc.addFamily(new HColumnDescriptor(HConstants.CATALOG_FAMILY));
+  admin.createTable(desc);
+  Table table=TEST_UTIL.getConnection().getTable(desc.getTableName());
+  assertTrue(((HTable)table).isAutoFlush());
+  server=TEST_UTIL.getRSForFirstRegionInTable(desc.getTableName());
+  HRegionInfo region=server.getOnlineRegions(desc.getTableName()).get(0).getRegionInfo();
+  final FSHLog log=(FSHLog)server.getWAL(region);
+  final AtomicBoolean lowReplicationHookCalled=new AtomicBoolean(false);
+  log.registerWALActionsListener(new WALActionsListener.Base(){
+    @Override public void logRollRequested(    boolean lowReplication){
+      if (lowReplication) {
+        lowReplicationHookCalled.lazySet(true);
+      }
+    }
+  }
+);
+  assertTrue("Need append support for this test",FSUtils.isAppendSupported(TEST_UTIL.getConfiguration()));
+  List<DataNode> existingNodes=dfsCluster.getDataNodes();
+  int numDataNodes=3;
+  dfsCluster.startDataNodes(TEST_UTIL.getConfiguration(),numDataNodes,true,null,null);
+  List<DataNode> allNodes=dfsCluster.getDataNodes();
+  for (int i=allNodes.size() - 1; i >= 0; i--) {
+    if (existingNodes.contains(allNodes.get(i))) {
+      dfsCluster.stopDataNode(i);
+    }
+  }
+  assertTrue("DataNodes " + dfsCluster.getDataNodes().size() + " default replication "+ fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()),dfsCluster.getDataNodes().size() >= fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()) + 1);
+  writeData(table,2);
+  long curTime=System.currentTimeMillis();
+  LOG.info("log.getCurrentFileName(): " + log.getCurrentFileName());
+  long oldFilenum=DefaultWALProvider.extractFileNumFromWAL(log);
+  assertTrue("Log should have a timestamp older than now",curTime > oldFilenum && oldFilenum != -1);
+  assertTrue("The log shouldn't have rolled yet",oldFilenum == DefaultWALProvider.extractFileNumFromWAL(log));
+  final DatanodeInfo[] pipeline=log.getPipeLine();
+  assertTrue(pipeline.length == fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()));
+  assertTrue(dfsCluster.stopDataNode(pipeline[0].getName()) != null);
+  writeData(table,2);
+  long newFilenum=DefaultWALProvider.extractFileNumFromWAL(log);
+  assertTrue("Missing datanode should've triggered a log roll",newFilenum > oldFilenum && newFilenum > curTime);
+  assertTrue("The log rolling hook should have been called with the low replication flag",lowReplicationHookCalled.get());
+  writeData(table,3);
+  assertTrue("The log should not roll again.",DefaultWALProvider.extractFileNumFromWAL(log) == newFilenum);
+  assertTrue(dfsCluster.stopDataNode(pipeline[1].getName()) != null);
+  batchWriteAndWait(table,log,3,false,14000);
+  int replication=log.getLogReplication();
+  assertTrue("LowReplication Roller should've been disabled, current replication=" + replication,!log.isLowReplicationRollEnabled());
+  dfsCluster.startDataNodes(TEST_UTIL.getConfiguration(),1,true,null,null);
+  log.rollWriter(true);
+  batchWriteAndWait(table,log,13,true,10000);
+  replication=log.getLogReplication();
+  assertTrue("New log file should have the default replication instead of " + replication,replication == fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()));
+  assertTrue("LowReplication Roller should've been enabled",log.isLowReplicationRollEnabled());
+}
+
+</code></pre>
+
+<pre class="type-7 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests that logs are deleted when some region has a compaction
+ * record in WAL and no other records. See HBASE-8597.
+ */
+@Test public void testCompactionRecordDoesntBlockRolling() throws Exception {
+  Table table=null;
+  Table t=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+  try {
+    table=createTestTable(getName());
+    server=TEST_UTIL.getRSForFirstRegionInTable(table.getName());
+    Region region=server.getOnlineRegions(table.getName()).get(0);
+    final WAL log=server.getWAL(region.getRegionInfo());
+    Store s=region.getStore(HConstants.CATALOG_FAMILY);
+    admin.flush(TableName.NAMESPACE_TABLE_NAME);
+    for (int i=1; i <= 2; ++i) {
+      doPut(table,i);
+      admin.flush(table.getName());
+    }
+    doPut(table,3);
+    assertEquals("Should have no WAL after initial writes",0,DefaultWALProvider.getNumRolledLogFiles(log));
+    assertEquals(2,s.getStorefilesCount());
+    log.rollWriter();
+    assertEquals("Should have WAL; one table is not flushed",1,DefaultWALProvider.getNumRolledLogFiles(log));
+    admin.flush(table.getName());
+    region.compact(false);
+    Assert.assertNotNull(s);
+    for (int waitTime=3000; s.getStorefilesCount() > 1 && waitTime > 0; waitTime-=200) {
+      Threads.sleepWithoutInterrupt(200);
+    }
+    assertEquals("Compaction didn't happen",1,s.getStorefilesCount());
+    doPut(table,0);
+    log.rollWriter();
+    assertEquals("Should have WAL; one table is not flushed",1,DefaultWALProvider.getNumRolledLogFiles(log));
+    admin.flush(table.getName());
+    doPut(table,1);
+    log.rollWriter();
+    assertEquals("Should have 1 WALs at the end",1,DefaultWALProvider.getNumRolledLogFiles(log));
+  }
+  finally {
+    if (t != null)     t.close();
+    if (table != null)     table.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Tests that logs are deleted
+ * @throws IOException
+ * @throws org.apache.hadoop.hbase.regionserver.wal.FailedLogCloseException
+ */
+@Test public void testLogRolling() throws Exception {
+  this.tableName=getName();
+  startAndWriteData();
+  HRegionInfo region=server.getOnlineRegions(TableName.valueOf(tableName)).get(0).getRegionInfo();
+  final WAL log=server.getWAL(region);
+  LOG.info("after writing there are " + DefaultWALProvider.getNumRolledLogFiles(log) + " log files");
+  for (  Region r : server.getOnlineRegionsLocalContext()) {
+    r.flush(true);
+  }
+  log.rollWriter();
+  int count=DefaultWALProvider.getNumRolledLogFiles(log);
+  LOG.info("after flushing all regions and rolling logs there are " + count + " log files");
+  assertTrue(("actual count: " + count),count <= 2);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  TEST_UTIL.startMiniCluster(1,1,2);
+  cluster=TEST_UTIL.getHBaseCluster();
+  dfsCluster=TEST_UTIL.getDFSCluster();
+  fs=TEST_UTIL.getTestFileSystem();
+  admin=TEST_UTIL.getHBaseAdmin();
+  cluster.getMaster().balanceSwitch(false);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that log rolling doesn't hang when no data is written.
+ */
+@Test(timeout=120000) public void testLogRollOnNothingWritten() throws Exception {
+  final Configuration conf=TEST_UTIL.getConfiguration();
+  final WALFactory wals=new WALFactory(conf,null,ServerName.valueOf("test.com",8080,1).toString());
+  final WAL newLog=wals.getWAL(new byte[]{},null);
+  try {
+    newLog.rollWriter(true);
+  }
+  finally {
+    wals.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that WAL is rolled when all data nodes in the pipeline have been
+ * restarted.
+ * @throws Exception
+ */
+@Test public void testLogRollOnPipelineRestart() throws Exception {
+  LOG.info("Starting testLogRollOnPipelineRestart");
+  assertTrue("This test requires WAL file replication.",fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()) > 1);
+  LOG.info("Replication=" + fs.getDefaultReplication(TEST_UTIL.getDataTestDirOnTestFS()));
+  Table t=TEST_UTIL.getConnection().getTable(TableName.META_TABLE_NAME);
+  try {
+    this.server=cluster.getRegionServer(0);
+    HTableDescriptor desc=new HTableDescriptor(TableName.valueOf(getName()));
+    desc.addFamily(new HColumnDescriptor(HConstants.CATALOG_FAMILY));
+    admin.createTable(desc);
+    Table table=TEST_UTIL.getConnection().getTable(desc.getTableName());
+    server=TEST_UTIL.getRSForFirstRegionInTable(desc.getTableName());
+    HRegionInfo region=server.getOnlineRegions(desc.getTableName()).get(0).getRegionInfo();
+    final WAL log=server.getWAL(region);
+    final List<Path> paths=new ArrayList<Path>();
+    final List<Integer> preLogRolledCalled=new ArrayList<Integer>();
+    paths.add(DefaultWALProvider.getCurrentFileName(log));
+    log.registerWALActionsListener(new WALActionsListener.Base(){
+      @Override public void preLogRoll(      Path oldFile,      Path newFile){
+        LOG.debug("preLogRoll: oldFile=" + oldFile + " newFile="+ newFile);
+        preLogRolledCalled.add(new Integer(1));
+      }
+      @Override public void postLogRoll(      Path oldFile,      Path newFile){
+        paths.add(newFile);
+      }
+    }
+);
+    assertTrue("Need append support for this test",FSUtils.isAppendSupported(TEST_UTIL.getConfiguration()));
+    writeData(table,1002);
+    long curTime=System.currentTimeMillis();
+    LOG.info("log.getCurrentFileName()): " + DefaultWALProvider.getCurrentFileName(log));
+    long oldFilenum=DefaultWALProvider.extractFileNumFromWAL(log);
+    assertTrue("Log should have a timestamp older than now",curTime > oldFilenum && oldFilenum != -1);
+    assertTrue("The log shouldn't have rolled yet",oldFilenum == DefaultWALProvider.extractFileNumFromWAL(log));
+    dfsCluster.restartDataNodes();
+    Thread.sleep(1000);
+    dfsCluster.waitActive();
+    LOG.info("Data Nodes restarted");
+    validateData(table,1002);
+    writeData(table,1003);
+    long newFilenum=DefaultWALProvider.extractFileNumFromWAL(log);
+    assertTrue("Missing datanode should've triggered a log roll",newFilenum > oldFilenum && newFilenum > curTime);
+    validateData(table,1003);
+    writeData(table,1004);
+    dfsCluster.restartDataNodes();
+    Thread.sleep(1000);
+    dfsCluster.waitActive();
+    LOG.info("Data Nodes restarted");
+    validateData(table,1004);
+    writeData(table,1005);
+    log.rollWriter(true);
+    assertTrue("preLogRolledCalled has size of " + preLogRolledCalled.size(),preLogRolledCalled.size() >= 1);
+    Set<String> loggedRows=new HashSet<String>();
+    FSUtils fsUtils=FSUtils.getInstance(fs,TEST_UTIL.getConfiguration());
+    for (    Path p : paths) {
+      LOG.debug("recovering lease for " + p);
+      fsUtils.recoverFileLease(((HFileSystem)fs).getBackingFs(),p,TEST_UTIL.getConfiguration(),null);
+      LOG.debug("Reading WAL " + FSUtils.getPath(p));
+      WAL.Reader reader=null;
+      try {
+        reader=WALFactory.createReader(fs,p,TEST_UTIL.getConfiguration());
+        WAL.Entry entry;
+        while ((entry=reader.next()) != null) {
+          LOG.debug("#" + entry.getKey().getLogSeqNum() + ": "+ entry.getEdit().getCells());
+          for (          Cell cell : entry.getEdit().getCells()) {
+            loggedRows.add(Bytes.toStringBinary(cell.getRowArray(),cell.getRowOffset(),cell.getRowLength()));
+          }
+        }
+      }
+ catch (      EOFException e) {
+        LOG.debug("EOF reading file " + FSUtils.getPath(p));
+      }
+ finally {
+        if (reader != null)         reader.close();
+      }
+    }
+    assertTrue(loggedRows.contains("row1002"));
+    assertTrue(loggedRows.contains("row1003"));
+    assertTrue(loggedRows.contains("row1004"));
+    assertTrue(loggedRows.contains("row1005"));
+    for (    Region r : server.getOnlineRegionsLocalContext()) {
+      try {
+        r.flush(true);
+      }
+ catch (      Exception e) {
+        LOG.info(e);
+      }
+    }
+    ResultScanner scanner=table.getScanner(new Scan());
+    try {
+      for (int i=2; i <= 5; i++) {
+        Result r=scanner.next();
+        assertNotNull(r);
+        assertFalse(r.isEmpty());
+        assertEquals("row100" + i,Bytes.toString(r.getRow()));
+      }
+    }
+  finally {
+      scanner.close();
+    }
+    for (    JVMClusterUtil.RegionServerThread rsThread : TEST_UTIL.getHBaseCluster().getRegionServerThreads()) {
+      assertFalse(rsThread.getRegionServer().isAborted());
+    }
+  }
+  finally {
+    if (t != null)     t.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

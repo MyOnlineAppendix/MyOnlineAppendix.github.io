@@ -1,0 +1,239 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.server.quorum.ReconfigBackupTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-5 type-10 type-2 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that if a version is appended to dynamic file,
+ * then peer should use that version as quorum config version.
+ * <p/>
+ * The scenario: one server has an older version of 3 servers, and
+ * four others have newer version of 5 servers. Finally, the lag-off one
+ * should have server config of 5 servers.
+ */
+@Test public void testVersionOfDynamicFilename() throws Exception {
+  final int SERVER_COUNT=5;
+  final int oldServerCount=3;
+  final int lagOffServerId=0;
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  String server;
+  StringBuilder oldSb=new StringBuilder();
+  ArrayList<String> allServers=new ArrayList<String>();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    server="server." + i + "=localhost:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ":participant;localhost:"+ clientPorts[i];
+    sb.append(server + "\n");
+    allServers.add(server);
+    if (i < oldServerCount) {
+      oldSb.append(server + "\n");
+    }
+  }
+  String currentQuorumCfgSection=sb.toString();
+  String oldQuorumCfg=oldSb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    if (i == lagOffServerId) {
+      mt[i]=new MainThread(i,clientPorts[i],oldQuorumCfg,true,"100000000");
+    }
+ else {
+      mt[i]=new MainThread(i,clientPorts[i],currentQuorumCfgSection,true,"200000000");
+    }
+    if (i == lagOffServerId) {
+      Assert.assertNotNull(mt[i].getFileByName("zoo.cfg.dynamic.100000000"));
+      Assert.assertNull(mt[i].getFileByName("zoo.cfg.dynamic.200000000"));
+      Assert.assertTrue(mt[i].getPropFromStaticFile("dynamicConfigFile").endsWith(".100000000"));
+    }
+ else {
+      Assert.assertNotNull(mt[i].getFileByName("zoo.cfg.dynamic.200000000"));
+      Assert.assertTrue(mt[i].getPropFromStaticFile("dynamicConfigFile").endsWith(".200000000"));
+    }
+    mt[i].start();
+  }
+  String dynamicFileContent=null;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    ZooKeeper zk=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    String configStr=ReconfigTest.testServerHasConfig(zk,allServers,null);
+    Assert.assertEquals("200000000",getVersionFromConfigStr(configStr));
+    List<String> configLines=Arrays.asList(configStr.split("\n"));
+    Collections.sort(configLines);
+    String sortedConfigStr=StringUtils.joinStrings(configLines,"\n");
+    File dynamicConfigFile=mt[i].getFileByName("zoo.cfg.dynamic.200000000");
+    Assert.assertNotNull(dynamicConfigFile);
+    if (i == 0) {
+      dynamicFileContent=getFileContent(dynamicConfigFile);
+      Assert.assertEquals(sortedConfigStr,dynamicFileContent + "version=200000000");
+    }
+ else {
+      String otherDynamicFileContent=getFileContent(dynamicConfigFile);
+      Assert.assertEquals(dynamicFileContent,otherDynamicFileContent);
+    }
+    zk.close();
+  }
+  Assert.assertTrue(mt[lagOffServerId].getPropFromStaticFile("dynamicConfigFile").endsWith(".200000000"));
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup(){
+  ClientBase.setupTestEnv();
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-10 type-2 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that on reconfig, a new dynamic file will be created with
+ * current version appended to file name. Meanwhile, the dynamic file pointer
+ * in static config file should also be changed.
+ */
+@Test public void testReconfigCreateNewVersionFile() throws Exception {
+  final int SERVER_COUNT=3;
+  final int NEW_SERVER_COUNT=5;
+  final int clientPorts[]=new int[NEW_SERVER_COUNT];
+  final int quorumPorts[]=new int[NEW_SERVER_COUNT];
+  final int electionPorts[]=new int[NEW_SERVER_COUNT];
+  final String servers[]=new String[NEW_SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  ArrayList<String> oldServers=new ArrayList<String>();
+  ArrayList<String> newServers=new ArrayList<String>();
+  for (int i=0; i < NEW_SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    quorumPorts[i]=PortAssignment.unique();
+    electionPorts[i]=PortAssignment.unique();
+    servers[i]="server." + i + "=localhost:"+ quorumPorts[i]+ ":"+ electionPorts[i]+ ":participant;localhost:"+ clientPorts[i];
+    newServers.add(servers[i]);
+    if (i >= SERVER_COUNT) {
+      continue;
+    }
+    oldServers.add(servers[i]);
+    sb.append(servers[i] + "\n");
+  }
+  String quorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[NEW_SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[NEW_SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection);
+    mt[i].start();
+  }
+  String firstVersion=null, secondVersion=null;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    Properties cfg=ReconfigLegacyTest.readPropertiesFromFile(mt[i].confFile);
+    String filename=cfg.getProperty("dynamicConfigFile","");
+    String version=QuorumPeerConfig.getVersionFromFilename(filename);
+    Assert.assertNotNull(version);
+    String configStr=ReconfigTest.testServerHasConfig(zk[i],oldServers,null);
+    String configVersion=getVersionFromConfigStr(configStr);
+    Assert.assertEquals(version,configVersion);
+    if (i == 0) {
+      firstVersion=version;
+    }
+ else {
+      Assert.assertEquals(firstVersion,version);
+    }
+  }
+  ReconfigTest.reconfig(zk[1],null,null,newServers,-1);
+  for (int i=SERVER_COUNT; i < NEW_SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection + servers[i]);
+    mt[i].start();
+  }
+  for (int i=SERVER_COUNT; i < NEW_SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+  }
+  for (int i=0; i < NEW_SERVER_COUNT; i++) {
+    Properties cfg=ReconfigLegacyTest.readPropertiesFromFile(mt[i].confFile);
+    String filename=cfg.getProperty("dynamicConfigFile","");
+    String version=QuorumPeerConfig.getVersionFromFilename(filename);
+    Assert.assertNotNull(version);
+    String configStr=ReconfigTest.testServerHasConfig(zk[i],newServers,null);
+    String quorumVersion=getVersionFromConfigStr(configStr);
+    Assert.assertEquals(version,quorumVersion);
+    if (i == 0) {
+      secondVersion=version;
+      Assert.assertTrue(Long.parseLong(secondVersion,16) > Long.parseLong(firstVersion,16));
+    }
+ else {
+      Assert.assertEquals(secondVersion,version);
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+    zk[i].close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-2 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that it will backup static file on bootup.
+ */
+@Test public void testBackupStatic() throws Exception {
+  final int SERVER_COUNT=3;
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  String server;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    server="server." + i + "=localhost:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ":participant;localhost:"+ clientPorts[i];
+    sb.append(server + "\n");
+  }
+  String currentQuorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  String[] staticFileContent=new String[SERVER_COUNT];
+  String[] staticBackupContent=new String[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],currentQuorumCfgSection,false);
+    Assert.assertNull("static file backup shouldn't exist before bootup",mt[i].getFileByName("zoo.cfg.bak"));
+    staticFileContent[i]=getFileContent(mt[i].confFile);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    File backupFile=mt[i].getFileByName("zoo.cfg.bak");
+    Assert.assertNotNull("static file backup should exist",backupFile);
+    staticBackupContent[i]=getFileContent(backupFile);
+    Assert.assertEquals(staticFileContent[i],staticBackupContent[i]);
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

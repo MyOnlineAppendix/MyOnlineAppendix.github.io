@@ -1,0 +1,99 @@
+<h3 style="margin:0px">Class: org.apache.felix.cm.integration.FELIX4385_StressTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-15 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void test_ConcurrentManagedServicesWithConcurrentConfigurations(){
+  final Log log=new Log(bundleContext);
+  log.info("starting test_ConcurrentManagedServicesWithConcurrentConfigurations");
+  int parallelism=Math.max(10,Runtime.getRuntime().availableProcessors());
+  final ConfigurationAdmin ca=getConfigurationAdmin();
+  final ExecutorService executor=Executors.newFixedThreadPool(parallelism);
+  try {
+    int pidCounter=0;
+    long timeStamp=System.currentTimeMillis();
+    for (int loop=0; loop < 1000; loop++) {
+      log.debug("loop#%d -------------------------",(loop + 1));
+      final CountDownLatch managedServiceUpdated=new CountDownLatch(MANAGED_SERVICES);
+      final CountDownLatch managedServiceUnregistered=new CountDownLatch(MANAGED_SERVICES);
+      log.info("registering aspects concurrently");
+      final CopyOnWriteArrayList<ServiceRegistration> managedServices=new CopyOnWriteArrayList<ServiceRegistration>();
+      final CopyOnWriteArrayList<Configuration> confs=new CopyOnWriteArrayList<Configuration>();
+      for (int i=0; i < MANAGED_SERVICES; i++) {
+        final String pid="pid." + i + "-"+ (pidCounter++);
+        executor.execute(new Runnable(){
+          public void run(){
+            Hashtable props=new Hashtable();
+            props.put(Constants.SERVICE_PID,pid);
+            ServiceRegistration sr=bundleContext.registerService(ManagedService.class.getName(),new TestManagedService(managedServiceUpdated),props);
+            managedServices.add(sr);
+            try {
+              Configuration c=ca.getConfiguration(pid,null);
+              c.update(new Hashtable(){
+{
+                  put("foo","bar");
+                }
+              }
+);
+              confs.add(c);
+            }
+ catch (            IOException e) {
+              log.error("could not create pid %s",e,pid);
+              return;
+            }
+          }
+        }
+);
+      }
+      if (!managedServiceUpdated.await(MAXWAIT,TimeUnit.MILLISECONDS)) {
+        TestCase.fail("Detected errors logged during concurrent test");
+        break;
+      }
+      log.info("all managed services updated");
+      log.info("unregistering services concurrently");
+      for (      final ServiceRegistration sr : managedServices) {
+        executor.execute(new Runnable(){
+          public void run(){
+            sr.unregister();
+            managedServiceUnregistered.countDown();
+          }
+        }
+);
+      }
+      log.info("unregistering configuration concurrently");
+      for (      final Configuration c : confs) {
+        c.delete();
+      }
+      if (!managedServiceUnregistered.await(MAXWAIT,TimeUnit.MILLISECONDS)) {
+        TestCase.fail("Managed Servives could not be unregistered timely");
+        break;
+      }
+      if (log.errorsLogged()) {
+        TestCase.fail("Detected errors logged during concurrent test");
+        break;
+      }
+      log.info("finished one test loop");
+      if ((loop + 1) % 100 == 0) {
+        long duration=System.currentTimeMillis() - timeStamp;
+        System.out.println(String.format("Performed %d tests in %d ms.",(loop + 1),duration));
+        timeStamp=System.currentTimeMillis();
+      }
+    }
+  }
+ catch (  Throwable t) {
+    Assert.fail("Test failed: " + t.getMessage());
+  }
+ finally {
+    shutdown(executor);
+    log.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

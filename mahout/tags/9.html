@@ -1,0 +1,2461 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspNullVerifier</h3><kbd>Verifies whether objects are null</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.mahout.cf.taste.hadoop.item.RecommenderJobTest </h4><pre class="type-3 type-8 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * small integration test that runs the full job
+ * As a tribute to http://www.slideshare.net/srowen/collaborative-filtering-at-scale,
+ * we recommend people food to animals in this test :)
+ * <pre>
+ * user-item-matrix
+ * burger  hotdog  berries  icecream
+ * dog       5       5        2        -
+ * rabbit    2       -        3        5
+ * cow       -       5        -        3
+ * donkey    3       -        -        5
+ * item-item-similarity-matrix (tanimoto-coefficient of the item-vectors of the user-item-matrix)
+ * burger  hotdog  berries icecream
+ * burger    -      0.25    0.66    0.5
+ * hotdog   0.25     -      0.33    0.25
+ * berries  0.66    0.33     -      0.25
+ * icecream 0.5     0.25    0.25     -
+ * Prediction(dog, icecream)   = (0.5 * 5 + 0.25 * 5 + 0.25 * 2 ) / (0.5 + 0.25 + 0.25)  ~ 4.3
+ * Prediction(rabbit, hotdog)  = (0.25 * 2 + 0.33 * 3 + 0.25 * 5) / (0.25 + 0.33 + 0.25) ~ 3,3
+ * Prediction(cow, burger)     = (0.25 * 5 + 0.5 * 3) / (0.25 + 0.5)                     ~ 3,7
+ * Prediction(cow, berries)    = (0.33 * 5 + 0.25 * 3) / (0.33 + 0.25)                   ~ 4,1
+ * Prediction(donkey, hotdog)  = (0.25 * 3 + 0.25 * 5) / (0.25 + 0.25)                   ~ 4
+ * Prediction(donkey, berries) = (0.66 * 3 + 0.25 * 5) / (0.66 + 0.25)                   ~ 3,5
+ * </pre>
+ */
+@Test public void testCompleteJob() throws Exception {
+  File inputFile=getTestTempFile("prefs.txt");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File similaritiesOutputDir=getTestTempDir("outputSimilarities");
+  similaritiesOutputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  writeLines(inputFile,"1,1,5","1,2,5","1,3,2","2,1,2","2,3,3","2,4,5","3,2,5","3,4,3","4,1,3","4,4,5");
+  RecommenderJob recommenderJob=new RecommenderJob();
+  Configuration conf=getConfiguration();
+  conf.set("mapred.input.dir",inputFile.getAbsolutePath());
+  conf.set("mapred.output.dir",outputDir.getAbsolutePath());
+  conf.setBoolean("mapred.output.compress",false);
+  recommenderJob.setConf(conf);
+  recommenderJob.run(new String[]{"--tempDir",tmpDir.getAbsolutePath(),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--numRecommendations","4","--outputPathForSimilarityMatrix",similaritiesOutputDir.getAbsolutePath()});
+  Map<Long,List<RecommendedItem>> recommendations=readRecommendations(new File(outputDir,"part-r-00000"));
+  assertEquals(4,recommendations.size());
+  for (  Entry<Long,List<RecommendedItem>> entry : recommendations.entrySet()) {
+    long userID=entry.getKey();
+    List<RecommendedItem> items=entry.getValue();
+    assertNotNull(items);
+    RecommendedItem item1=items.get(0);
+    if (userID == 1L) {
+      assertEquals(1,items.size());
+      assertEquals(4L,item1.getItemID());
+      assertEquals(4.3,item1.getValue(),0.05);
+    }
+    if (userID == 2L) {
+      assertEquals(1,items.size());
+      assertEquals(2L,item1.getItemID());
+      assertEquals(3.3,item1.getValue(),0.05);
+    }
+    if (userID == 3L) {
+      assertEquals(2,items.size());
+      assertEquals(3L,item1.getItemID());
+      assertEquals(4.1,item1.getValue(),0.05);
+      RecommendedItem item2=items.get(1);
+      assertEquals(1L,item2.getItemID());
+      assertEquals(3.7,item2.getValue(),0.05);
+    }
+    if (userID == 4L) {
+      assertEquals(2,items.size());
+      assertEquals(2L,item1.getItemID());
+      assertEquals(4.0,item1.getValue(),0.05);
+      RecommendedItem item2=items.get(1);
+      assertEquals(3L,item2.getItemID());
+      assertEquals(3.5,item2.getValue(),0.05);
+    }
+  }
+  Map<Pair<Long,Long>,Double> similarities=readSimilarities(new File(similaritiesOutputDir,"part-r-00000"));
+  assertEquals(6,similarities.size());
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(1L,2L)),EPSILON);
+  assertEquals(0.6666666666666666,similarities.get(new Pair<Long,Long>(1L,3L)),EPSILON);
+  assertEquals(0.5,similarities.get(new Pair<Long,Long>(1L,4L)),EPSILON);
+  assertEquals(0.3333333333333333,similarities.get(new Pair<Long,Long>(2L,3L)),EPSILON);
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(2L,4L)),EPSILON);
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(3L,4L)),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.FastByIDMapTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPutAndGet(){
+  FastByIDMap<Long> map=new FastByIDMap<Long>();
+  assertNull(map.get(500000L));
+  map.put(500000L,2L);
+  assertEquals(2L,(long)map.get(500000L));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGrow(){
+  FastByIDMap<String> map=new FastByIDMap<String>(1,1);
+  map.put(500000L,"alpha");
+  map.put(47L,"bang");
+  assertNull(map.get(500000L));
+  assertEquals("bang",map.get(47L));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClear(){
+  FastByIDMap<Long> map=new FastByIDMap<Long>();
+  map.put(500000L,2L);
+  map.clear();
+  assertEquals(0,map.size());
+  assertTrue(map.isEmpty());
+  assertNull(map.get(500000L));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRehash(){
+  FastByIDMap<String> map=buildTestFastMap();
+  map.remove(500000L);
+  map.rehash();
+  assertNull(map.get(500000L));
+  assertEquals("bang",map.get(47L));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRemove(){
+  FastByIDMap<Long> map=new FastByIDMap<Long>();
+  map.put(500000L,2L);
+  map.remove(500000L);
+  assertEquals(0,map.size());
+  assertTrue(map.isEmpty());
+  assertNull(map.get(500000L));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaxSize(){
+  FastByIDMap<String> map=new FastByIDMap<String>();
+  map.put(4,"bang");
+  assertEquals(1,map.size());
+  map.put(47L,"bang");
+  assertEquals(2,map.size());
+  assertNull(map.get(500000L));
+  map.put(47L,"buzz");
+  assertEquals(2,map.size());
+  assertEquals("buzz",map.get(47L));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.FastMapTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRehash(){
+  FastMap<String,String> map=buildTestFastMap();
+  map.remove("foo");
+  map.rehash();
+  assertNull(map.get("foo"));
+  assertEquals("bang",map.get("baz"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testClear(){
+  Map<String,String> map=new FastMap<String,String>();
+  map.put("foo","bar");
+  map.clear();
+  assertEquals(0,map.size());
+  assertTrue(map.isEmpty());
+  assertNull(map.get("foo"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRemove(){
+  Map<String,String> map=new FastMap<String,String>();
+  map.put("foo","bar");
+  map.remove("foo");
+  assertEquals(0,map.size());
+  assertTrue(map.isEmpty());
+  assertNull(map.get("foo"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPutAndGet(){
+  Map<String,String> map=new FastMap<String,String>();
+  assertNull(map.get("foo"));
+  map.put("foo","bar");
+  assertEquals("bar",map.get("foo"));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=NullPointerException.class) public void testNull1(){
+  Map<String,String> map=new FastMap<String,String>();
+  assertNull(map.get(null));
+  map.put(null,"bar");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaxSize(){
+  Map<String,String> map=new FastMap<String,String>(1,1);
+  map.put("foo","bar");
+  assertEquals(1,map.size());
+  map.put("baz","bang");
+  assertEquals(1,map.size());
+  assertNull(map.get("foo"));
+  map.put("baz","buzz");
+  assertEquals(1,map.size());
+  assertEquals("buzz",map.get("baz"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.eval.GenericRecommenderIRStatsEvaluatorImplTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBoolean() throws Exception {
+  DataModel model=getBooleanDataModel();
+  RecommenderBuilder builder=new RecommenderBuilder(){
+    @Override public Recommender buildRecommender(    DataModel dataModel){
+      return new GenericBooleanPrefItemBasedRecommender(dataModel,new LogLikelihoodSimilarity(dataModel));
+    }
+  }
+;
+  DataModelBuilder dataModelBuilder=new DataModelBuilder(){
+    @Override public DataModel buildDataModel(    FastByIDMap<PreferenceArray> trainingData){
+      return new GenericBooleanPrefDataModel(GenericBooleanPrefDataModel.toDataMap(trainingData));
+    }
+  }
+;
+  RecommenderIRStatsEvaluator evaluator=new GenericRecommenderIRStatsEvaluator();
+  IRStatistics stats=evaluator.evaluate(builder,dataModelBuilder,model,null,1,GenericRecommenderIRStatsEvaluator.CHOOSE_THRESHOLD,1.0);
+  assertNotNull(stats);
+  assertEquals(0.666666666,stats.getPrecision(),EPSILON);
+  assertEquals(0.666666666,stats.getRecall(),EPSILON);
+  assertEquals(0.666666666,stats.getF1Measure(),EPSILON);
+  assertEquals(0.666666666,stats.getFNMeasure(2.0),EPSILON);
+  assertEquals(0.666666666,stats.getNormalizedDiscountedCumulativeGain(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.model.MemoryIDMigratorTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInitialize() throws Exception {
+  UpdatableIDMigrator migrator=new MemoryIDMigrator();
+  long id=migrator.toLongID(DUMMY_STRING);
+  assertNull(migrator.toStringID(id));
+  migrator.initialize(Collections.singleton(DUMMY_STRING));
+  assertEquals(DUMMY_STRING,migrator.toStringID(id));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStore() throws Exception {
+  UpdatableIDMigrator migrator=new MemoryIDMigrator();
+  long id=migrator.toLongID(DUMMY_STRING);
+  assertNull(migrator.toStringID(id));
+  migrator.storeMapping(id,DUMMY_STRING);
+  assertEquals(DUMMY_STRING,migrator.toStringID(id));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.model.PlusAnonymousConcurrentUserDataModelTest </h4><pre class="type-5 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+/** 
+ * Test taking an unavailable user
+ */
+@Test public void testTakeUnavailableUser(){
+  PlusAnonymousConcurrentUserDataModel instance=getTestableWithoutDelegateData(1);
+  instance.takeAvailableUser();
+  assertNull(instance.takeAvailableUser());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.model.file.FileDataModelTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTranspose() throws Exception {
+  FileDataModel tModel=new FileDataModel(testFile,true,FileDataModel.DEFAULT_MIN_RELOAD_INTERVAL_MS);
+  PreferenceArray userPrefs=tModel.getPreferencesFromUser(456);
+  assertNotNull("user prefs are null and it shouldn't be",userPrefs);
+  PreferenceArray pref=tModel.getPreferencesForItem(123);
+  assertNotNull("pref is null and it shouldn't be",pref);
+  assertEquals("pref Size: " + pref.length() + " is not: "+ 3,3,pref.length());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-5 type-9 type-4 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=NoSuchElementException.class) public void testGetItems() throws Exception {
+  LongPrimitiveIterator it=model.getItemIDs();
+  assertNotNull(it);
+  assertTrue(it.hasNext());
+  assertEquals(123,it.nextLong());
+  assertTrue(it.hasNext());
+  assertEquals(234,it.nextLong());
+  assertTrue(it.hasNext());
+  assertEquals(456,it.nextLong());
+  assertTrue(it.hasNext());
+  assertEquals(654,it.nextLong());
+  assertTrue(it.hasNext());
+  assertEquals(789,it.nextLong());
+  assertTrue(it.hasNext());
+  assertEquals(999,it.nextLong());
+  assertFalse(it.hasNext());
+  it.next();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPreferencesForItem() throws Exception {
+  PreferenceArray prefs=model.getPreferencesForItem(456);
+  assertNotNull(prefs);
+  Preference pref1=prefs.get(0);
+  assertEquals(123,pref1.getUserID());
+  assertEquals(456,pref1.getItemID());
+  Preference pref2=prefs.get(1);
+  assertEquals(456,pref2.getUserID());
+  assertEquals(456,pref2.getItemID());
+  assertEquals(2,prefs.length());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.model.file.FileIDMigratorTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNoRefreshAfterFileUpdate() throws Exception {
+  IDMigrator migrator=new FileIDMigrator(testFile,0L);
+  long dogAsLong=migrator.toLongID("dog");
+  migrator.toStringID(dogAsLong);
+  Thread.sleep(2000L);
+  writeLines(testFile,UPDATED_STRING_IDS);
+  long cowAsLong=migrator.toLongID("cow");
+  long donkeyAsLong=migrator.toLongID("donkey");
+  assertEquals("dog",migrator.toStringID(dogAsLong));
+  assertEquals("cow",migrator.toStringID(cowAsLong));
+  assertNull(migrator.toStringID(donkeyAsLong));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLoadFromFile() throws Exception {
+  IDMigrator migrator=new FileIDMigrator(testFile);
+  long dogAsLong=migrator.toLongID("dog");
+  long cowAsLong=migrator.toLongID("cow");
+  long donkeyAsLong=migrator.toLongID("donkey");
+  assertEquals("dog",migrator.toStringID(dogAsLong));
+  assertEquals("cow",migrator.toStringID(cowAsLong));
+  assertNull(migrator.toStringID(donkeyAsLong));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.neighborhood.NearestNNeighborhoodTest </h4><pre class="type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNeighborhood() throws Exception {
+  DataModel dataModel=getDataModel();
+  long[] neighborhood=new NearestNUserNeighborhood(1,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(1);
+  assertNotNull(neighborhood);
+  assertEquals(1,neighborhood.length);
+  assertTrue(arrayContains(neighborhood,2));
+  long[] neighborhood2=new NearestNUserNeighborhood(2,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(2);
+  assertNotNull(neighborhood2);
+  assertEquals(2,neighborhood2.length);
+  assertTrue(arrayContains(neighborhood2,1));
+  assertTrue(arrayContains(neighborhood2,3));
+  long[] neighborhood3=new NearestNUserNeighborhood(4,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(4);
+  assertNotNull(neighborhood3);
+  assertEquals(3,neighborhood3.length);
+  assertTrue(arrayContains(neighborhood3,1));
+  assertTrue(arrayContains(neighborhood3,2));
+  assertTrue(arrayContains(neighborhood3,3));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.neighborhood.ThresholdNeighborhoodTest </h4><pre class="type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNeighborhood() throws Exception {
+  DataModel dataModel=getDataModel();
+  long[] neighborhood=new ThresholdUserNeighborhood(1.0,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(1);
+  assertNotNull(neighborhood);
+  assertEquals(0,neighborhood.length);
+  long[] neighborhood2=new ThresholdUserNeighborhood(0.8,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(1);
+  assertNotNull(neighborhood2);
+  assertEquals(1,neighborhood2.length);
+  assertTrue(arrayContains(neighborhood2,2));
+  long[] neighborhood3=new ThresholdUserNeighborhood(0.6,new DummySimilarity(dataModel),dataModel).getUserNeighborhood(2);
+  assertNotNull(neighborhood3);
+  assertEquals(3,neighborhood3.length);
+  assertTrue(arrayContains(neighborhood3,1));
+  assertTrue(arrayContains(neighborhood3,3));
+  assertTrue(arrayContains(neighborhood3,4));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.GenericItemBasedRecommenderTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRescorer() throws Exception {
+  DataModel dataModel=getDataModel(new long[]{1,2,3},new Double[][]{{0.1,0.2},{0.2,0.3,0.3,0.6},{0.4,0.4,0.5,0.9}});
+  Collection<GenericItemSimilarity.ItemItemSimilarity> similarities=Lists.newArrayList();
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,1,1.0));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,2,0.5));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,3,0.2));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(1,2,0.7));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(1,3,0.5));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(2,3,0.9));
+  ItemSimilarity similarity=new GenericItemSimilarity(similarities);
+  Recommender recommender=new GenericItemBasedRecommender(dataModel,similarity);
+  List<RecommendedItem> originalRecommended=recommender.recommend(1,2);
+  List<RecommendedItem> rescoredRecommended=recommender.recommend(1,2,new ReversingRescorer<Long>());
+  assertNotNull(originalRecommended);
+  assertNotNull(rescoredRecommended);
+  assertEquals(2,originalRecommended.size());
+  assertEquals(2,rescoredRecommended.size());
+  assertEquals(originalRecommended.get(0).getItemID(),rescoredRecommended.get(1).getItemID());
+  assertEquals(originalRecommended.get(1).getItemID(),rescoredRecommended.get(0).getItemID());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMostSimilarToMultipleDontExcludeIfNotSimilarToAll() throws Exception {
+  ItemBasedRecommender recommender=buildRecommender2();
+  List<RecommendedItem> similar=recommender.mostSimilarItems(new long[]{1,2,4},10,false);
+  assertNotNull(similar);
+  assertEquals(2,similar.size());
+  RecommendedItem first=similar.get(0);
+  RecommendedItem second=similar.get(1);
+  assertEquals(0,first.getItemID());
+  assertEquals(0.933333333f,first.getValue(),EPSILON);
+  assertEquals(3,second.getItemID());
+  assertEquals(-0.2f,second.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIncludeKnownItems() throws Exception {
+  DataModel dataModel=getDataModel(new long[]{1,2,3},new Double[][]{{0.1,0.2},{0.2,0.3,0.3,0.6},{0.4,0.4,0.5,0.9}});
+  Collection<GenericItemSimilarity.ItemItemSimilarity> similarities=Lists.newArrayList();
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,1,0.8));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,2,0.5));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(0,3,0.2));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(1,2,0.7));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(1,3,0.5));
+  similarities.add(new GenericItemSimilarity.ItemItemSimilarity(2,3,0.9));
+  ItemSimilarity similarity=new GenericItemSimilarity(similarities);
+  Recommender recommender=new GenericItemBasedRecommender(dataModel,similarity);
+  List<RecommendedItem> originalRecommended=recommender.recommend(1,4,null,true);
+  List<RecommendedItem> rescoredRecommended=recommender.recommend(1,4,new ReversingRescorer<Long>(),true);
+  assertNotNull(originalRecommended);
+  assertNotNull(rescoredRecommended);
+  assertEquals(4,originalRecommended.size());
+  assertEquals(4,rescoredRecommended.size());
+  assertEquals(originalRecommended.get(0).getItemID(),rescoredRecommended.get(3).getItemID());
+  assertEquals(originalRecommended.get(3).getItemID(),rescoredRecommended.get(0).getItemID());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMostSimilar() throws Exception {
+  ItemBasedRecommender recommender=buildRecommender();
+  List<RecommendedItem> similar=recommender.mostSimilarItems(0,2);
+  assertNotNull(similar);
+  assertEquals(2,similar.size());
+  RecommendedItem first=similar.get(0);
+  RecommendedItem second=similar.get(1);
+  assertEquals(1,first.getItemID());
+  assertEquals(1.0f,first.getValue(),EPSILON);
+  assertEquals(2,second.getItemID());
+  assertEquals(0.5f,second.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommendedBecause() throws Exception {
+  ItemBasedRecommender recommender=buildRecommender2();
+  List<RecommendedItem> recommendedBecause=recommender.recommendedBecause(1,4,3);
+  assertNotNull(recommendedBecause);
+  assertEquals(3,recommendedBecause.size());
+  RecommendedItem first=recommendedBecause.get(0);
+  RecommendedItem second=recommendedBecause.get(1);
+  RecommendedItem third=recommendedBecause.get(2);
+  assertEquals(2,first.getItemID());
+  assertEquals(0.99f,first.getValue(),EPSILON);
+  assertEquals(3,second.getItemID());
+  assertEquals(0.4f,second.getValue(),EPSILON);
+  assertEquals(0,third.getItemID());
+  assertEquals(0.2f,third.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMostSimilarToMultipleExcludeIfNotSimilarToAll() throws Exception {
+  ItemBasedRecommender recommender=buildRecommender2();
+  List<RecommendedItem> similar=recommender.mostSimilarItems(new long[]{3,4},2);
+  assertNotNull(similar);
+  assertEquals(1,similar.size());
+  RecommendedItem first=similar.get(0);
+  assertEquals(0,first.getItemID());
+  assertEquals(0.2f,first.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommender() throws Exception {
+  Recommender recommender=buildRecommender();
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+  recommender.refresh(null);
+  recommended=recommender.recommend(1,1);
+  firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMostSimilarToMultiple() throws Exception {
+  ItemBasedRecommender recommender=buildRecommender2();
+  List<RecommendedItem> similar=recommender.mostSimilarItems(new long[]{0,1},2);
+  assertNotNull(similar);
+  assertEquals(2,similar.size());
+  RecommendedItem first=similar.get(0);
+  RecommendedItem second=similar.get(1);
+  assertEquals(2,first.getItemID());
+  assertEquals(0.85f,first.getValue(),EPSILON);
+  assertEquals(3,second.getItemID());
+  assertEquals(-0.3f,second.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Contributed test case that verifies fix for bug
+ * <a href="http://sourceforge.net/tracker/index.php?func=detail&amp;aid=1396128&amp;group_id=138771&amp;atid=741665">
+ * 1396128</a>.
+ */
+@Test public void testBestRating() throws Exception {
+  Recommender recommender=buildRecommender();
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.GenericUserBasedRecommenderTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMostSimilar() throws Exception {
+  UserBasedRecommender recommender=buildRecommender();
+  long[] similar=recommender.mostSimilarUserIDs(1,2);
+  assertNotNull(similar);
+  assertEquals(2,similar.length);
+  assertEquals(2,similar[0]);
+  assertEquals(3,similar[1]);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBestRating() throws Exception {
+  Recommender recommender=buildRecommender();
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommender() throws Exception {
+  Recommender recommender=buildRecommender();
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+  recommender.refresh(null);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.1f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIsolatedUser() throws Exception {
+  DataModel dataModel=getDataModel(new long[]{1,2,3,4},new Double[][]{{0.1,0.2},{0.2,0.3,0.3,0.6},{0.4,0.4,0.5,0.9},{null,null,null,null,1.0}});
+  UserSimilarity similarity=new PearsonCorrelationSimilarity(dataModel);
+  UserNeighborhood neighborhood=new NearestNUserNeighborhood(3,similarity,dataModel);
+  UserBasedRecommender recommender=new GenericUserBasedRecommender(dataModel,neighborhood,similarity);
+  long[] mostSimilar=recommender.mostSimilarUserIDs(4,3);
+  assertNotNull(mostSimilar);
+  assertEquals(0,mostSimilar.length);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRescorer() throws Exception {
+  DataModel dataModel=getDataModel(new long[]{1,2,3},new Double[][]{{0.1,0.2},{0.2,0.3,0.3,0.6},{0.4,0.5,0.5,0.9}});
+  UserSimilarity similarity=new PearsonCorrelationSimilarity(dataModel);
+  UserNeighborhood neighborhood=new NearestNUserNeighborhood(2,similarity,dataModel);
+  Recommender recommender=new GenericUserBasedRecommender(dataModel,neighborhood,similarity);
+  List<RecommendedItem> originalRecommended=recommender.recommend(1,2);
+  List<RecommendedItem> rescoredRecommended=recommender.recommend(1,2,new ReversingRescorer<Long>());
+  assertNotNull(originalRecommended);
+  assertNotNull(rescoredRecommended);
+  assertEquals(2,originalRecommended.size());
+  assertEquals(2,rescoredRecommended.size());
+  assertEquals(originalRecommended.get(0).getItemID(),rescoredRecommended.get(1).getItemID());
+  assertEquals(originalRecommended.get(1).getItemID(),rescoredRecommended.get(0).getItemID());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIncludeKnownItems() throws Exception {
+  DataModel dataModel=getDataModel(new long[]{1,2,3},new Double[][]{{0.1,0.2},{0.2,0.3,0.3,0.6},{0.4,0.5,0.5,0.9}});
+  UserSimilarity similarity=new PearsonCorrelationSimilarity(dataModel);
+  UserNeighborhood neighborhood=new NearestNUserNeighborhood(2,similarity,dataModel);
+  Recommender recommender=new GenericUserBasedRecommender(dataModel,neighborhood,similarity);
+  List<RecommendedItem> originalRecommended=recommender.recommend(1,4,null,true);
+  List<RecommendedItem> rescoredRecommended=recommender.recommend(1,4,new ReversingRescorer<Long>(),true);
+  assertNotNull(originalRecommended);
+  assertNotNull(rescoredRecommended);
+  assertEquals(4,originalRecommended.size());
+  assertEquals(4,rescoredRecommended.size());
+  assertEquals(originalRecommended.get(0).getItemID(),rescoredRecommended.get(3).getItemID());
+  assertEquals(originalRecommended.get(3).getItemID(),rescoredRecommended.get(0).getItemID());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.ItemAverageRecommenderTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommender() throws Exception {
+  Recommender recommender=new ItemAverageRecommender(getDataModel());
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.53333336f,firstRecommended.getValue(),EPSILON);
+  recommender.refresh(null);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.53333336f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.ItemUserAverageRecommenderTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommender() throws Exception {
+  Recommender recommender=new ItemUserAverageRecommender(getDataModel());
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.35151517f,firstRecommended.getValue(),EPSILON);
+  recommender.refresh(null);
+  assertEquals(2,firstRecommended.getItemID());
+  assertEquals(0.35151517f,firstRecommended.getValue(),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.NullRescorerTest </h4><pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUserRescorer() throws Exception {
+  IDRescorer rescorer=NullRescorer.getUserInstance();
+  assertNotNull(rescorer);
+  assertEquals(1.0,rescorer.rescore(1L,1.0),EPSILON);
+  assertEquals(1.0,rescorer.rescore(0L,1.0),EPSILON);
+  assertEquals(0.0,rescorer.rescore(1L,0.0),EPSILON);
+  assertTrue(Double.isNaN(rescorer.rescore(1L,Double.NaN)));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testItemRescorer() throws Exception {
+  IDRescorer rescorer=NullRescorer.getItemInstance();
+  assertNotNull(rescorer);
+  assertEquals(1.0,rescorer.rescore(1L,1.0),EPSILON);
+  assertEquals(1.0,rescorer.rescore(0L,1.0),EPSILON);
+  assertEquals(0.0,rescorer.rescore(1L,0.0),EPSILON);
+  assertTrue(Double.isNaN(rescorer.rescore(1L,Double.NaN)));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.RandomRecommenderTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRecommender() throws Exception {
+  Recommender recommender=new RandomRecommender(getDataModel());
+  List<RecommendedItem> recommended=recommender.recommend(1,1);
+  assertNotNull(recommended);
+  assertEquals(1,recommended.size());
+  RecommendedItem firstRecommended=recommended.get(0);
+  assertEquals(2,firstRecommended.getItemID());
+  recommender.refresh(null);
+  assertEquals(2,firstRecommended.getItemID());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.svd.FilePersistenceStrategyTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void persistAndLoad() throws Exception {
+  FastByIDMap<Integer> userIDMapping=new FastByIDMap<Integer>();
+  FastByIDMap<Integer> itemIDMapping=new FastByIDMap<Integer>();
+  userIDMapping.put(123,0);
+  userIDMapping.put(456,1);
+  itemIDMapping.put(12,0);
+  itemIDMapping.put(34,1);
+  double[][] userFeatures={{0.1,0.2,0.3},{0.4,0.5,0.6}};
+  double[][] itemFeatures={{0.7,0.8,0.9},{1.0,1.1,1.2}};
+  Factorization original=new Factorization(userIDMapping,itemIDMapping,userFeatures,itemFeatures);
+  File storage=getTestTempFile("storage.bin");
+  PersistenceStrategy persistenceStrategy=new FilePersistenceStrategy(storage);
+  assertNull(persistenceStrategy.load());
+  persistenceStrategy.maybePersist(original);
+  Factorization clone=persistenceStrategy.load();
+  assertEquals(original,clone);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.recommender.svd.ParallelSGDFactorizerTest </h4><pre class="type-11 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPreferenceShufflerWithSyntheticData() throws Exception {
+  setUpSyntheticData();
+  ParallelSGDFactorizer.PreferenceShuffler shuffler=new PreferenceShuffler(dataModel);
+  shuffler.shuffle();
+  shuffler.stage();
+  FastByIDMap<FastByIDMap<Boolean>> checked=new FastByIDMap<FastByIDMap<Boolean>>();
+  for (int i=0; i < shuffler.size(); i++) {
+    Preference pref=shuffler.get(i);
+    float value=dataModel.getPreferenceValue(pref.getUserID(),pref.getItemID());
+    assertEquals(pref.getValue(),value,0.0);
+    if (!checked.containsKey(pref.getUserID())) {
+      checked.put(pref.getUserID(),new FastByIDMap<Boolean>());
+    }
+    assertNull(checked.get(pref.getUserID()).get(pref.getItemID()));
+    checked.get(pref.getUserID()).put(pref.getItemID(),true);
+  }
+  LongPrimitiveIterator userIDs=dataModel.getUserIDs();
+  int index=0;
+  while (userIDs.hasNext()) {
+    long userID=userIDs.nextLong();
+    PreferenceArray preferencesFromUser=dataModel.getPreferencesFromUser(userID);
+    for (    Preference preference : preferencesFromUser) {
+      assertTrue(checked.get(preference.getUserID()).get(preference.getItemID()));
+      index++;
+    }
+  }
+  assertEquals(index,shuffler.size());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.similarity.file.FileItemSimilarityTest </h4><pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFileItemItemSimilarityIterable() throws Exception {
+  Iterable<ItemItemSimilarity> similarityIterable=new FileItemItemSimilarityIterable(testFile);
+  GenericItemSimilarity similarity=new GenericItemSimilarity(similarityIterable);
+  assertEquals(0.125,similarity.itemSimilarity(1L,5L),EPSILON);
+  assertEquals(0.125,similarity.itemSimilarity(5L,1L),EPSILON);
+  assertEquals(0.5,similarity.itemSimilarity(1L,7L),EPSILON);
+  assertEquals(0.5,similarity.itemSimilarity(7L,1L),EPSILON);
+  assertTrue(Double.isNaN(similarity.itemSimilarity(7L,8L)));
+  double[] valuesForOne=similarity.itemSimilarities(1L,new long[]{5L,7L});
+  assertNotNull(valuesForOne);
+  assertEquals(2,valuesForOne.length);
+  assertEquals(0.125,valuesForOne[0],EPSILON);
+  assertEquals(0.5,valuesForOne[1],EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLoadFromFile() throws Exception {
+  ItemSimilarity similarity=new FileItemSimilarity(testFile);
+  assertEquals(0.125,similarity.itemSimilarity(1L,5L),EPSILON);
+  assertEquals(0.125,similarity.itemSimilarity(5L,1L),EPSILON);
+  assertEquals(0.5,similarity.itemSimilarity(1L,7L),EPSILON);
+  assertEquals(0.5,similarity.itemSimilarity(7L,1L),EPSILON);
+  assertTrue(Double.isNaN(similarity.itemSimilarity(7L,8L)));
+  double[] valuesForOne=similarity.itemSimilarities(1L,new long[]{5L,7L});
+  assertNotNull(valuesForOne);
+  assertEquals(2,valuesForOne.length);
+  assertEquals(0.125,valuesForOne[0],EPSILON);
+  assertEquals(0.5,valuesForOne[1],EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.RegressionResultAnalyzerTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUnpredictable(){
+  double[][] results=new double[10][2];
+  for (int i=0; i < results.length; i++) {
+    results[i][0]=i;
+    results[i][1]=Double.NaN;
+  }
+  RegressionResultAnalyzer analyzer=new RegressionResultAnalyzer();
+  analyzer.setInstances(results);
+  String analysis=analyzer.toString();
+  assertNull(parseAnalysis(analysis));
+  assertArrayEquals(new int[]{0,10,10},parseAnalysisCount(analysis));
+  for (int i=0; i < results.length - 3; i++) {
+    results[i][1]=Math.sqrt(i);
+  }
+  analyzer=new RegressionResultAnalyzer();
+  analyzer.setInstances(results);
+  analysis=analyzer.toString();
+  assertArrayEquals(new double[]{0.9552,1.4526,1.9345},parseAnalysis(analysis),0);
+  assertArrayEquals(new int[]{7,3,10},parseAnalysisCount(analysis));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.df.builder.DecisionTreeBuilderTest </h4><pre class="type-11 type-3 type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * make sure that DecisionTreeBuilder.randomAttributes() returns the correct number of attributes, that have not been
+ * selected yet
+ */
+@Test public void testRandomAttributes() throws Exception {
+  Random rng=RandomUtils.getRandom();
+  int nbAttributes=rng.nextInt(100) + 1;
+  boolean[] selected=new boolean[nbAttributes];
+  for (int nloop=0; nloop < 100; nloop++) {
+    Arrays.fill(selected,false);
+    int nbSelected=rng.nextInt(nbAttributes - 1);
+    for (int index=0; index < nbSelected; index++) {
+      int attr;
+      do {
+        attr=rng.nextInt(nbAttributes);
+      }
+ while (selected[attr]);
+      selected[attr]=true;
+    }
+    int m=rng.nextInt(nbAttributes);
+    Method randomAttributes=DecisionTreeBuilder.class.getDeclaredMethod("randomAttributes",Random.class,boolean[].class,int.class);
+    randomAttributes.setAccessible(true);
+    int[] attrs=(int[])randomAttributes.invoke(null,rng,selected,m);
+    assertNotNull(attrs);
+    assertEquals(Math.min(m,nbAttributes - nbSelected),attrs.length);
+    for (    int attr : attrs) {
+      assertFalse("an attribute has already been selected",selected[attr]);
+      assertTrue(attr >= 0);
+      assertTrue(attr < nbAttributes);
+      assertEquals(ArrayUtils.indexOf(attrs,attr),ArrayUtils.lastIndexOf(attrs,attr));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.df.builder.DefaultTreeBuilderTest </h4><pre class="type-11 type-3 type-2 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * make sure that DefaultTreeBuilder.randomAttributes() returns the correct number of attributes, that have not been
+ * selected yet
+ */
+@Test public void testRandomAttributes() throws Exception {
+  Random rng=RandomUtils.getRandom();
+  int nbAttributes=rng.nextInt(100) + 1;
+  boolean[] selected=new boolean[nbAttributes];
+  for (int nloop=0; nloop < 100; nloop++) {
+    Arrays.fill(selected,false);
+    int nbSelected=rng.nextInt(nbAttributes - 1);
+    for (int index=0; index < nbSelected; index++) {
+      int attr;
+      do {
+        attr=rng.nextInt(nbAttributes);
+      }
+ while (selected[attr]);
+      selected[attr]=true;
+    }
+    int m=rng.nextInt(nbAttributes);
+    int[] attrs=DefaultTreeBuilder.randomAttributes(rng,selected,m);
+    assertNotNull(attrs);
+    assertEquals(Math.min(m,nbAttributes - nbSelected),attrs.length);
+    for (    int attr : attrs) {
+      assertFalse("an attribute has already been selected",selected[attr]);
+      assertTrue(attr >= 0);
+      assertTrue(attr < nbAttributes);
+      assertEquals(ArrayUtils.indexOf(attrs,attr),ArrayUtils.lastIndexOf(attrs,attr));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.sequencelearning.hmm.HMMAlgorithmsTest </h4><pre class="type-11 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLogScaledForwardAlgorithm(){
+  double[][] alphaExpectedA={{0.02,0.0392,0.002438,0.00035456,0.0011554672,7.158497e-04,4.614927e-05},{0.01,0.0054,0.001824,0.00069486,0.0007586904,2.514137e-04,1.721505e-05},{0.32,0.0262,0.002542,0.00038026,0.0001360234,3.002345e-05,9.659608e-05},{0.03,0.0000,0.013428,0.00951084,0.0000000000,0.000000e+00,2.428986e-05}};
+  Matrix alpha=HmmAlgorithms.forwardAlgorithm(getModel(),getSequence(),true);
+  assertNotNull(alpha);
+  assertEquals(4,alpha.numCols());
+  assertEquals(7,alpha.numRows());
+  for (int i=0; i < 4; ++i) {
+    for (int j=0; j < 7; ++j) {
+      assertEquals(Math.log(alphaExpectedA[i][j]),alpha.get(j,i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testViterbiAlgorithm(){
+  int[] expected={2,0,3,3,0,0,2};
+  int[] computed=HmmAlgorithms.viterbiAlgorithm(getModel(),getSequence(),false);
+  assertNotNull(computed);
+  assertEquals(computed.length,getSequence().length);
+  for (int i=0; i < getSequence().length; ++i) {
+    assertEquals(expected[i],computed[i]);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLogScaledViterbiAlgorithm(){
+  int[] expected={2,0,3,3,0,0,2};
+  int[] computed=HmmAlgorithms.viterbiAlgorithm(getModel(),getSequence(),true);
+  assertNotNull(computed);
+  assertEquals(computed.length,getSequence().length);
+  for (int i=0; i < getSequence().length; ++i) {
+    assertEquals(expected[i],computed[i]);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the backward algorithm by comparing the beta values with the values
+ * obtained from HMM R model. We test the following observation sequence "O1"
+ * "O0" "O2" "O2" "O0" "O0" "O1" by comparing the generated beta values to the
+ * R-generated "reference".
+ */
+@Test public void testBackwardAlgorithm(){
+  double[][] betaExpectedA={{0.0015730559,0.003543656,0.00738264,0.040692,0.0848,0.17,1},{0.0017191865,0.002386795,0.00923652,0.052232,0.1018,0.17,1},{0.0003825772,0.001238558,0.00259464,0.012096,0.0664,0.66,1},{0.0004390858,0.007076994,0.01063512,0.013556,0.0304,0.17,1}};
+  Matrix beta=HmmAlgorithms.backwardAlgorithm(getModel(),getSequence(),false);
+  assertNotNull(beta);
+  assertEquals(4,beta.numCols());
+  assertEquals(7,beta.numRows());
+  for (int i=0; i < 4; ++i) {
+    for (int j=0; j < 7; ++j) {
+      assertEquals(betaExpectedA[i][j],beta.get(j,i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLogScaledBackwardAlgorithm(){
+  double[][] betaExpectedA={{0.0015730559,0.003543656,0.00738264,0.040692,0.0848,0.17,1},{0.0017191865,0.002386795,0.00923652,0.052232,0.1018,0.17,1},{0.0003825772,0.001238558,0.00259464,0.012096,0.0664,0.66,1},{0.0004390858,0.007076994,0.01063512,0.013556,0.0304,0.17,1}};
+  Matrix beta=HmmAlgorithms.backwardAlgorithm(getModel(),getSequence(),true);
+  assertNotNull(beta);
+  assertEquals(4,beta.numCols());
+  assertEquals(7,beta.numRows());
+  for (int i=0; i < 4; ++i) {
+    for (int j=0; j < 7; ++j) {
+      assertEquals(Math.log(betaExpectedA[i][j]),beta.get(j,i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test the forward algorithm by comparing the alpha values with the values
+ * obtained from HMM R model. We test the test observation sequence "O1" "O0"
+ * "O2" "O2" "O0" "O0" "O1" by comparing the generated alpha values to the
+ * R-generated "reference".
+ */
+@Test public void testForwardAlgorithm(){
+  double[][] alphaExpectedA={{0.02,0.0392,0.002438,0.00035456,0.0011554672,7.158497e-04,4.614927e-05},{0.01,0.0054,0.001824,0.00069486,0.0007586904,2.514137e-04,1.721505e-05},{0.32,0.0262,0.002542,0.00038026,0.0001360234,3.002345e-05,9.659608e-05},{0.03,0.0000,0.013428,0.00951084,0.0000000000,0.000000e+00,2.428986e-05}};
+  Matrix alpha=HmmAlgorithms.forwardAlgorithm(getModel(),getSequence(),false);
+  assertNotNull(alpha);
+  assertEquals(4,alpha.numCols());
+  assertEquals(7,alpha.numRows());
+  for (int i=0; i < 4; ++i) {
+    for (int j=0; j < 7; ++j) {
+      assertEquals(alphaExpectedA[i][j],alpha.get(j,i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.clustering.spectral.TestVectorCache </h4><pre class="type-3 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAll() throws Exception {
+  Configuration conf=getConfiguration();
+  Vector v=new DenseVector(VECTOR);
+  Path toSave=getTestTempDirPath("output");
+  Writable key=new IntWritable(0);
+  VectorCache.save(key,v,toSave,conf);
+  Vector v2=VectorCache.load(conf);
+  assertNotNull("Vector is null",v2);
+  assertEquals("Vectors are not identical",v2,v);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLoad() throws Exception {
+  Configuration conf=getConfiguration();
+  Writable key=new IntWritable(0);
+  Vector value=new DenseVector(VECTOR);
+  Path path=getTestTempDirPath("output");
+  FileSystem fs=FileSystem.get(path.toUri(),conf);
+  path=fs.makeQualified(path);
+  fs.deleteOnExit(path);
+  HadoopUtil.delete(conf,path);
+  SequenceFile.Writer writer=new SequenceFile.Writer(fs,conf,path,IntWritable.class,VectorWritable.class);
+  try {
+    writer.append(key,new VectorWritable(value));
+  }
+  finally {
+    Closeables.close(writer,false);
+  }
+  DistributedCache.setCacheFiles(new URI[]{path.toUri()},conf);
+  Vector result=VectorCache.load(conf);
+  assertNotNull("Vector is null",result);
+  assertEquals("Loaded vector is not identical to original",result,value);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.common.AbstractJobTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testInputOutputPaths() throws Exception {
+  AbstractJobFactory fact=new AbstractJobFactory(){
+    @Override public AbstractJob getJob(){
+      return new AbstractJob(){
+        @Override public int run(        String[] args) throws IOException {
+          addInputOption();
+          addOutputOption();
+          Map<String,List<String>> argMap=parseArguments(args);
+          if (argMap == null) {
+            return -1;
+          }
+          Path inputPath=getInputPath();
+          assertNotNull("getInputPath() returns non-null",inputPath);
+          Path outputPath=getInputPath();
+          assertNotNull("getOutputPath() returns non-null",outputPath);
+          return 0;
+        }
+      }
+;
+    }
+  }
+;
+  int ret=ToolRunner.run(fact.getJob(),new String[0]);
+  assertEquals("-1 for missing input option",-1,ret);
+  String testInputPath="testInputPath";
+  AbstractJob job=fact.getJob();
+  ret=ToolRunner.run(job,new String[]{"--input",testInputPath});
+  assertEquals("-1 for missing output option",-1,ret);
+  assertEquals("input path is correct",testInputPath,job.getInputPath().toString());
+  job=fact.getJob();
+  String testOutputPath="testOutputPath";
+  ret=ToolRunner.run(job,new String[]{"--output",testOutputPath});
+  assertEquals("-1 for missing input option",-1,ret);
+  assertEquals("output path is correct",testOutputPath,job.getOutputPath().toString());
+  job=fact.getJob();
+  ret=ToolRunner.run(job,new String[]{"--input",testInputPath,"--output",testOutputPath});
+  assertEquals("0 for complete options",0,ret);
+  assertEquals("input path is correct",testInputPath,job.getInputPath().toString());
+  assertEquals("output path is correct",testOutputPath,job.getOutputPath().toString());
+  job=fact.getJob();
+  ret=ToolRunner.run(job,new String[]{"--input",testInputPath,"--output",testOutputPath});
+  assertEquals("0 for complete options",0,ret);
+  assertEquals("input path is correct",testInputPath,job.getInputPath().toString());
+  assertEquals("output path is correct",testOutputPath,job.getOutputPath().toString());
+  job=fact.getJob();
+  String testInputPropertyPath="testInputPropertyPath";
+  String testOutputPropertyPath="testOutputPropertyPath";
+  ret=ToolRunner.run(job,new String[]{"-Dmapred.input.dir=" + testInputPropertyPath,"-Dmapred.output.dir=" + testOutputPropertyPath});
+  assertEquals("0 for complete options",0,ret);
+  assertEquals("input path from property is correct",testInputPropertyPath,job.getInputPath().toString());
+  assertEquals("output path from property is correct",testOutputPropertyPath,job.getOutputPath().toString());
+  job=fact.getJob();
+  ret=ToolRunner.run(job,new String[]{"-Dmapred.input.dir=" + testInputPropertyPath,"-Dmapred.output.dir=" + testOutputPropertyPath,"--input",testInputPath,"--output",testOutputPath});
+  assertEquals("0 for complete options",0,ret);
+  assertEquals("input command-line option precedes property",testInputPath,job.getInputPath().toString());
+  assertEquals("output command-line option precedes property",testOutputPath,job.getOutputPath().toString());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testOptions() throws Exception {
+  final Map<String,List<String>> testMap=Maps.newHashMap();
+  AbstractJobFactory fact=new AbstractJobFactory(){
+    @Override public AbstractJob getJob(){
+      return new AbstractJob(){
+        @Override public int run(        String[] args) throws IOException {
+          this.addOption(DefaultOptionCreator.overwriteOption().create());
+          this.addOption("option","o","option");
+          this.addOption("required","r","required",true);
+          this.addOption("notRequired","nr","not required",false);
+          this.addOption("hasDefault","hd","option w/ default","defaultValue");
+          Map<String,List<String>> argMap=parseArguments(args);
+          if (argMap == null) {
+            return -1;
+          }
+          testMap.clear();
+          testMap.putAll(argMap);
+          return 0;
+        }
+      }
+;
+    }
+  }
+;
+  int ret=ToolRunner.run(fact.getJob(),new String[0]);
+  assertEquals("-1 for missing required options",-1,ret);
+  ret=ToolRunner.run(fact.getJob(),new String[]{"--required","requiredArg"});
+  assertEquals("0 for no missing required options",0,ret);
+  assertEquals(Collections.singletonList("requiredArg"),testMap.get("--required"));
+  assertEquals(Collections.singletonList("defaultValue"),testMap.get("--hasDefault"));
+  assertNull(testMap.get("--option"));
+  assertNull(testMap.get("--notRequired"));
+  assertFalse(testMap.containsKey("--overwrite"));
+  ret=ToolRunner.run(fact.getJob(),new String[]{"--required","requiredArg","--unknownArg"});
+  assertEquals("-1 for including unknown options",-1,ret);
+  ret=ToolRunner.run(fact.getJob(),new String[]{"--required","requiredArg","--required","requiredArg2"});
+  assertEquals("-1 for including duplicate options",-1,ret);
+  ret=ToolRunner.run(fact.getJob(),new String[]{"--required","requiredArg","--overwrite","--hasDefault","nonDefault","--option","optionValue","--notRequired","notRequired"});
+  assertEquals("0 for no missing required options",0,ret);
+  assertEquals(Collections.singletonList("requiredArg"),testMap.get("--required"));
+  assertEquals(Collections.singletonList("nonDefault"),testMap.get("--hasDefault"));
+  assertEquals(Collections.singletonList("optionValue"),testMap.get("--option"));
+  assertEquals(Collections.singletonList("notRequired"),testMap.get("--notRequired"));
+  assertTrue(testMap.containsKey("--overwrite"));
+  ret=ToolRunner.run(fact.getJob(),new String[]{"-r","requiredArg","-ow","-hd","nonDefault","-o","optionValue","-nr","notRequired"});
+  assertEquals("0 for no missing required options",0,ret);
+  assertEquals(Collections.singletonList("requiredArg"),testMap.get("--required"));
+  assertEquals(Collections.singletonList("nonDefault"),testMap.get("--hasDefault"));
+  assertEquals(Collections.singletonList("optionValue"),testMap.get("--option"));
+  assertEquals(Collections.singletonList("notRequired"),testMap.get("--notRequired"));
+  assertTrue(testMap.containsKey("--overwrite"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.common.DistributedCacheFileLocationTest </h4><pre class="type-3 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void existingFile(){
+  Path path=HadoopUtil.findInCacheByPartOfFilename("want_to_find",DISTRIBUTED_CACHE_FILES);
+  assertNotNull(path);
+  assertEquals(FILE_I_WANT_TO_FIND.getName(),path.getName());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+"></span><br>
+@Test public void nonExistingFile(){
+  Path path=HadoopUtil.findInCacheByPartOfFilename("no such file",DISTRIBUTED_CACHE_FILES);
+  assertNull(path);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.common.lucene.AnalyzerUtilsTest </h4><pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+"></span><br>
+@Test public void createCJKAnalyzer() throws Exception {
+  assertNotNull(AnalyzerUtils.createAnalyzer(CJKAnalyzer.class.getName()));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+"></span><br>
+@Test public void createStandardAnalyzer() throws Exception {
+  assertNotNull(AnalyzerUtils.createAnalyzer(StandardAnalyzer.class.getName()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.ep.EvolutionaryProcessTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConverges() throws Exception {
+  State<Foo,Double> s0=new State<Foo,Double>(new double[5],1);
+  s0.setPayload(new Foo());
+  EvolutionaryProcess<Foo,Double> ep=new EvolutionaryProcess<Foo,Double>(10,100,s0);
+  State<Foo,Double> best=null;
+  for (int i=0; i < 20; i++) {
+    best=ep.parallelDo(new EvolutionaryProcess.Function<Payload<Double>>(){
+      @Override public double apply(      Payload<Double> payload,      double[] params){
+        int i=1;
+        double sum=0;
+        for (        double x : params) {
+          sum+=i * (x - i) * (x - i);
+          i++;
+        }
+        return -sum;
+      }
+    }
+);
+    ep.mutatePopulation(3);
+    System.out.printf("%10.3f %.3f\n",best.getValue(),best.getOmni());
+  }
+  ep.close();
+  assertNotNull(best);
+  assertEquals(0.0,best.getValue(),0.02);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.MatrixTest </h4><pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLabelBindingSerialization(){
+  Matrix m=matrixFactory(new double[][]{{1,3,4},{5,2,3},{1,4,2}});
+  assertNull("row bindings",m.getRowLabelBindings());
+  assertNull("col bindings",m.getColumnLabelBindings());
+  Map<String,Integer> rowBindings=Maps.newHashMap();
+  rowBindings.put("Fee",0);
+  rowBindings.put("Fie",1);
+  rowBindings.put("Foe",2);
+  m.setRowLabelBindings(rowBindings);
+  assertEquals("row",rowBindings,m.getRowLabelBindings());
+  Map<String,Integer> colBindings=Maps.newHashMap();
+  colBindings.put("Foo",0);
+  colBindings.put("Bar",1);
+  colBindings.put("Baz",2);
+  m.setColumnLabelBindings(colBindings);
+  assertEquals("col",colBindings,m.getColumnLabelBindings());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLabelBindings(){
+  Matrix m=matrixFactory(new double[][]{{1,3,4},{5,2,3},{1,4,2}});
+  assertNull("row bindings",m.getRowLabelBindings());
+  assertNull("col bindings",m.getColumnLabelBindings());
+  Map<String,Integer> rowBindings=Maps.newHashMap();
+  rowBindings.put("Fee",0);
+  rowBindings.put("Fie",1);
+  rowBindings.put("Foe",2);
+  m.setRowLabelBindings(rowBindings);
+  assertEquals("row",rowBindings,m.getRowLabelBindings());
+  Map<String,Integer> colBindings=Maps.newHashMap();
+  colBindings.put("Foo",0);
+  colBindings.put("Bar",1);
+  colBindings.put("Baz",2);
+  m.setColumnLabelBindings(colBindings);
+  assertEquals("row",rowBindings,m.getRowLabelBindings());
+  assertEquals("Fee",m.get(0,1),m.get("Fee","Bar"),EPSILON);
+  double[] newrow={9,8,7};
+  m.set("Foe",newrow);
+  assertEquals("FeeBaz",m.get(0,2),m.get("Fee","Baz"),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=IllegalStateException.class) public void testSettingLabelBindings(){
+  Matrix m=matrixFactory(new double[][]{{1,3,4},{5,2,3},{1,4,2}});
+  assertNull("row bindings",m.getRowLabelBindings());
+  assertNull("col bindings",m.getColumnLabelBindings());
+  m.set("Fee","Foo",1,2,9);
+  assertNotNull("row",m.getRowLabelBindings());
+  assertNotNull("row",m.getRowLabelBindings());
+  assertEquals("Fee",1,m.getRowLabelBindings().get("Fee").intValue());
+  assertEquals("Fee",2,m.getColumnLabelBindings().get("Foo").intValue());
+  assertEquals("FeeFoo",m.get(1,2),m.get("Fee","Foo"),EPSILON);
+  m.get("Fie","Foe");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.TestMatrixView </h4><pre class="type-5 type-9 type-4 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(expected=IllegalStateException.class) public void testSettingLabelBindings(){
+  assertNull("row bindings",test.getRowLabelBindings());
+  assertNull("col bindings",test.getColumnLabelBindings());
+  test.set("Fee","Foo",1,1,9);
+  assertNotNull("row",test.getRowLabelBindings());
+  assertNotNull("row",test.getRowLabelBindings());
+  assertEquals("Fee",1,test.getRowLabelBindings().get("Fee").intValue());
+  assertEquals("Foo",1,test.getColumnLabelBindings().get("Foo").intValue());
+  assertEquals("FeeFoo",test.get(1,1),test.get("Fee","Foo"),EPSILON);
+  test.get("Fie","Foe");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLabelBindings(){
+  assertNull("row bindings",test.getRowLabelBindings());
+  assertNull("col bindings",test.getColumnLabelBindings());
+  Map<String,Integer> rowBindings=Maps.newHashMap();
+  rowBindings.put("Fee",0);
+  rowBindings.put("Fie",1);
+  test.setRowLabelBindings(rowBindings);
+  assertEquals("row",rowBindings,test.getRowLabelBindings());
+  Map<String,Integer> colBindings=Maps.newHashMap();
+  colBindings.put("Foo",0);
+  colBindings.put("Bar",1);
+  test.setColumnLabelBindings(colBindings);
+  assertEquals("row",rowBindings,test.getRowLabelBindings());
+  assertEquals("Fee",test.get(0,1),test.get("Fee","Bar"),EPSILON);
+  double[] newrow={9,8};
+  test.set("Fie",newrow);
+  assertEquals("FeeBar",test.get(0,1),test.get("Fee","Bar"),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLabelBindingSerialization(){
+  assertNull("row bindings",test.getRowLabelBindings());
+  assertNull("col bindings",test.getColumnLabelBindings());
+  Map<String,Integer> rowBindings=Maps.newHashMap();
+  rowBindings.put("Fee",0);
+  rowBindings.put("Fie",1);
+  rowBindings.put("Foe",2);
+  test.setRowLabelBindings(rowBindings);
+  assertEquals("row",rowBindings,test.getRowLabelBindings());
+  Map<String,Integer> colBindings=Maps.newHashMap();
+  colBindings.put("Foo",0);
+  colBindings.put("Bar",1);
+  colBindings.put("Baz",2);
+  test.setColumnLabelBindings(colBindings);
+  assertEquals("col",colBindings,test.getColumnLabelBindings());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.VectorTest </h4><pre class="type-10 type-5 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLogNormalize(){
+  Vector vec1=new RandomAccessSparseVector(3);
+  vec1.setQuick(0,1);
+  vec1.setQuick(1,2);
+  vec1.setQuick(2,3);
+  Vector norm=vec1.logNormalize();
+  assertNotNull("norm1 is null and it shouldn't be",norm);
+  Vector vec2=new SequentialAccessSparseVector(3);
+  vec2.setQuick(0,1);
+  vec2.setQuick(1,2);
+  vec2.setQuick(2,3);
+  Vector norm2=vec2.logNormalize();
+  assertNotNull("norm1 is null and it shouldn't be",norm2);
+  Vector expected=new DenseVector(new double[]{0.2672612419124244,0.4235990463273581,0.5345224838248488});
+  assertVectorEquals(expected,norm,1.0e-15);
+  assertVectorEquals(expected,norm2,1.0e-15);
+  norm=vec1.logNormalize(2);
+  assertVectorEquals(expected,norm,1.0e-15);
+  norm2=vec2.logNormalize(2);
+  assertVectorEquals(expected,norm2,1.0e-15);
+  try {
+    vec1.logNormalize(1);
+    fail("Should fail with power == 1");
+  }
+ catch (  IllegalArgumentException e) {
+  }
+  try {
+    vec1.logNormalize(-1);
+    fail("Should fail with negative power");
+  }
+ catch (  IllegalArgumentException e) {
+  }
+  try {
+    vec2.logNormalize(Double.POSITIVE_INFINITY);
+    fail("Should fail with positive infinity norm");
+  }
+ catch (  IllegalArgumentException e) {
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNormalize(){
+  Vector vec1=new RandomAccessSparseVector(3);
+  vec1.setQuick(0,1);
+  vec1.setQuick(1,2);
+  vec1.setQuick(2,3);
+  Vector norm=vec1.normalize();
+  assertNotNull("norm1 is null and it shouldn't be",norm);
+  Vector vec2=new SequentialAccessSparseVector(3);
+  vec2.setQuick(0,1);
+  vec2.setQuick(1,2);
+  vec2.setQuick(2,3);
+  Vector norm2=vec2.normalize();
+  assertNotNull("norm1 is null and it shouldn't be",norm2);
+  Vector expected=new RandomAccessSparseVector(3);
+  expected.setQuick(0,0.2672612419124244);
+  expected.setQuick(1,0.5345224838248488);
+  expected.setQuick(2,0.8017837257372732);
+  assertEquals(expected,norm);
+  norm=vec1.normalize(2);
+  assertEquals(expected,norm);
+  norm2=vec2.normalize(2);
+  assertEquals(expected,norm2);
+  norm=vec1.normalize(1);
+  norm2=vec2.normalize(1);
+  expected.setQuick(0,1.0 / 6);
+  expected.setQuick(1,2.0 / 6);
+  expected.setQuick(2,3.0 / 6);
+  assertEquals(expected,norm);
+  assertEquals(expected,norm2);
+  norm=vec1.normalize(3);
+  double cube=Math.pow(36,1.0 / 3);
+  expected=vec1.divide(cube);
+  assertEquals(norm,expected);
+  norm=vec1.normalize(Double.POSITIVE_INFINITY);
+  norm2=vec2.normalize(Double.POSITIVE_INFINITY);
+  expected.setQuick(0,1.0 / 3);
+  expected.setQuick(1,2.0 / 3);
+  expected.setQuick(2,3.0 / 3);
+  assertEquals(norm,expected);
+  assertEquals(norm2,expected);
+  norm=vec1.normalize(0);
+  expected.setQuick(0,1.0 / 3);
+  expected.setQuick(1,2.0 / 3);
+  expected.setQuick(2,3.0 / 3);
+  assertEquals(norm,expected);
+  try {
+    vec1.normalize(-1);
+    fail();
+  }
+ catch (  IllegalArgumentException e) {
+  }
+  try {
+    vec2.normalize(-1);
+    fail();
+  }
+ catch (  IllegalArgumentException e) {
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.hadoop.TestDistributedRowMatrix </h4><pre class="type-3 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTransposeJobConfBuilder() throws Exception {
+  Configuration initialConf=createInitialConf();
+  Path baseTmpDirPath=getTestTempDirPath("testpaths");
+  Path inputPath=new Path(baseTmpDirPath,"input");
+  Path outputPath=new Path(baseTmpDirPath,"output");
+  Configuration transposeJobConf=TransposeJob.buildTransposeJob(inputPath,outputPath,10).getConfiguration();
+  Configuration transposeCustomJobConf=TransposeJob.buildTransposeJob(initialConf,inputPath,outputPath,10).getConfiguration();
+  assertNull(transposeJobConf.get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,transposeCustomJobConf.get(TEST_PROPERTY_KEY));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMatrixMultiplactionJobConfBuilder() throws Exception {
+  Configuration initialConf=createInitialConf();
+  Path baseTmpDirPath=getTestTempDirPath("testpaths");
+  Path aPath=new Path(baseTmpDirPath,"a");
+  Path bPath=new Path(baseTmpDirPath,"b");
+  Path outPath=new Path(baseTmpDirPath,"out");
+  Configuration mmJobConf=MatrixMultiplicationJob.createMatrixMultiplyJobConf(aPath,bPath,outPath,10);
+  Configuration mmCustomJobConf=MatrixMultiplicationJob.createMatrixMultiplyJobConf(initialConf,aPath,bPath,outPath,10);
+  assertNull(mmJobConf.get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,mmCustomJobConf.get(TEST_PROPERTY_KEY));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTimesSquaredJobConfBuilders() throws Exception {
+  Configuration initialConf=createInitialConf();
+  Path baseTmpDirPath=getTestTempDirPath("testpaths");
+  Path inputPath=new Path(baseTmpDirPath,"input");
+  Path outputPath=new Path(baseTmpDirPath,"output");
+  Vector v=new RandomAccessSparseVector(50);
+  v.assign(1.0);
+  Job timesSquaredJob1=TimesSquaredJob.createTimesSquaredJob(v,inputPath,outputPath);
+  Job customTimesSquaredJob1=TimesSquaredJob.createTimesSquaredJob(initialConf,v,inputPath,outputPath);
+  assertNull(timesSquaredJob1.getConfiguration().get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,customTimesSquaredJob1.getConfiguration().get(TEST_PROPERTY_KEY));
+  Job timesJob=TimesSquaredJob.createTimesJob(v,50,inputPath,outputPath);
+  Job customTimesJob=TimesSquaredJob.createTimesJob(initialConf,v,50,inputPath,outputPath);
+  assertNull(timesJob.getConfiguration().get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,customTimesJob.getConfiguration().get(TEST_PROPERTY_KEY));
+  Job timesSquaredJob2=TimesSquaredJob.createTimesSquaredJob(v,inputPath,outputPath,TimesSquaredJob.TimesSquaredMapper.class,TimesSquaredJob.VectorSummingReducer.class);
+  Job customTimesSquaredJob2=TimesSquaredJob.createTimesSquaredJob(initialConf,v,inputPath,outputPath,TimesSquaredJob.TimesSquaredMapper.class,TimesSquaredJob.VectorSummingReducer.class);
+  assertNull(timesSquaredJob2.getConfiguration().get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,customTimesSquaredJob2.getConfiguration().get(TEST_PROPERTY_KEY));
+  Job timesSquaredJob3=TimesSquaredJob.createTimesSquaredJob(v,50,inputPath,outputPath,TimesSquaredJob.TimesSquaredMapper.class,TimesSquaredJob.VectorSummingReducer.class);
+  Job customTimesSquaredJob3=TimesSquaredJob.createTimesSquaredJob(initialConf,v,50,inputPath,outputPath,TimesSquaredJob.TimesSquaredMapper.class,TimesSquaredJob.VectorSummingReducer.class);
+  assertNull(timesSquaredJob3.getConfiguration().get(TEST_PROPERTY_KEY));
+  assertEquals(TEST_PROPERTY_VALUE,customTimesSquaredJob3.getConfiguration().get(TEST_PROPERTY_KEY));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.hadoop.similarity.cooccurrence.RowSimilarityJobTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void toyIntegrationMaxSimilaritiesPerRow() throws Exception {
+  File inputFile=getTestTempFile("rows");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  Configuration conf=getConfiguration();
+  Path inputPath=new Path(inputFile.getAbsolutePath());
+  FileSystem fs=FileSystem.get(inputPath.toUri(),conf);
+  MathHelper.writeDistributedRowMatrix(new double[][]{new double[]{1,0,1,1,0,1},new double[]{0,1,1,1,1,1},new double[]{1,1,0,1,0,0}},fs,conf,inputPath);
+  RowSimilarityJob rowSimilarityJob=new RowSimilarityJob();
+  rowSimilarityJob.setConf(conf);
+  rowSimilarityJob.run(new String[]{"--input",inputFile.getAbsolutePath(),"--output",outputDir.getAbsolutePath(),"--numberOfColumns",String.valueOf(6),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--maxSimilaritiesPerRow",String.valueOf(1),"--excludeSelfSimilarity",String.valueOf(true),"--tempDir",tmpDir.getAbsolutePath()});
+  Matrix similarityMatrix=MathHelper.readMatrix(conf,new Path(outputDir.getAbsolutePath(),"part-r-00000"),3,3);
+  assertNotNull(similarityMatrix);
+  assertEquals(3,similarityMatrix.numCols());
+  assertEquals(3,similarityMatrix.numRows());
+  assertEquals(0.0,similarityMatrix.get(0,0),EPSILON);
+  assertEquals(0.5,similarityMatrix.get(0,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(0,2),EPSILON);
+  assertEquals(0.5,similarityMatrix.get(1,0),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(1,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(1,2),EPSILON);
+  assertEquals(0.4,similarityMatrix.get(2,0),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,2),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void toyIntegrationWithThreshold() throws Exception {
+  File inputFile=getTestTempFile("rows");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  Configuration conf=getConfiguration();
+  Path inputPath=new Path(inputFile.getAbsolutePath());
+  FileSystem fs=FileSystem.get(inputPath.toUri(),conf);
+  MathHelper.writeDistributedRowMatrix(new double[][]{new double[]{1,0,1,1,0,1},new double[]{0,1,1,1,1,1},new double[]{1,1,0,1,0,0}},fs,conf,inputPath);
+  RowSimilarityJob rowSimilarityJob=new RowSimilarityJob();
+  rowSimilarityJob.setConf(conf);
+  rowSimilarityJob.run(new String[]{"--input",inputFile.getAbsolutePath(),"--output",outputDir.getAbsolutePath(),"--numberOfColumns",String.valueOf(6),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--excludeSelfSimilarity",String.valueOf(true),"--threshold",String.valueOf(0.5),"--tempDir",tmpDir.getAbsolutePath()});
+  Matrix similarityMatrix=MathHelper.readMatrix(conf,new Path(outputDir.getAbsolutePath(),"part-r-00000"),3,3);
+  assertNotNull(similarityMatrix);
+  assertEquals(3,similarityMatrix.numCols());
+  assertEquals(3,similarityMatrix.numRows());
+  assertEquals(0.0,similarityMatrix.get(0,0),EPSILON);
+  assertEquals(0.5,similarityMatrix.get(0,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(0,2),EPSILON);
+  assertEquals(0.5,similarityMatrix.get(1,0),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(1,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(1,2),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,0),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,2),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * integration test with a tiny data set
+ * <pre>
+ * input matrix:
+ * 1, 0, 1, 1, 0
+ * 0, 0, 1, 1, 0
+ * 0, 0, 0, 0, 1
+ * similarity matrix (via tanimoto):
+ * 1,     0.666, 0
+ * 0.666, 1,     0
+ * 0,     0,     1
+ * </pre>
+ * @throws Exception
+ */
+@Test public void toyIntegration() throws Exception {
+  File inputFile=getTestTempFile("rows");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  Configuration conf=getConfiguration();
+  Path inputPath=new Path(inputFile.getAbsolutePath());
+  FileSystem fs=FileSystem.get(inputPath.toUri(),conf);
+  MathHelper.writeDistributedRowMatrix(new double[][]{new double[]{1,0,1,1,0},new double[]{0,0,1,1,0},new double[]{0,0,0,0,1}},fs,conf,inputPath);
+  RowSimilarityJob rowSimilarityJob=new RowSimilarityJob();
+  rowSimilarityJob.setConf(conf);
+  rowSimilarityJob.run(new String[]{"--input",inputFile.getAbsolutePath(),"--output",outputDir.getAbsolutePath(),"--numberOfColumns",String.valueOf(5),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--tempDir",tmpDir.getAbsolutePath()});
+  OpenIntIntHashMap observationsPerColumn=Vectors.readAsIntMap(new Path(tmpDir.getAbsolutePath(),"observationsPerColumn.bin"),conf);
+  assertEquals(4,observationsPerColumn.size());
+  assertEquals(1,observationsPerColumn.get(0));
+  assertEquals(2,observationsPerColumn.get(2));
+  assertEquals(2,observationsPerColumn.get(3));
+  assertEquals(1,observationsPerColumn.get(4));
+  Matrix similarityMatrix=MathHelper.readMatrix(conf,new Path(outputDir.getAbsolutePath(),"part-r-00000"),3,3);
+  assertNotNull(similarityMatrix);
+  assertEquals(3,similarityMatrix.numCols());
+  assertEquals(3,similarityMatrix.numRows());
+  assertEquals(1.0,similarityMatrix.get(0,0),EPSILON);
+  assertEquals(1.0,similarityMatrix.get(1,1),EPSILON);
+  assertEquals(1.0,similarityMatrix.get(2,2),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,0),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(2,1),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(0,2),EPSILON);
+  assertEquals(0.0,similarityMatrix.get(1,2),EPSILON);
+  assertEquals(0.666666,similarityMatrix.get(0,1),EPSILON);
+  assertEquals(0.666666,similarityMatrix.get(1,0),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.text.MailArchivesClusteringAnalyzerTest </h4><pre class="type-11 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAnalysis() throws Exception {
+  Analyzer analyzer=new MailArchivesClusteringAnalyzer();
+  String text="A test message\n" + "atokenthatistoolongtobeusefulforclustertextanalysis\n" + "Mahout is a scalable, machine-learning LIBRARY\n"+ "we've added some additional stopwords such as html, mailto, regards\t"+ "apache_hadoop provides the foundation for scalability\n"+ "www.nabble.com general-help@incubator.apache.org\n"+ "public void int protected package";
+  Reader reader=new StringReader(text);
+  String[] expectedTokens={"test","mahout","scalabl","machin","learn","librari","weve","ad","stopword","apache_hadoop","provid","foundat","scalabl"};
+  TokenStream tokenStream=analyzer.tokenStream("test",reader);
+  assertNotNull(tokenStream);
+  tokenStream.reset();
+  CharTermAttribute termAtt=tokenStream.addAttribute(CharTermAttribute.class);
+  int e=0;
+  while (tokenStream.incrementToken() && e < expectedTokens.length) {
+    assertEquals(expectedTokens[e++],termAtt.toString());
+  }
+  assertEquals(e,expectedTokens.length);
+  tokenStream.end();
+  tokenStream.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.vectors.arff.ARFFTypeTest </h4><pre class="type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void removeQuotes(){
+  assertNull(ARFFType.removeQuotes(null));
+  assertEquals("",ARFFType.removeQuotes("\"\""));
+  assertEquals("",ARFFType.removeQuotes("''"));
+  assertEquals("",ARFFType.removeQuotes(""));
+  assertEquals("",ARFFType.removeQuotes("  "));
+  assertEquals("single",ARFFType.removeQuotes("'single'"));
+  assertEquals("double",ARFFType.removeQuotes("\"double\""));
+  assertEquals("trim",ARFFType.removeQuotes(" trim "));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.vectors.arff.ARFFVectorIterableTest </h4><pre class="type-3 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultipleNoms() throws Exception {
+  MapBackedARFFModel model=new MapBackedARFFModel();
+  ARFFVectorIterable iterable=getVectors("non-numeric-1.arff",model);
+  int count=0;
+  for (  Vector vector : iterable) {
+    assertTrue("Vector is not dense",vector instanceof RandomAccessSparseVector);
+    count++;
+  }
+  assertEquals(10,count);
+  Map<String,Map<String,Integer>> nominalMap=iterable.getModel().getNominalMap();
+  assertNotNull(nominalMap);
+  assertEquals(1,nominalMap.size());
+  Map<String,Integer> noms=nominalMap.get("bar");
+  assertNotNull("nominals for bar are null",noms);
+  assertEquals(5,noms.size());
+  Map<Integer,ARFFType> integerARFFTypeMap=model.getTypeMap();
+  assertNotNull("Type map null",integerARFFTypeMap);
+  assertEquals(5,integerARFFTypeMap.size());
+  Map<String,Long> words=model.getWords();
+  assertNotNull("words null",words);
+  assertEquals(10,words.size());
+  Map<Integer,DateFormat> integerDateFormatMap=model.getDateMap();
+  assertNotNull("date format null",integerDateFormatMap);
+  assertEquals(1,integerDateFormatMap.size());
+  iterable=getVectors("non-numeric-2.arff",model);
+  count=0;
+  for (  Vector vector : iterable) {
+    assertTrue("Vector is not dense",vector instanceof RandomAccessSparseVector);
+    count++;
+  }
+  nominalMap=model.getNominalMap();
+  assertNotNull(nominalMap);
+  assertEquals(2,nominalMap.size());
+  noms=nominalMap.get("test");
+  assertNotNull("nominals for bar are null",noms);
+  assertEquals(2,noms.size());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNonNumeric() throws Exception {
+  MapBackedARFFModel model=new MapBackedARFFModel();
+  ARFFVectorIterable iterable=getVectors("non-numeric-1.arff",model);
+  int count=0;
+  for (  Vector vector : iterable) {
+    assertTrue("Vector is not dense",vector instanceof RandomAccessSparseVector);
+    count++;
+  }
+  iterable=getVectors("non-numeric-1.arff",model);
+  Iterator<Vector> iter=iterable.iterator();
+  Vector firstVector=iter.next();
+  assertEquals(1.0,firstVector.get(2),0);
+  assertEquals(10,count);
+  Map<String,Map<String,Integer>> nominalMap=iterable.getModel().getNominalMap();
+  assertNotNull(nominalMap);
+  assertEquals(1,nominalMap.size());
+  Map<String,Integer> noms=nominalMap.get("bar");
+  assertNotNull("nominals for bar are null",noms);
+  assertEquals(5,noms.size());
+  Map<Integer,ARFFType> integerARFFTypeMap=model.getTypeMap();
+  assertNotNull("Type map null",integerARFFTypeMap);
+  assertEquals(5,integerARFFTypeMap.size());
+  Map<String,Long> words=model.getWords();
+  assertNotNull("words null",words);
+  assertEquals(10,words.size());
+  Map<Integer,DateFormat> integerDateFormatMap=model.getDateMap();
+  assertNotNull("date format null",integerDateFormatMap);
+  assertEquals(1,integerDateFormatMap.size());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testValues() throws Exception {
+  ARFFVectorIterable iterable=readModelFromResource("sample.arff");
+  assertEquals("Mahout",iterable.getModel().getRelation());
+  Map<String,Integer> bindings=iterable.getModel().getLabelBindings();
+  assertNotNull(bindings);
+  assertEquals(5,bindings.size());
+  Iterator<Vector> iter=iterable.iterator();
+  assertTrue(iter.hasNext());
+  Vector next=iter.next();
+  assertNotNull(next);
+  assertTrue("Wrong instanceof",next instanceof DenseVector);
+  assertEquals(1.0,next.get(0),EPSILON);
+  assertEquals(2.0,next.get(1),EPSILON);
+  assertTrue(iter.hasNext());
+  next=iter.next();
+  assertNotNull(next);
+  assertTrue("Wrong instanceof",next instanceof DenseVector);
+  assertEquals(2.0,next.get(0),EPSILON);
+  assertEquals(3.0,next.get(1),EPSILON);
+  assertTrue(iter.hasNext());
+  next=iter.next();
+  assertNotNull(next);
+  assertTrue("Wrong instanceof",next instanceof RandomAccessSparseVector);
+  assertEquals(5.0,next.get(0),EPSILON);
+  assertEquals(23.0,next.get(1),EPSILON);
+  assertFalse(iter.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNumerics() throws Exception {
+  String arff="@RELATION numerics\n" + "@ATTRIBUTE theNumeric NUMERIC\n" + "@ATTRIBUTE theInteger INTEGER\n"+ "@ATTRIBUTE theReal REAL\n"+ "@DATA\n"+ "1.0,2,3.0";
+  ARFFModel model=new MapBackedARFFModel();
+  ARFFVectorIterable iterable=new ARFFVectorIterable(arff,model);
+  model=iterable.getModel();
+  assertNotNull(model);
+  assertEquals(3,model.getLabelSize());
+  assertEquals(ARFFType.NUMERIC,model.getARFFType(0));
+  assertEquals(ARFFType.INTEGER,model.getARFFType(1));
+  assertEquals(ARFFType.REAL,model.getARFFType(2));
+  Iterator<Vector> it=iterable.iterator();
+  Vector vector=it.next();
+  assertEquals(1.0,vector.get(0),EPSILON);
+  assertEquals(2.0,vector.get(1),EPSILON);
+  assertEquals(3.0,vector.get(2),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-2 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testQuotes() throws Exception {
+  ARFFModel model=new MapBackedARFFModel();
+  ARFFVectorIterable iterable=getVectors("quoted-id.arff",model);
+  model=iterable.getModel();
+  assertNotNull(model);
+  assertEquals("quotes",model.getRelation());
+  assertEquals(4,model.getLabelSize());
+  assertEquals(ARFFType.NUMERIC,model.getARFFType(0));
+  assertEquals(ARFFType.INTEGER,model.getARFFType(1));
+  assertEquals(ARFFType.REAL,model.getARFFType(2));
+  assertEquals(ARFFType.NOMINAL,model.getARFFType(3));
+  Map<String,Integer> labelBindings=model.getLabelBindings();
+  assertTrue(labelBindings.keySet().contains("thenumeric"));
+  assertTrue(labelBindings.keySet().contains("theinteger"));
+  assertTrue(labelBindings.keySet().contains("thereal"));
+  assertTrue(labelBindings.keySet().contains("thenominal"));
+  Map<String,Integer> nominalMap=model.getNominalMap().get("thenominal");
+  assertNotNull(nominalMap);
+  assertEquals(3,nominalMap.size());
+  assertTrue(nominalMap.keySet().contains("double-quote"));
+  assertTrue(nominalMap.keySet().contains("single-quote"));
+  assertTrue(nominalMap.keySet().contains("no-quote"));
+  Iterator<Vector> it=iterable.iterator();
+  Vector vector=it.next();
+  assertEquals(nominalMap.get("no-quote"),vector.get(3),EPSILON);
+  assertEquals(nominalMap.get("single-quote"),it.next().get(3),EPSILON);
+  assertEquals(nominalMap.get("double-quote"),it.next().get(3),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.vectors.io.VectorWriterTest </h4><pre class="type-3 type-2 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTextOutputSize() throws Exception {
+  StringWriter strWriter=new StringWriter();
+  try (VectorWriter writer=new TextualVectorWriter(strWriter)){
+    Collection<Vector> vectors=new ArrayList<>();
+    vectors.add(new DenseVector(new double[]{0.3,1.5,4.5}));
+    vectors.add(new DenseVector(new double[]{1.3,1.5,3.5}));
+    writer.write(vectors);
+  }
+   String buffer=strWriter.toString();
+  assertNotNull(buffer);
+  assertFalse(buffer.isEmpty());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.vectors.lucene.CachedTermInfoTest </h4><pre class="type-3 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  IndexReader reader=DirectoryReader.open(directory);
+  CachedTermInfo cti=new CachedTermInfo(reader,"content",0,100);
+  assertEquals(3,cti.totalTerms("content"));
+  assertNotNull(cti.getTermEntry("content","a"));
+  assertNull(cti.getTermEntry("content","e"));
+  cti=new CachedTermInfo(reader,"content",3,100);
+  assertEquals(2,cti.totalTerms("content"));
+  assertNotNull(cti.getTermEntry("content","a"));
+  assertNull(cti.getTermEntry("content","c"));
+  cti=new CachedTermInfo(reader,"content",0,85);
+  assertEquals(2,cti.totalTerms("content"));
+  assertNotNull(cti.getTermEntry("content","b"));
+  assertNotNull(cti.getTermEntry("content","c"));
+  assertNull(cti.getTermEntry("content","a"));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.vectors.lucene.LuceneIterableTest </h4><pre class="type-2 type-5 type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIterable() throws Exception {
+  IndexReader reader=DirectoryReader.open(directory);
+  Weight weight=new TFIDF();
+  TermInfo termInfo=new CachedTermInfo(reader,"content",1,100);
+  LuceneIterable iterable=new LuceneIterable(reader,"id","content",termInfo,weight);
+  for (  Vector vector : iterable) {
+    assertNotNull(vector);
+    assertTrue("vector is not an instanceof " + NamedVector.class,vector instanceof NamedVector);
+    assertTrue("vector Size: " + vector.size() + " is not greater than: "+ 0,vector.size() > 0);
+    assertTrue(((NamedVector)vector).getName().startsWith("doc_"));
+  }
+  iterable=new LuceneIterable(reader,"id","content",termInfo,weight,3);
+  for (  Vector vector : iterable) {
+    assertNotNull(vector);
+    assertTrue("vector is not an instanceof " + NamedVector.class,vector instanceof NamedVector);
+    assertTrue("vector Size: " + vector.size() + " is not greater than: "+ 0,vector.size() > 0);
+    assertTrue(((NamedVector)vector).getName().startsWith("doc_"));
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

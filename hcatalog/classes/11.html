@@ -1,0 +1,65 @@
+<h3 style="margin:0px">Class: org.apache.hcatalog.hbase.TestSnapshots (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-2 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void TestSnapshotConversion() throws Exception {
+  Initialize();
+  String tableName=newTableName("mytableOne");
+  String databaseName=newTableName("mydatabase");
+  String fullyQualTableName=databaseName + "." + tableName;
+  String db_dir=getTestDir() + "/hbasedb";
+  String dbquery="CREATE DATABASE IF NOT EXISTS " + databaseName + " LOCATION '"+ db_dir+ "'";
+  String tableQuery="CREATE TABLE " + fullyQualTableName + "(key string, value1 string, value2 string) STORED BY "+ "'org.apache.hcatalog.hbase.HBaseHCatStorageHandler'"+ "TBLPROPERTIES ('hbase.columns.mapping'=':key,cf1:q1,cf2:q2')";
+  CommandProcessorResponse cmdResponse=hcatDriver.run(dbquery);
+  assertEquals(0,cmdResponse.getResponseCode());
+  cmdResponse=hcatDriver.run(tableQuery);
+  assertEquals(0,cmdResponse.getResponseCode());
+  Configuration conf=new Configuration(hcatConf);
+  conf.set(HCatConstants.HCAT_KEY_HIVE_CONF,HCatUtil.serialize(getHiveConf().getAllProperties()));
+  Job job=new Job(conf);
+  Properties properties=new Properties();
+  properties.setProperty(HBaseConstants.PROPERTY_TABLE_SNAPSHOT_KEY,"dummysnapshot");
+  HCatInputFormat.setInput(job,databaseName,tableName).setProperties(properties);
+  String modifiedInputInfo=job.getConfiguration().get(HCatConstants.HCAT_KEY_JOB_INFO);
+  InputJobInfo inputInfo=(InputJobInfo)HCatUtil.deserialize(modifiedInputInfo);
+  Map<String,Long> revMap=new HashMap<String,Long>();
+  revMap.put("cf1",3L);
+  revMap.put("cf2",5L);
+  TableSnapshot hbaseSnapshot=new TableSnapshot(fullyQualTableName,revMap,-1);
+  HCatTableSnapshot hcatSnapshot=HBaseRevisionManagerUtil.convertSnapshot(hbaseSnapshot,inputInfo.getTableInfo());
+  assertEquals(hcatSnapshot.getRevision("value1"),3);
+  assertEquals(hcatSnapshot.getRevision("value2"),5);
+  String dropTable="DROP TABLE " + fullyQualTableName;
+  cmdResponse=hcatDriver.run(dropTable);
+  assertEquals(0,cmdResponse.getResponseCode());
+  tableName=newTableName("mytableTwo");
+  fullyQualTableName=databaseName + "." + tableName;
+  tableQuery="CREATE TABLE " + fullyQualTableName + "(key string, value1 string, value2 string) STORED BY "+ "'org.apache.hcatalog.hbase.HBaseHCatStorageHandler'"+ "TBLPROPERTIES ('hbase.columns.mapping'=':key,cf1:q1,cf1:q2')";
+  cmdResponse=hcatDriver.run(tableQuery);
+  assertEquals(0,cmdResponse.getResponseCode());
+  revMap.clear();
+  revMap.put("cf1",3L);
+  hbaseSnapshot=new TableSnapshot(fullyQualTableName,revMap,-1);
+  HCatInputFormat.setInput(job,databaseName,tableName).setProperties(properties);
+  modifiedInputInfo=job.getConfiguration().get(HCatConstants.HCAT_KEY_JOB_INFO);
+  inputInfo=(InputJobInfo)HCatUtil.deserialize(modifiedInputInfo);
+  hcatSnapshot=HBaseRevisionManagerUtil.convertSnapshot(hbaseSnapshot,inputInfo.getTableInfo());
+  assertEquals(hcatSnapshot.getRevision("value1"),3);
+  assertEquals(hcatSnapshot.getRevision("value2"),3);
+  dropTable="DROP TABLE " + fullyQualTableName;
+  cmdResponse=hcatDriver.run(dropTable);
+  assertEquals(0,cmdResponse.getResponseCode());
+  String dropDatabase="DROP DATABASE IF EXISTS " + databaseName + "CASCADE";
+  cmdResponse=hcatDriver.run(dropDatabase);
+  assertEquals(0,cmdResponse.getResponseCode());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

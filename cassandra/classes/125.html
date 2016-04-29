@@ -1,0 +1,341 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.db.ScrubTest (17 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(13)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="19"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('19')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-19"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testFailScrubCompositeIndex() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX2,COL_INDEX,true,false);
+}
+
+</code></pre>
+
+<pre class="type-15 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testScrubOutOfOrder() throws Exception {
+  IPartitioner oldPartitioner=DatabaseDescriptor.getPartitioner();
+  DatabaseDescriptor.setPartitionerUnsafe(new ByteOrderedPartitioner());
+  File tempDir=File.createTempFile("ScrubTest.testScrubOutOfOrder","").getParentFile();
+  File tempDataDir=new File(tempDir,String.join(File.separator,KEYSPACE,CF3));
+  tempDataDir.mkdirs();
+  try {
+    CompactionManager.instance.disableAutoCompaction();
+    Keyspace keyspace=Keyspace.open(KEYSPACE);
+    String columnFamily=CF3;
+    ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(columnFamily);
+    cfs.clearUnsafe();
+    List<String> keys=Arrays.asList("t","a","b","z","c","y","d");
+    String filename=cfs.getSSTablePath(tempDataDir);
+    Descriptor desc=Descriptor.fromFilename(filename);
+    LifecycleTransaction txn=LifecycleTransaction.offline(OperationType.WRITE);
+    try (SSTableTxnWriter writer=new SSTableTxnWriter(txn,createTestWriter(desc,(long)keys.size(),cfs.metadata,txn))){
+      for (      String k : keys) {
+        PartitionUpdate update=UpdateBuilder.create(cfs.metadata,Util.dk(k)).newRow("someName").add("val","someValue").build();
+        writer.append(update.unfilteredIterator());
+      }
+      writer.finish(false);
+    }
+     try {
+      SSTableReader.open(desc,cfs.metadata);
+      fail("SSTR validation should have caught the out-of-order rows");
+    }
+ catch (    IllegalStateException ise) {
+    }
+    Set<Component> components=new HashSet<>();
+    if (new File(desc.filenameFor(Component.COMPRESSION_INFO)).exists())     components.add(Component.COMPRESSION_INFO);
+    components.add(Component.DATA);
+    components.add(Component.PRIMARY_INDEX);
+    components.add(Component.FILTER);
+    components.add(Component.STATS);
+    components.add(Component.SUMMARY);
+    components.add(Component.TOC);
+    SSTableReader sstable=SSTableReader.openNoValidation(desc,components,cfs);
+    if (sstable.last.compareTo(sstable.first) < 0)     sstable.last=sstable.first;
+    try (LifecycleTransaction scrubTxn=LifecycleTransaction.offline(OperationType.SCRUB,sstable);Scrubber scrubber=new Scrubber(cfs,scrubTxn,false,true,true)){
+      scrubber.scrub();
+    }
+     LifecycleTransaction.waitForDeletions();
+    cfs.loadNewSSTables();
+    assertOrderedAll(cfs,7);
+  }
+  finally {
+    FileUtils.deleteRecursive(tempDataDir);
+    DatabaseDescriptor.setPartitionerUnsafe(oldPartitioner);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-13 type-15 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testScrubCorruptedCounterRow() throws IOException, WriteTimeoutException {
+  int numPartitions=1000;
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(COUNTER_CF);
+  cfs.clearUnsafe();
+  fillCounterCF(cfs,numPartitions);
+  assertOrderedAll(cfs,numPartitions);
+  assertEquals(1,cfs.getLiveSSTables().size());
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  overrideWithGarbage(sstable,ByteBufferUtil.bytes("0"),ByteBufferUtil.bytes("1"));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,false,false,true)){
+    scrubber.scrub();
+    fail("Expected a CorruptSSTableException to be thrown");
+  }
+ catch (  IOError err) {
+  }
+  Scrubber.ScrubResult scrubResult;
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,true,false,true)){
+    scrubResult=scrubber.scrubWithResult();
+  }
+   assertNotNull(scrubResult);
+  boolean compression=Boolean.parseBoolean(System.getProperty("cassandra.test.compression","false"));
+  if (compression) {
+    assertEquals(0,scrubResult.emptyRows);
+    assertEquals(numPartitions,scrubResult.badRows + scrubResult.goodRows);
+    assertTrue(scrubResult.goodRows >= scrubResult.badRows * 2);
+  }
+ else {
+    assertEquals(0,scrubResult.emptyRows);
+    assertEquals(1,scrubResult.badRows);
+    assertEquals(numPartitions - 1,scrubResult.goodRows);
+  }
+  assertEquals(1,cfs.getLiveSSTables().size());
+  assertOrderedAll(cfs,scrubResult.goodRows);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubMultiRow() throws ExecutionException, InterruptedException {
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  cfs.clearUnsafe();
+  fillCF(cfs,10);
+  assertOrderedAll(cfs,10);
+  CompactionManager.instance.performScrub(cfs,false,true);
+  assertOrderedAll(cfs,10);
+}
+
+</code></pre>
+
+<pre class="type-7 type-15 type-4 type-19 type-2 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testScrubCorruptedRowInSmallFile() throws IOException, WriteTimeoutException {
+  assumeTrue(!Boolean.parseBoolean(System.getProperty("cassandra.test.compression","false")));
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(COUNTER_CF);
+  cfs.clearUnsafe();
+  fillCounterCF(cfs,2);
+  assertOrderedAll(cfs,2);
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  overrideWithGarbage(sstable,ByteBufferUtil.bytes("0"),ByteBufferUtil.bytes("1"));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,false,false,true)){
+    scrubber.scrub();
+    fail("Expected a CorruptSSTableException to be thrown");
+  }
+ catch (  IOError err) {
+  }
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(Arrays.asList(sstable),OperationType.SCRUB);Scrubber scrubber=new Scrubber(cfs,txn,true,false,true)){
+    scrubber.scrub();
+    scrubber.close();
+  }
+   assertEquals(1,cfs.getLiveSSTables().size());
+  assertOrderedAll(cfs,1);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testFailScrubKeysIndex() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX1,COL_INDEX,false,false);
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * For CASSANDRA-6892 too, check that for a compact table with one cluster column, we can insert whatever
+ * we want as value for the clustering column, including something that would conflict with a CQL column definition.
+ */
+@Test public void testValidationCompactStorage() throws Exception {
+  QueryProcessor.process(String.format("CREATE TABLE \"%s\".test_compact_dynamic_columns (a int, b text, c text, PRIMARY KEY (a, b)) WITH COMPACT STORAGE",KEYSPACE),ConsistencyLevel.ONE);
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore("test_compact_dynamic_columns");
+  QueryProcessor.executeInternal(String.format("INSERT INTO \"%s\".test_compact_dynamic_columns (a, b, c) VALUES (0, 'a', 'foo')",KEYSPACE));
+  QueryProcessor.executeInternal(String.format("INSERT INTO \"%s\".test_compact_dynamic_columns (a, b, c) VALUES (0, 'b', 'bar')",KEYSPACE));
+  QueryProcessor.executeInternal(String.format("INSERT INTO \"%s\".test_compact_dynamic_columns (a, b, c) VALUES (0, 'c', 'boo')",KEYSPACE));
+  cfs.forceBlockingFlush();
+  CompactionManager.instance.performScrub(cfs,true,true);
+  UntypedResultSet rs=QueryProcessor.executeInternal(String.format("SELECT * FROM \"%s\".test_compact_dynamic_columns",KEYSPACE));
+  assertEquals(3,rs.size());
+  Iterator<UntypedResultSet.Row> iter=rs.iterator();
+  assertEquals("foo",iter.next().getString("c"));
+  assertEquals("bar",iter.next().getString("c"));
+  assertEquals("boo",iter.next().getString("c"));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubTwice() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX1,COL_INDEX,false,true,true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubNoIndex() throws IOException, ExecutionException, InterruptedException, ConfigurationException {
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  cfs.clearUnsafe();
+  fillCF(cfs,10);
+  assertOrderedAll(cfs,10);
+  for (  SSTableReader sstable : cfs.getLiveSSTables())   new File(sstable.descriptor.filenameFor(Component.PRIMARY_INDEX)).delete();
+  CompactionManager.instance.performScrub(cfs,false,true,true);
+  assertOrderedAll(cfs,10);
+}
+
+</code></pre>
+
+<pre class="type-19 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubOneRowWithCorruptedKey() throws IOException, ExecutionException, InterruptedException, ConfigurationException {
+  assumeTrue(!Boolean.parseBoolean(System.getProperty("cassandra.test.compression","false")));
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  cfs.clearUnsafe();
+  fillCF(cfs,4);
+  assertOrderedAll(cfs,4);
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  overrideWithGarbage(sstable,0,2);
+  CompactionManager.instance.performScrub(cfs,false,true);
+  assertOrderedAll(cfs,4);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubCompositeIndex_preserveOrder() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX2_BYTEORDERED,COL_INDEX,true,true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubOneRow() throws ExecutionException, InterruptedException {
+  CompactionManager.instance.disableAutoCompaction();
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(CF);
+  cfs.clearUnsafe();
+  fillCF(cfs,1);
+  assertOrderedAll(cfs,1);
+  CompactionManager.instance.performScrub(cfs,false,true);
+  assertOrderedAll(cfs,1);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubCorruptedCounterRowNoEarlyOpen() throws IOException, WriteTimeoutException {
+  boolean oldDisabledVal=SSTableRewriter.disableEarlyOpeningForTests;
+  try {
+    SSTableRewriter.disableEarlyOpeningForTests=true;
+    testScrubCorruptedCounterRow();
+  }
+  finally {
+    SSTableRewriter.disableEarlyOpeningForTests=oldDisabledVal;
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubCompositeIndex() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX2,COL_INDEX,true,true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubColumnValidation() throws InterruptedException, RequestExecutionException, ExecutionException {
+  QueryProcessor.process(String.format("CREATE TABLE \"%s\".test_compact_static_columns (a bigint, b timeuuid, c boolean static, d text, PRIMARY KEY (a, b))",KEYSPACE),ConsistencyLevel.ONE);
+  Keyspace keyspace=Keyspace.open(KEYSPACE);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore("test_compact_static_columns");
+  QueryProcessor.executeInternal(String.format("INSERT INTO \"%s\".test_compact_static_columns (a, b, c, d) VALUES (123, c3db07e8-b602-11e3-bc6b-e0b9a54a6d93, true, 'foobar')",KEYSPACE));
+  cfs.forceBlockingFlush();
+  CompactionManager.instance.performScrub(cfs,false,true);
+  QueryProcessor.process("CREATE TABLE \"Keyspace1\".test_scrub_validation (a text primary key, b int)",ConsistencyLevel.ONE);
+  ColumnFamilyStore cfs2=keyspace.getColumnFamilyStore("test_scrub_validation");
+  new Mutation(UpdateBuilder.create(cfs2.metadata,"key").newRow().add("b",LongType.instance.decompose(1L)).build()).apply();
+  cfs2.forceBlockingFlush();
+  CompactionManager.instance.performScrub(cfs2,false,false);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubKeysIndex() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX1,COL_INDEX,false,true);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testScrubKeysIndex_preserveOrder() throws IOException, ExecutionException, InterruptedException {
+  testScrubIndex(CF_INDEX1_BYTEORDERED,COL_INDEX,false,true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,84 @@
+<h3 style="margin:0px">Class: org.apache.flume.source.TestPollableSourceRunner (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  sourceRunner=new PollableSourceRunner();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testLifecycle() throws InterruptedException {
+  final Channel channel=new MemoryChannel();
+  final CountDownLatch latch=new CountDownLatch(50);
+  Configurables.configure(channel,new Context());
+  final ChannelSelector cs=new ReplicatingChannelSelector();
+  cs.setChannels(Lists.newArrayList(channel));
+  PollableSource source=new PollableSource(){
+    private String name;
+    private ChannelProcessor cp=new ChannelProcessor(cs);
+    @Override public Status process() throws EventDeliveryException {
+      Transaction transaction=channel.getTransaction();
+      try {
+        transaction.begin();
+        Event event=EventBuilder.withBody(String.valueOf("Event " + latch.getCount()).getBytes());
+        latch.countDown();
+        if (latch.getCount() % 20 == 0) {
+          throw new EventDeliveryException("I don't like event:" + event);
+        }
+        channel.put(event);
+        transaction.commit();
+        return Status.READY;
+      }
+ catch (      EventDeliveryException e) {
+        logger.error("Unable to deliver event. Exception follows.",e);
+        transaction.rollback();
+        return Status.BACKOFF;
+      }
+ finally {
+        transaction.close();
+      }
+    }
+    @Override public long getBackOffSleepIncrement(){
+      return PollableSourceConstants.DEFAULT_BACKOFF_SLEEP_INCREMENT;
+    }
+    @Override public long getMaxBackOffSleepInterval(){
+      return PollableSourceConstants.DEFAULT_MAX_BACKOFF_SLEEP;
+    }
+    @Override public void start(){
+    }
+    @Override public void stop(){
+    }
+    @Override public LifecycleState getLifecycleState(){
+      return null;
+    }
+    @Override public void setName(    String name){
+      this.name=name;
+    }
+    @Override public String getName(){
+      return name;
+    }
+    @Override public void setChannelProcessor(    ChannelProcessor channelProcessor){
+      cp=channelProcessor;
+    }
+    @Override public ChannelProcessor getChannelProcessor(){
+      return cp;
+    }
+  }
+;
+  sourceRunner.setSource(source);
+  sourceRunner.start();
+  latch.await();
+  sourceRunner.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

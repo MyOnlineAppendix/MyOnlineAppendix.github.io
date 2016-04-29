@@ -1,0 +1,63 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspIterativeVerifier</h3><kbd>Verifies assertions in iterations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.directory.studio.test.integration.core.DirectoryApiConnectionWrapperTest </h4><pre class="type-11 type-9 type-4 type-5 type-1 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * DIRSTUDIO-1039
+ */
+@Test public void testConcurrentUseAndCloseOfConnection() throws Exception {
+  final StudioProgressMonitor monitor=getProgressMonitor();
+  final ConnectionParameter connectionParameter=new ConnectionParameter(null,LOCALHOST,ldapServer.getPort(),EncryptionMethod.NONE,NetworkProvider.APACHE_DIRECTORY_LDAP_API,AuthenticationMethod.SIMPLE,"uid=admin,ou=system","secret",null,true,null);
+  final Connection connection=new Connection(connectionParameter);
+  final BrowserConnection browserConnection=new BrowserConnection(connection);
+  ExecutorService pool=Executors.newFixedThreadPool(2);
+  final AtomicLong closeCounter=new AtomicLong();
+  final AtomicLong useCounter=new AtomicLong();
+  Callable<Void> closeCallable=new Callable<Void>(){
+    @Override public Void call() throws Exception {
+      ConnectionEventRegistry.suspendEventFiringInCurrentThread();
+      while (true) {
+        connection.getConnectionWrapper().unbind();
+        connection.getConnectionWrapper().disconnect();
+        closeCounter.incrementAndGet();
+        Thread.sleep(10);
+      }
+    }
+  }
+;
+  Future<Void> closeFuture=pool.submit(closeCallable);
+  Callable<Void> useCallable=new Callable<Void>(){
+    @Override public Void call() throws Exception {
+      for (int i=0; i < 10; i++) {
+        browserConnection.getRootDSE().setAttributesInitialized(false);
+        assertFalse(browserConnection.getRootDSE().isAttributesInitialized());
+        InitializeRootDSERunnable.loadRootDSE(browserConnection,monitor);
+        assertTrue(browserConnection.getRootDSE().isAttributesInitialized());
+        useCounter.incrementAndGet();
+      }
+      return null;
+    }
+  }
+;
+  Future<Void> useFuture=pool.submit(useCallable);
+  useFuture.get(60,TimeUnit.SECONDS);
+  assertEquals(10,useCounter.get());
+  assertTrue(closeCounter.get() > 10);
+  pool.shutdownNow();
+  pool.awaitTermination(60,TimeUnit.SECONDS);
+  assertTrue(useFuture.isDone());
+  assertTrue(closeFuture.isDone());
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

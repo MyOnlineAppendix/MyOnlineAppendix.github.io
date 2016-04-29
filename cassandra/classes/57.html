@@ -1,0 +1,137 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.cql3.validation.entities.TupleTypeTest (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTupleWithUnsetValues() throws Throwable {
+  createTable("CREATE TABLE %s (k int PRIMARY KEY, t tuple<int, text, double>)");
+  assertInvalidMessage("Invalid unset value for tuple field number 1","INSERT INTO %s (k, t) VALUES(0, (3, ?, 2.1))",unset());
+  createIndex("CREATE INDEX tuple_index ON %s (t)");
+  assertInvalidMessage("Invalid unset value for tuple field number 0","SELECT * FROM %s WHERE k = ? and t = (?,?,?)",unset(),unset(),unset(),unset());
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTupleFromString() throws Throwable {
+  createTable("CREATE TABLE %s (k int, c int, t frozen<tuple<int, text>>, PRIMARY KEY (k, c))");
+  execute("INSERT INTO %s (k, c, t) VALUES (0, 0, '0:0')");
+  execute("INSERT INTO %s (k, c, t) VALUES (0, 1, '0:1')");
+  execute("INSERT INTO %s (k, c, t) VALUES (0, 2, '1')");
+  execute("INSERT INTO %s (k, c, t) VALUES (0, 3, '1:1\\:1')");
+  execute("INSERT INTO %s (k, c, t) VALUES (0, 4, '@:1')");
+  assertAllRows(row(0,0,tuple(0,"0")),row(0,1,tuple(0,"1")),row(0,2,tuple(1)),row(0,3,tuple(1,"1:1")),row(0,4,tuple(null,"1")));
+  assertInvalidMessage("Invalid tuple literal: too many elements. Type frozen<tuple<int, text>> expects 2 but got 3","INSERT INTO %s(k, t) VALUES (1,'1:2:3')");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testInvalidQueries() throws Throwable {
+  createTable("CREATE TABLE %s (k int PRIMARY KEY, t frozen<tuple<int, text, double>>)");
+  assertInvalidSyntax("INSERT INTO %s (k, t) VALUES (0, ())");
+  assertInvalidMessage("Invalid tuple literal for t: too many elements. Type frozen<tuple<int, text, double>> expects 3 but got 4","INSERT INTO %s (k, t) VALUES (0, (2, 'foo', 3.1, 'bar'))");
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTupleInPartitionKey() throws Throwable {
+  createTable("CREATE TABLE %s (t frozen<tuple<int, text>> PRIMARY KEY)");
+  execute("INSERT INTO %s (t) VALUES (?)",tuple(3,"foo"));
+  assertAllRows(row(tuple(3,"foo")));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTupleInClusteringKey() throws Throwable {
+  createTable("CREATE TABLE %s (k int, t frozen<tuple<int, text>>, PRIMARY KEY (k, t))");
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(5,"bar"));
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(3,"foo"));
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(6,"bar"));
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(5,"foo"));
+  assertAllRows(row(0,tuple(3,"foo")),row(0,tuple(5,"bar")),row(0,tuple(5,"foo")),row(0,tuple(6,"bar")));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test for CASSANDRA-8062,
+ * migrated from cql_tests.py:TestCQL.test_v2_protocol_IN_with_tuples()
+ */
+@Test public void testSelectInStatementWithTuples() throws Throwable {
+  createTable("CREATE TABLE %s (k int, c1 int, c2 text, PRIMARY KEY (k, c1, c2))");
+  execute("INSERT INTO %s (k, c1, c2) VALUES (0, 0, 'a')");
+  execute("INSERT INTO %s (k, c1, c2) VALUES (0, 0, 'b')");
+  execute("INSERT INTO %s (k, c1, c2) VALUES (0, 0, 'c')");
+  assertRows(execute("SELECT * FROM %s WHERE k=0 AND (c1, c2) IN ((0, 'b'), (0, 'c'))"),row(0,0,"b"),row(0,0,"c"));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testNestedTuple() throws Throwable {
+  createTable("CREATE TABLE %s (k int PRIMARY KEY, t frozen<tuple<int, tuple<text, double>>>)");
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(3,tuple("foo",3.4)));
+  execute("INSERT INTO %s (k, t) VALUES (?, ?)",1,tuple(8,tuple("bar",0.2)));
+  assertAllRows(row(1,tuple(8,tuple("bar",0.2))),row(0,tuple(3,tuple("foo",3.4))));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testTuplePutAndGet() throws Throwable {
+  String[] valueTypes={"frozen<tuple<int, text, double>>","tuple<int, text, double>"};
+  for (  String valueType : valueTypes) {
+    createTable("CREATE TABLE %s (k int PRIMARY KEY, t " + valueType + ")");
+    execute("INSERT INTO %s (k, t) VALUES (?, ?)",0,tuple(3,"foo",3.4));
+    execute("INSERT INTO %s (k, t) VALUES (?, ?)",1,tuple(8,"bar",0.2));
+    assertAllRows(row(1,tuple(8,"bar",0.2)),row(0,tuple(3,"foo",3.4)));
+    execute("INSERT INTO %s (k, t) VALUES (?, ?)",2,tuple(5,null,3.4));
+    assertRows(execute("SELECT * FROM %s WHERE k=?",2),row(2,tuple(5,null,3.4)));
+    execute("INSERT INTO %s (k, t) VALUES (?, ?)",3,tuple(5,"bar"));
+    assertRows(execute("SELECT * FROM %s WHERE k=?",3),row(3,tuple(5,"bar")));
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the syntax introduced by #4851,
+ * migrated from cql_tests.py:TestCQL.tuple_notation_test()
+ */
+@Test public void testTupleNotation() throws Throwable {
+  createTable("CREATE TABLE %s (k int, v1 int, v2 int, v3 int, PRIMARY KEY (k, v1, v2, v3))");
+  for (int i=0; i < 2; i++)   for (int j=0; j < 2; j++)   for (int k=0; k < 2; k++)   execute("INSERT INTO %s (k, v1, v2, v3) VALUES (0, ?, ?, ?)",i,j,k);
+  assertRows(execute("SELECT v1, v2, v3 FROM %s WHERE k = 0"),row(0,0,0),row(0,0,1),row(0,1,0),row(0,1,1),row(1,0,0),row(1,0,1),row(1,1,0),row(1,1,1));
+  assertRows(execute("SELECT v1, v2, v3 FROM %s WHERE k = 0 AND (v1, v2, v3) >= (1, 0, 1)"),row(1,0,1),row(1,1,0),row(1,1,1));
+  assertRows(execute("SELECT v1, v2, v3 FROM %s WHERE k = 0 AND (v1, v2) >= (1, 1)"),row(1,1,0),row(1,1,1));
+  assertRows(execute("SELECT v1, v2, v3 FROM %s WHERE k = 0 AND (v1, v2) > (0, 1) AND (v1, v2, v3) <= (1, 1, 0)"),row(1,0,0),row(1,0,1),row(1,1,0));
+  assertInvalid("SELECT v1, v2, v3 FROM %s WHERE k = 0 AND (v1, v3) > (1, 0)");
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

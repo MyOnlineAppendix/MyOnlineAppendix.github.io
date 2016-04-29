@@ -1,0 +1,105 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.nodemanager.containermanager.TestContainerManagerRecovery (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testApplicationRecovery() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  conf.setBoolean(YarnConfiguration.NM_RECOVERY_ENABLED,true);
+  conf.set(YarnConfiguration.NM_ADDRESS,"localhost:1234");
+  conf.setBoolean(YarnConfiguration.YARN_ACL_ENABLE,true);
+  conf.set(YarnConfiguration.YARN_ADMIN_ACL,"yarn_admin_user");
+  NMStateStoreService stateStore=new NMMemoryStateStoreService();
+  stateStore.init(conf);
+  stateStore.start();
+  Context context=new NMContext(new NMContainerTokenSecretManager(conf),new NMTokenSecretManagerInNM(),null,new ApplicationACLsManager(conf),stateStore);
+  ContainerManagerImpl cm=createContainerManager(context);
+  cm.init(conf);
+  cm.start();
+  MasterKey masterKey=new MasterKeyPBImpl();
+  masterKey.setKeyId(123);
+  masterKey.setBytes(ByteBuffer.wrap(new byte[]{new Integer(123).byteValue()}));
+  context.getContainerTokenSecretManager().setMasterKey(masterKey);
+  context.getNMTokenSecretManager().setMasterKey(masterKey);
+  String appUser="app_user1";
+  String modUser="modify_user1";
+  String viewUser="view_user1";
+  String enemyUser="enemy_user";
+  ApplicationId appId=ApplicationId.newInstance(0,1);
+  ApplicationAttemptId attemptId=ApplicationAttemptId.newInstance(appId,1);
+  ContainerId cid=ContainerId.newInstance(attemptId,1);
+  Map<String,LocalResource> localResources=Collections.emptyMap();
+  Map<String,String> containerEnv=Collections.emptyMap();
+  List<String> containerCmds=Collections.emptyList();
+  Map<String,ByteBuffer> serviceData=Collections.emptyMap();
+  Credentials containerCreds=new Credentials();
+  DataOutputBuffer dob=new DataOutputBuffer();
+  containerCreds.writeTokenStorageToStream(dob);
+  ByteBuffer containerTokens=ByteBuffer.wrap(dob.getData(),0,dob.getLength());
+  Map<ApplicationAccessType,String> acls=new HashMap<ApplicationAccessType,String>();
+  acls.put(ApplicationAccessType.MODIFY_APP,modUser);
+  acls.put(ApplicationAccessType.VIEW_APP,viewUser);
+  ContainerLaunchContext clc=ContainerLaunchContext.newInstance(localResources,containerEnv,containerCmds,serviceData,containerTokens,acls);
+  StartContainersResponse startResponse=startContainer(context,cm,cid,clc);
+  assertTrue(startResponse.getFailedRequests().isEmpty());
+  assertEquals(1,context.getApplications().size());
+  Application app=context.getApplications().get(appId);
+  assertNotNull(app);
+  waitForAppState(app,ApplicationState.INITING);
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(modUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(enemyUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  cm.stop();
+  context=new NMContext(new NMContainerTokenSecretManager(conf),new NMTokenSecretManagerInNM(),null,new ApplicationACLsManager(conf),stateStore);
+  cm=createContainerManager(context);
+  cm.init(conf);
+  cm.start();
+  assertEquals(1,context.getApplications().size());
+  app=context.getApplications().get(appId);
+  assertNotNull(app);
+  waitForAppState(app,ApplicationState.INITING);
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(modUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(enemyUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  List<ApplicationId> finishedApps=new ArrayList<ApplicationId>();
+  finishedApps.add(appId);
+  cm.handle(new CMgrCompletedAppsEvent(finishedApps,CMgrCompletedAppsEvent.Reason.BY_RESOURCEMANAGER));
+  waitForAppState(app,ApplicationState.APPLICATION_RESOURCES_CLEANINGUP);
+  cm.stop();
+  context=new NMContext(new NMContainerTokenSecretManager(conf),new NMTokenSecretManagerInNM(),null,new ApplicationACLsManager(conf),stateStore);
+  cm=createContainerManager(context);
+  cm.init(conf);
+  cm.start();
+  assertEquals(1,context.getApplications().size());
+  app=context.getApplications().get(appId);
+  assertNotNull(app);
+  waitForAppState(app,ApplicationState.APPLICATION_RESOURCES_CLEANINGUP);
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(modUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.MODIFY_APP,appUser,appId));
+  assertTrue(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(viewUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  assertFalse(context.getApplicationACLsManager().checkAccess(UserGroupInformation.createRemoteUser(enemyUser),ApplicationAccessType.VIEW_APP,appUser,appId));
+  app.handle(new ApplicationEvent(app.getAppId(),ApplicationEventType.APPLICATION_RESOURCES_CLEANEDUP));
+  assertEquals(app.getApplicationState(),ApplicationState.FINISHED);
+  app.handle(new ApplicationEvent(app.getAppId(),ApplicationEventType.APPLICATION_LOG_HANDLING_FINISHED));
+  cm.stop();
+  context=new NMContext(new NMContainerTokenSecretManager(conf),new NMTokenSecretManagerInNM(),null,new ApplicationACLsManager(conf),stateStore);
+  cm=createContainerManager(context);
+  cm.init(conf);
+  cm.start();
+  assertTrue(context.getApplications().isEmpty());
+  cm.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

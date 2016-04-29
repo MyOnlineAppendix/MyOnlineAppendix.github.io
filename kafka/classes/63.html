@@ -1,0 +1,112 @@
+<h3 style="margin:0px">Class: org.apache.kafka.connect.runtime.WorkerSinkTaskTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testErrorInRebalancePartitionRevocation() throws Exception {
+  RuntimeException exception=new RuntimeException("Revocation error");
+  expectInitializeTask();
+  expectPollInitialAssignment();
+  expectRebalanceRevocationError(exception);
+  PowerMock.replayAll();
+  workerTask.initialize(TASK_PROPS);
+  workerTask.initializeAndStart();
+  workerTask.poll(Long.MAX_VALUE);
+  try {
+    workerTask.poll(Long.MAX_VALUE);
+    fail("Poll should have raised the rebalance exception");
+  }
+ catch (  RuntimeException e) {
+    assertEquals(exception,e);
+  }
+  PowerMock.verifyAll();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testPollRedelivery() throws Exception {
+  expectInitializeTask();
+  expectPollInitialAssignment();
+  expectConsumerPoll(1);
+  expectConvertMessages(1);
+  Capture<Collection<SinkRecord>> records=EasyMock.newCapture(CaptureType.ALL);
+  sinkTask.put(EasyMock.capture(records));
+  EasyMock.expectLastCall().andThrow(new RetriableException("retry"));
+  EasyMock.expect(consumer.assignment()).andReturn(new HashSet<>(Arrays.asList(TOPIC_PARTITION,TOPIC_PARTITION2)));
+  consumer.pause(TOPIC_PARTITION);
+  PowerMock.expectLastCall();
+  consumer.pause(TOPIC_PARTITION2);
+  PowerMock.expectLastCall();
+  expectConsumerPoll(0);
+  sinkTask.put(EasyMock.capture(records));
+  EasyMock.expectLastCall();
+  EasyMock.expect(consumer.assignment()).andReturn(new HashSet<>(Arrays.asList(TOPIC_PARTITION,TOPIC_PARTITION2)));
+  consumer.resume(TOPIC_PARTITION);
+  PowerMock.expectLastCall();
+  consumer.resume(TOPIC_PARTITION2);
+  PowerMock.expectLastCall();
+  PowerMock.replayAll();
+  workerTask.initialize(TASK_PROPS);
+  workerTask.initializeAndStart();
+  workerTask.poll(Long.MAX_VALUE);
+  workerTask.poll(Long.MAX_VALUE);
+  workerTask.poll(Long.MAX_VALUE);
+  PowerMock.verifyAll();
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  time=new MockTime();
+  Map<String,String> workerProps=new HashMap<>();
+  workerProps.put("key.converter","org.apache.kafka.connect.json.JsonConverter");
+  workerProps.put("value.converter","org.apache.kafka.connect.json.JsonConverter");
+  workerProps.put("internal.key.converter","org.apache.kafka.connect.json.JsonConverter");
+  workerProps.put("internal.value.converter","org.apache.kafka.connect.json.JsonConverter");
+  workerProps.put("internal.key.converter.schemas.enable","false");
+  workerProps.put("internal.value.converter.schemas.enable","false");
+  workerConfig=new StandaloneConfig(workerProps);
+  workerTask=PowerMock.createPartialMock(WorkerSinkTask.class,new String[]{"createConsumer"},taskId,sinkTask,workerConfig,keyConverter,valueConverter,time);
+  recordsReturned=0;
+}
+
+</code></pre>
+
+<pre class="type-10 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testErrorInRebalancePartitionAssignment() throws Exception {
+  RuntimeException exception=new RuntimeException("Assignment error");
+  expectInitializeTask();
+  expectPollInitialAssignment();
+  expectRebalanceAssignmentError(exception);
+  PowerMock.replayAll();
+  workerTask.initialize(TASK_PROPS);
+  workerTask.initializeAndStart();
+  workerTask.poll(Long.MAX_VALUE);
+  try {
+    workerTask.poll(Long.MAX_VALUE);
+    fail("Poll should have raised the rebalance exception");
+  }
+ catch (  RuntimeException e) {
+    assertEquals(exception,e);
+  }
+  PowerMock.verifyAll();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,125 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestClientReportBadBlock (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void startUpCluster() throws IOException {
+  if (System.getProperty("test.build.data") == null) {
+    System.setProperty("test.build.data","build/test/data");
+  }
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_SCAN_PERIOD_HOURS_KEY,-1);
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+  cluster.waitActive();
+  dfs=(DistributedFileSystem)cluster.getFileSystem();
+  buffersize=conf.getInt("io.file.buffer.size",4096);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void shutDownCluster() throws IOException {
+  dfs.close();
+  cluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOneBlockReplica() throws Exception {
+  final short repl=1;
+  final int corruptBlockNumber=1;
+  for (int i=0; i < 2; i++) {
+    String fileName="/tmp/testClientReportBadBlock/OneBlockReplica" + i;
+    Path filePath=new Path(fileName);
+    createAFileWithCorruptedBlockReplicas(filePath,repl,corruptBlockNumber);
+    if (i == 0) {
+      dfsClientReadFile(filePath);
+    }
+ else {
+      dfsClientReadFileFromPosition(filePath);
+    }
+    int expectedReplicaCount=1;
+    verifyCorruptedBlockCount(filePath,expectedReplicaCount);
+    verifyFirstBlockCorrupted(filePath,true);
+    verifyFsckBlockCorrupted();
+    testFsckListCorruptFilesBlocks(filePath,-1);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * This test creates a file with three block replicas. Corrupt two of the
+ * replicas. Make dfs client read the file. The corrupted blocks with their
+ * owner data nodes should be reported to the name node. 
+ */
+@Test public void testCorruptTwoOutOfThreeReplicas() throws Exception {
+  final short repl=3;
+  final int corruptBlocReplicas=2;
+  for (int i=0; i < 2; i++) {
+    String fileName="/tmp/testClientReportBadBlock/CorruptTwoOutOfThreeReplicas" + i;
+    Path filePath=new Path(fileName);
+    createAFileWithCorruptedBlockReplicas(filePath,repl,corruptBlocReplicas);
+    int replicaCount=0;
+    while (replicaCount != repl - corruptBlocReplicas) {
+      if (i == 0) {
+        dfsClientReadFile(filePath);
+      }
+ else {
+        dfsClientReadFileFromPosition(filePath);
+      }
+      LocatedBlocks blocks=dfs.dfs.getNamenode().getBlockLocations(filePath.toString(),0,Long.MAX_VALUE);
+      replicaCount=blocks.get(0).getLocations().length;
+    }
+    verifyFirstBlockCorrupted(filePath,false);
+    int expectedReplicaCount=repl - corruptBlocReplicas;
+    verifyCorruptedBlockCount(filePath,expectedReplicaCount);
+    verifyFsckHealth("Target Replicas is 3 but found 1 replica");
+    testFsckListCorruptFilesBlocks(filePath,0);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * This test creates a file with three block replicas. Corrupt all of the
+ * replicas. Make dfs client read the file. No block corruption should be
+ * reported.
+ */
+@Test public void testCorruptAllOfThreeReplicas() throws Exception {
+  final short repl=3;
+  final int corruptBlockNumber=3;
+  for (int i=0; i < 2; i++) {
+    String fileName="/tmp/testClientReportBadBlock/testCorruptAllReplicas" + i;
+    Path filePath=new Path(fileName);
+    createAFileWithCorruptedBlockReplicas(filePath,repl,corruptBlockNumber);
+    if (i == 0) {
+      dfsClientReadFile(filePath);
+    }
+ else {
+      dfsClientReadFileFromPosition(filePath);
+    }
+    int expectedReplicasReturned=repl;
+    verifyCorruptedBlockCount(filePath,expectedReplicasReturned);
+    verifyFirstBlockCorrupted(filePath,false);
+    verifyFsckHealth("");
+    testFsckListCorruptFilesBlocks(filePath,0);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

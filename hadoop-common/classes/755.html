@@ -1,0 +1,198 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestLocalDistributedCacheManager (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDuplicateDownload() throws Exception {
+  JobConf conf=new JobConf();
+  conf.setClass("fs.mock.impl",MockFileSystem.class,FileSystem.class);
+  URI mockBase=new URI("mock://test-nn1/");
+  when(mockfs.getUri()).thenReturn(mockBase);
+  Path working=new Path("mock://test-nn1/user/me/");
+  when(mockfs.getWorkingDirectory()).thenReturn(working);
+  when(mockfs.resolvePath(any(Path.class))).thenAnswer(new Answer<Path>(){
+    @Override public Path answer(    InvocationOnMock args) throws Throwable {
+      return (Path)args.getArguments()[0];
+    }
+  }
+);
+  final URI file=new URI("mock://test-nn1/user/me/file.txt#link");
+  final Path filePath=new Path(file);
+  File link=new File("link");
+  when(mockfs.getFileStatus(any(Path.class))).thenAnswer(new Answer<FileStatus>(){
+    @Override public FileStatus answer(    InvocationOnMock args) throws Throwable {
+      Path p=(Path)args.getArguments()[0];
+      if ("file.txt".equals(p.getName())) {
+        return new FileStatus(201,false,1,500,101,101,FsPermission.getDefault(),"me","me",filePath);
+      }
+ else {
+        throw new FileNotFoundException(p + " not supported by mocking");
+      }
+    }
+  }
+);
+  when(mockfs.getConf()).thenReturn(conf);
+  final FSDataInputStream in=new FSDataInputStream(new MockInputStream("This is a test file\n".getBytes()));
+  when(mockfs.open(any(Path.class),anyInt())).thenAnswer(new Answer<FSDataInputStream>(){
+    @Override public FSDataInputStream answer(    InvocationOnMock args) throws Throwable {
+      Path src=(Path)args.getArguments()[0];
+      if ("file.txt".equals(src.getName())) {
+        return in;
+      }
+ else {
+        throw new FileNotFoundException(src + " not supported by mocking");
+      }
+    }
+  }
+);
+  DistributedCache.addCacheFile(file,conf);
+  DistributedCache.addCacheFile(file,conf);
+  conf.set(MRJobConfig.CACHE_FILE_TIMESTAMPS,"101,101");
+  conf.set(MRJobConfig.CACHE_FILES_SIZES,"201,201");
+  conf.set(MRJobConfig.CACHE_FILE_VISIBILITIES,"false,false");
+  conf.set(MRConfig.LOCAL_DIR,localDir.getAbsolutePath());
+  LocalDistributedCacheManager manager=new LocalDistributedCacheManager();
+  try {
+    manager.setup(conf);
+    assertTrue(link.exists());
+  }
+  finally {
+    manager.close();
+  }
+  assertFalse(link.exists());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testEmptyDownload() throws Exception {
+  JobConf conf=new JobConf();
+  conf.setClass("fs.mock.impl",MockFileSystem.class,FileSystem.class);
+  URI mockBase=new URI("mock://test-nn1/");
+  when(mockfs.getUri()).thenReturn(mockBase);
+  Path working=new Path("mock://test-nn1/user/me/");
+  when(mockfs.getWorkingDirectory()).thenReturn(working);
+  when(mockfs.resolvePath(any(Path.class))).thenAnswer(new Answer<Path>(){
+    @Override public Path answer(    InvocationOnMock args) throws Throwable {
+      return (Path)args.getArguments()[0];
+    }
+  }
+);
+  when(mockfs.getFileStatus(any(Path.class))).thenAnswer(new Answer<FileStatus>(){
+    @Override public FileStatus answer(    InvocationOnMock args) throws Throwable {
+      Path p=(Path)args.getArguments()[0];
+      throw new FileNotFoundException(p + " not supported by mocking");
+    }
+  }
+);
+  when(mockfs.getConf()).thenReturn(conf);
+  when(mockfs.open(any(Path.class),anyInt())).thenAnswer(new Answer<FSDataInputStream>(){
+    @Override public FSDataInputStream answer(    InvocationOnMock args) throws Throwable {
+      Path src=(Path)args.getArguments()[0];
+      throw new FileNotFoundException(src + " not supported by mocking");
+    }
+  }
+);
+  conf.set(MRJobConfig.CACHE_FILES,"");
+  conf.set(MRConfig.LOCAL_DIR,localDir.getAbsolutePath());
+  LocalDistributedCacheManager manager=new LocalDistributedCacheManager();
+  try {
+    manager.setup(conf);
+  }
+  finally {
+    manager.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void cleanup() throws Exception {
+  delete(localDir);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  mockfs=mock(FileSystem.class);
+  localDir=new File(System.getProperty("test.build.dir","target/test-dir"),TestLocalDistributedCacheManager.class.getName());
+  delete(localDir);
+  localDir.mkdirs();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDownload() throws Exception {
+  JobConf conf=new JobConf();
+  conf.setClass("fs.mock.impl",MockFileSystem.class,FileSystem.class);
+  URI mockBase=new URI("mock://test-nn1/");
+  when(mockfs.getUri()).thenReturn(mockBase);
+  Path working=new Path("mock://test-nn1/user/me/");
+  when(mockfs.getWorkingDirectory()).thenReturn(working);
+  when(mockfs.resolvePath(any(Path.class))).thenAnswer(new Answer<Path>(){
+    @Override public Path answer(    InvocationOnMock args) throws Throwable {
+      return (Path)args.getArguments()[0];
+    }
+  }
+);
+  final URI file=new URI("mock://test-nn1/user/me/file.txt#link");
+  final Path filePath=new Path(file);
+  File link=new File("link");
+  when(mockfs.getFileStatus(any(Path.class))).thenAnswer(new Answer<FileStatus>(){
+    @Override public FileStatus answer(    InvocationOnMock args) throws Throwable {
+      Path p=(Path)args.getArguments()[0];
+      if ("file.txt".equals(p.getName())) {
+        return new FileStatus(201,false,1,500,101,101,FsPermission.getDefault(),"me","me",filePath);
+      }
+ else {
+        throw new FileNotFoundException(p + " not supported by mocking");
+      }
+    }
+  }
+);
+  when(mockfs.getConf()).thenReturn(conf);
+  final FSDataInputStream in=new FSDataInputStream(new MockInputStream("This is a test file\n".getBytes()));
+  when(mockfs.open(any(Path.class),anyInt())).thenAnswer(new Answer<FSDataInputStream>(){
+    @Override public FSDataInputStream answer(    InvocationOnMock args) throws Throwable {
+      Path src=(Path)args.getArguments()[0];
+      if ("file.txt".equals(src.getName())) {
+        return in;
+      }
+ else {
+        throw new FileNotFoundException(src + " not supported by mocking");
+      }
+    }
+  }
+);
+  DistributedCache.addCacheFile(file,conf);
+  conf.set(MRJobConfig.CACHE_FILE_TIMESTAMPS,"101");
+  conf.set(MRJobConfig.CACHE_FILES_SIZES,"201");
+  conf.set(MRJobConfig.CACHE_FILE_VISIBILITIES,"false");
+  conf.set(MRConfig.LOCAL_DIR,localDir.getAbsolutePath());
+  LocalDistributedCacheManager manager=new LocalDistributedCacheManager();
+  try {
+    manager.setup(conf);
+    assertTrue(link.exists());
+  }
+  finally {
+    manager.close();
+  }
+  assertFalse(link.exists());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

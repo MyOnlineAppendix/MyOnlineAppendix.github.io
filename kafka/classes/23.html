@@ -1,0 +1,286 @@
+<h3 style="margin:0px">Class: org.apache.kafka.clients.producer.internals.RecordAccumulatorTest (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-13 type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testExpiredBatches() throws InterruptedException {
+  Time time=new SystemTime();
+  long now=time.milliseconds();
+  RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,10,100L,metrics,time);
+  int appends=1024 / msgSize;
+  for (int i=0; i < appends; i++) {
+    accum.append(tp1,key,value,null,maxBlockTimeMs);
+    assertEquals("No partitions should be ready.",0,accum.ready(cluster,now).readyNodes.size());
+  }
+  time.sleep(2000);
+  accum.ready(cluster,now);
+  accum.append(tp1,key,value,null,0);
+  Set<Node> readyNodes=accum.ready(cluster,time.milliseconds()).readyNodes;
+  assertEquals("Our partition's leader should be ready",Collections.singleton(node1),readyNodes);
+  Cluster cluster=new Cluster(new ArrayList<Node>(),new ArrayList<PartitionInfo>(),Collections.<String>emptySet());
+  now=time.milliseconds();
+  List<RecordBatch> expiredBatches=accum.abortExpiredBatches(60,cluster,now);
+  assertEquals(1,expiredBatches.size());
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("unused") @Test public void testStressfulSituation() throws Exception {
+  final int numThreads=5;
+  final int msgs=10000;
+  final int numParts=2;
+  final RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,0L,100L,metrics,time);
+  List<Thread> threads=new ArrayList<Thread>();
+  for (int i=0; i < numThreads; i++) {
+    threads.add(new Thread(){
+      public void run(){
+        for (int i=0; i < msgs; i++) {
+          try {
+            accum.append(new TopicPartition(topic,i % numParts),key,value,null,maxBlockTimeMs);
+          }
+ catch (          Exception e) {
+            e.printStackTrace();
+          }
+        }
+      }
+    }
+);
+  }
+  for (  Thread t : threads)   t.start();
+  int read=0;
+  long now=time.milliseconds();
+  while (read < numThreads * msgs) {
+    Set<Node> nodes=accum.ready(cluster,now).readyNodes;
+    List<RecordBatch> batches=accum.drain(cluster,nodes,5 * 1024,0).get(node1.id());
+    if (batches != null) {
+      for (      RecordBatch batch : batches) {
+        for (        LogEntry entry : batch.records)         read++;
+        accum.deallocate(batch);
+      }
+    }
+  }
+  for (  Thread t : threads)   t.join();
+}
+
+</code></pre>
+
+<pre class="type-8 type-9 type-7 type-3 type-12 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testLinger() throws Exception {
+  long lingerMs=10L;
+  RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,lingerMs,100L,metrics,time);
+  accum.append(tp1,key,value,null,maxBlockTimeMs);
+  assertEquals("No partitions should be ready",0,accum.ready(cluster,time.milliseconds()).readyNodes.size());
+  time.sleep(10);
+  assertEquals("Our partition's leader should be ready",Collections.singleton(node1),accum.ready(cluster,time.milliseconds()).readyNodes);
+  List<RecordBatch> batches=accum.drain(cluster,Collections.singleton(node1),Integer.MAX_VALUE,0).get(node1.id());
+  assertEquals(1,batches.size());
+  RecordBatch batch=batches.get(0);
+  Iterator<LogEntry> iter=batch.records.iterator();
+  LogEntry entry=iter.next();
+  assertEquals("Keys should match",ByteBuffer.wrap(key),entry.record().key());
+  assertEquals("Values should match",ByteBuffer.wrap(value),entry.record().value());
+  assertFalse("No more records",iter.hasNext());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNextReadyCheckDelay() throws Exception {
+  long lingerMs=10L;
+  RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,lingerMs,100L,metrics,time);
+  int appends=1024 / msgSize;
+  for (int i=0; i < appends; i++)   accum.append(tp1,key,value,null,maxBlockTimeMs);
+  RecordAccumulator.ReadyCheckResult result=accum.ready(cluster,time.milliseconds());
+  assertEquals("No nodes should be ready.",0,result.readyNodes.size());
+  assertEquals("Next check time should be the linger time",lingerMs,result.nextReadyCheckDelayMs);
+  time.sleep(lingerMs / 2);
+  for (int i=0; i < appends; i++)   accum.append(tp3,key,value,null,maxBlockTimeMs);
+  result=accum.ready(cluster,time.milliseconds());
+  assertEquals("No nodes should be ready.",0,result.readyNodes.size());
+  assertEquals("Next check time should be defined by node1, half remaining linger time",lingerMs / 2,result.nextReadyCheckDelayMs);
+  for (int i=0; i < appends + 1; i++)   accum.append(tp2,key,value,null,maxBlockTimeMs);
+  result=accum.ready(cluster,time.milliseconds());
+  assertEquals("Node1 should be ready",Collections.singleton(node1),result.readyNodes);
+  assertTrue("Next check time should be defined by node2, at most linger time",result.nextReadyCheckDelayMs <= lingerMs);
+}
+
+</code></pre>
+
+<pre class="type-8 type-13 type-9 type-7 type-3 type-12 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFull() throws Exception {
+  long now=time.milliseconds();
+  RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,10L,100L,metrics,time);
+  int appends=1024 / msgSize;
+  for (int i=0; i < appends; i++) {
+    accum.append(tp1,key,value,null,maxBlockTimeMs);
+    assertEquals("No partitions should be ready.",0,accum.ready(cluster,now).readyNodes.size());
+  }
+  accum.append(tp1,key,value,null,maxBlockTimeMs);
+  assertEquals("Our partition's leader should be ready",Collections.singleton(node1),accum.ready(cluster,time.milliseconds()).readyNodes);
+  List<RecordBatch> batches=accum.drain(cluster,Collections.singleton(node1),Integer.MAX_VALUE,0).get(node1.id());
+  assertEquals(1,batches.size());
+  RecordBatch batch=batches.get(0);
+  Iterator<LogEntry> iter=batch.records.iterator();
+  for (int i=0; i < appends; i++) {
+    LogEntry entry=iter.next();
+    assertEquals("Keys should match",ByteBuffer.wrap(key),entry.record().key());
+    assertEquals("Values should match",ByteBuffer.wrap(value),entry.record().value());
+  }
+  assertFalse("No more records",iter.hasNext());
+}
+
+</code></pre>
+
+<pre class="type-8 type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPartialDrain() throws Exception {
+  RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,10L,100L,metrics,time);
+  int appends=1024 / msgSize + 1;
+  List<TopicPartition> partitions=asList(tp1,tp2);
+  for (  TopicPartition tp : partitions) {
+    for (int i=0; i < appends; i++)     accum.append(tp,key,value,null,maxBlockTimeMs);
+  }
+  assertEquals("Partition's leader should be ready",Collections.singleton(node1),accum.ready(cluster,time.milliseconds()).readyNodes);
+  List<RecordBatch> batches=accum.drain(cluster,Collections.singleton(node1),1024,0).get(node1.id());
+  assertEquals("But due to size bound only one partition should have been retrieved",1,batches.size());
+}
+
+</code></pre>
+
+<pre class="type-7 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAppendLarge() throws Exception {
+  int batchSize=512;
+  RecordAccumulator accum=new RecordAccumulator(batchSize,10 * 1024,CompressionType.NONE,0L,100L,metrics,time);
+  accum.append(tp1,key,new byte[2 * batchSize],null,maxBlockTimeMs);
+  assertEquals("Our partition's leader should be ready",Collections.singleton(node1),accum.ready(cluster,time.milliseconds()).readyNodes);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAbortIncompleteBatches() throws Exception {
+  long lingerMs=Long.MAX_VALUE;
+  final AtomicInteger numExceptionReceivedInCallback=new AtomicInteger(0);
+  final RecordAccumulator accum=new RecordAccumulator(4 * 1024,64 * 1024,CompressionType.NONE,lingerMs,100L,metrics,time);
+class TestCallback implements Callback {
+    @Override public void onCompletion(    RecordMetadata metadata,    Exception exception){
+      assertTrue(exception.getMessage().equals("Producer is closed forcefully."));
+      numExceptionReceivedInCallback.incrementAndGet();
+    }
+  }
+  for (int i=0; i < 100; i++)   accum.append(new TopicPartition(topic,i % 3),key,value,new TestCallback(),maxBlockTimeMs);
+  RecordAccumulator.ReadyCheckResult result=accum.ready(cluster,time.milliseconds());
+  assertEquals("No nodes should be ready.",0,result.readyNodes.size());
+  accum.abortIncompleteBatches();
+  assertEquals(numExceptionReceivedInCallback.get(),100);
+  assertFalse(accum.hasUnsent());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown(){
+  this.metrics.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-3 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFlush() throws Exception {
+  long lingerMs=Long.MAX_VALUE;
+  final RecordAccumulator accum=new RecordAccumulator(4 * 1024,64 * 1024,CompressionType.NONE,lingerMs,100L,metrics,time);
+  for (int i=0; i < 100; i++)   accum.append(new TopicPartition(topic,i % 3),key,value,null,maxBlockTimeMs);
+  RecordAccumulator.ReadyCheckResult result=accum.ready(cluster,time.milliseconds());
+  assertEquals("No nodes should be ready.",0,result.readyNodes.size());
+  accum.beginFlush();
+  result=accum.ready(cluster,time.milliseconds());
+  Map<Integer,List<RecordBatch>> results=accum.drain(cluster,result.readyNodes,Integer.MAX_VALUE,time.milliseconds());
+  for (  List<RecordBatch> batches : results.values())   for (  RecordBatch batch : batches)   accum.deallocate(batch);
+  accum.awaitFlushCompletion();
+  assertFalse(accum.hasUnsent());
+}
+
+</code></pre>
+
+<pre class="type-7 type-3 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRetryBackoff() throws Exception {
+  long lingerMs=Long.MAX_VALUE / 4;
+  long retryBackoffMs=Long.MAX_VALUE / 2;
+  final RecordAccumulator accum=new RecordAccumulator(1024,10 * 1024,CompressionType.NONE,lingerMs,retryBackoffMs,metrics,time);
+  long now=time.milliseconds();
+  accum.append(tp1,key,value,null,maxBlockTimeMs);
+  RecordAccumulator.ReadyCheckResult result=accum.ready(cluster,now + lingerMs + 1);
+  assertEquals("Node1 should be ready",Collections.singleton(node1),result.readyNodes);
+  Map<Integer,List<RecordBatch>> batches=accum.drain(cluster,result.readyNodes,Integer.MAX_VALUE,now + lingerMs + 1);
+  assertEquals("Node1 should be the only ready node.",1,batches.size());
+  assertEquals("Partition 0 should only have one batch drained.",1,batches.get(0).size());
+  now=time.milliseconds();
+  accum.reenqueue(batches.get(0).get(0),now);
+  accum.append(tp2,key,value,null,maxBlockTimeMs);
+  result=accum.ready(cluster,now + lingerMs + 1);
+  assertEquals("Node1 should be ready",Collections.singleton(node1),result.readyNodes);
+  batches=accum.drain(cluster,result.readyNodes,Integer.MAX_VALUE,now + lingerMs + 1);
+  assertEquals("Node1 should be the only ready node.",1,batches.size());
+  assertEquals("Node1 should only have one batch drained.",1,batches.get(0).size());
+  assertEquals("Node1 should only have one batch for partition 1.",tp2,batches.get(0).get(0).topicPartition);
+  result=accum.ready(cluster,now + retryBackoffMs + 1);
+  assertEquals("Node1 should be ready",Collections.singleton(node1),result.readyNodes);
+  batches=accum.drain(cluster,result.readyNodes,Integer.MAX_VALUE,now + retryBackoffMs + 1);
+  assertEquals("Node1 should be the only ready node.",1,batches.size());
+  assertEquals("Node1 should only have one batch drained.",1,batches.get(0).size());
+  assertEquals("Node1 should only have one batch for partition 0.",tp1,batches.get(0).get(0).topicPartition);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

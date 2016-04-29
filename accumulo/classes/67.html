@@ -1,0 +1,79 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.core.file.BloomFilterLayerLookupTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-13 type-11 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void test() throws IOException {
+  HashSet<Integer> valsSet=new HashSet<Integer>();
+  for (int i=0; i < 100000; i++) {
+    valsSet.add(random.nextInt(Integer.MAX_VALUE));
+  }
+  ArrayList<Integer> vals=new ArrayList<Integer>(valsSet);
+  Collections.sort(vals);
+  ConfigurationCopy acuconf=new ConfigurationCopy(AccumuloConfiguration.getDefaultConfiguration());
+  acuconf.set(Property.TABLE_BLOOM_ENABLED,"true");
+  acuconf.set(Property.TABLE_BLOOM_KEY_FUNCTOR,ColumnFamilyFunctor.class.getName());
+  acuconf.set(Property.TABLE_FILE_TYPE,RFile.EXTENSION);
+  acuconf.set(Property.TABLE_BLOOM_LOAD_THRESHOLD,"1");
+  acuconf.set(Property.TSERV_BLOOM_LOAD_MAXCONCURRENT,"1");
+  Configuration conf=CachedConfiguration.getInstance();
+  FileSystem fs=FileSystem.get(conf);
+  String suffix=FileOperations.getNewFileExtension(acuconf);
+  String fname=new File(tempDir.getRoot(),testName + "." + suffix).getAbsolutePath();
+  FileSKVWriter bmfw=FileOperations.getInstance().openWriter(fname,fs,conf,acuconf);
+  long t1=System.currentTimeMillis();
+  bmfw.startDefaultLocalityGroup();
+  for (  Integer i : vals) {
+    String fi=String.format("%010d",i);
+    bmfw.append(new Key(new Text("r" + fi),new Text("cf1")),new Value(("v" + fi).getBytes()));
+    bmfw.append(new Key(new Text("r" + fi),new Text("cf2")),new Value(("v" + fi).getBytes()));
+  }
+  long t2=System.currentTimeMillis();
+  LOG.debug(String.format("write rate %6.2f%n",vals.size() / ((t2 - t1) / 1000.0)));
+  bmfw.close();
+  t1=System.currentTimeMillis();
+  FileSKVIterator bmfr=FileOperations.getInstance().openReader(fname,false,fs,conf,acuconf);
+  t2=System.currentTimeMillis();
+  LOG.debug("Opened " + fname + " in "+ (t2 - t1));
+  int hits=0;
+  t1=System.currentTimeMillis();
+  for (int i=0; i < 5000; i++) {
+    int row=random.nextInt(Integer.MAX_VALUE);
+    seek(bmfr,row);
+    if (valsSet.contains(row)) {
+      hits++;
+      assertTrue(bmfr.hasTop());
+    }
+  }
+  t2=System.currentTimeMillis();
+  double rate1=5000 / ((t2 - t1) / 1000.0);
+  LOG.debug(String.format("random lookup rate : %6.2f%n",rate1));
+  LOG.debug("hits = " + hits);
+  int count=0;
+  t1=System.currentTimeMillis();
+  for (  Integer row : valsSet) {
+    seek(bmfr,row);
+    assertTrue(bmfr.hasTop());
+    count++;
+    if (count >= 500) {
+      break;
+    }
+  }
+  t2=System.currentTimeMillis();
+  double rate2=500 / ((t2 - t1) / 1000.0);
+  LOG.debug(String.format("existant lookup rate %6.2f%n",rate2));
+  LOG.debug("expected hits 500.  Receive hits: " + count);
+  bmfr.close();
+  assertTrue(rate1 > rate2);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,1815 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspUtilityVerifier</h3><kbd>Verifies (un)successful execution of the test case by reporting explicitly a failure</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestCluster </h4><pre class="type-10 type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to verify the common properties of tasks.
+ * @throws Exception
+ */
+@Test public void testTaskDetails() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JTProtocol wovenClient=cluster.getJTClient().getProxy();
+  FinishTaskControlAction.configureControlActionForJob(conf);
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job rJob=job.createJob(1,1,100,100,100,100);
+  JobClient client=cluster.getJTClient().getClient();
+  rJob.submit();
+  RunningJob rJob1=client.getJob(org.apache.hadoop.mapred.JobID.downgrade(rJob.getJobID()));
+  JobID id=rJob.getJobID();
+  JobInfo jInfo=wovenClient.getJobInfo(id);
+  while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+    Thread.sleep(1000);
+    jInfo=wovenClient.getJobInfo(id);
+  }
+  LOG.info("Waiting till job starts running one map");
+  TaskInfo[] myTaskInfos=wovenClient.getTaskInfo(id);
+  boolean isOneTaskStored=false;
+  String sometaskpid=null;
+  org.apache.hadoop.mapreduce.TaskAttemptID sometaskId=null;
+  TTClient myCli=null;
+  for (  TaskInfo info : myTaskInfos) {
+    if (!info.isSetupOrCleanup()) {
+      String[] taskTrackers=info.getTaskTrackers();
+      for (      String taskTracker : taskTrackers) {
+        TTInfo ttInfo=wovenClient.getTTInfo(taskTracker);
+        TTClient ttCli=cluster.getTTClient(ttInfo.getStatus().getHost());
+        TaskID taskId=info.getTaskID();
+        TTTaskInfo ttTaskInfo=ttCli.getProxy().getTask(taskId);
+        Assert.assertNotNull(ttTaskInfo);
+        Assert.assertNotNull(ttTaskInfo.getConf());
+        Assert.assertNotNull(ttTaskInfo.getUser());
+        Assert.assertTrue(ttTaskInfo.getTaskStatus().getProgress() >= 0.0);
+        Assert.assertTrue(ttTaskInfo.getTaskStatus().getProgress() <= 1.0);
+        String pid=ttTaskInfo.getPid();
+        int i=1;
+        while (pid.isEmpty()) {
+          Thread.sleep(1000);
+          LOG.info("Waiting for task to report its pid back");
+          ttTaskInfo=ttCli.getProxy().getTask(taskId);
+          pid=ttTaskInfo.getPid();
+          if (i == 40) {
+            Assert.fail("The task pid not reported for 40 seconds.");
+          }
+          i++;
+        }
+        if (!isOneTaskStored) {
+          sometaskpid=pid;
+          sometaskId=ttTaskInfo.getTaskStatus().getTaskID();
+          myCli=ttCli;
+          isOneTaskStored=true;
+        }
+        LOG.info("verified task progress to be between 0 and 1");
+        State state=ttTaskInfo.getTaskStatus().getRunState();
+        if (ttTaskInfo.getTaskStatus().getProgress() < 1.0 && ttTaskInfo.getTaskStatus().getProgress() > 0.0) {
+          Assert.assertEquals(TaskStatus.State.RUNNING,state);
+          LOG.info("verified run state as " + state);
+        }
+        FinishTaskControlAction action=new FinishTaskControlAction(org.apache.hadoop.mapred.TaskID.downgrade(info.getTaskID()));
+        ttCli.getProxy().sendAction(action);
+      }
+    }
+  }
+  rJob.killJob();
+  int i=1;
+  while (!rJob.isComplete()) {
+    Thread.sleep(1000);
+    if (i == 40) {
+      Assert.fail("The job not completed within 40 seconds after killing it.");
+    }
+    i++;
+  }
+  TTTaskInfo myTaskInfo=myCli.getProxy().getTask(sometaskId.getTaskID());
+  i=0;
+  while (myTaskInfo != null && !myTaskInfo.getPid().isEmpty()) {
+    LOG.info("sleeping till task is retired from TT memory");
+    Thread.sleep(1000);
+    myTaskInfo=myCli.getProxy().getTask(sometaskId.getTaskID());
+    if (i == 40) {
+      Assert.fail("Task not retired from TT memory within 40 seconds of job completeing");
+    }
+    i++;
+  }
+  Assert.assertFalse(myCli.getProxy().isProcessTreeAlive(sometaskpid));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-14 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testClusterRestart() throws Exception {
+  cluster.stop();
+  AbstractDaemonClient cli=cluster.getJTClient();
+  int i=1;
+  while (i < 40) {
+    try {
+      cli.ping();
+      Thread.sleep(1000);
+      i++;
+    }
+ catch (    Exception e) {
+      break;
+    }
+  }
+  if (i >= 40) {
+    Assert.fail("JT on " + cli.getHostName() + " Should have been down.");
+  }
+  i=1;
+  for (  AbstractDaemonClient tcli : cluster.getTTClients()) {
+    i=1;
+    while (i < 40) {
+      try {
+        tcli.ping();
+        Thread.sleep(1000);
+        i++;
+      }
+ catch (      Exception e) {
+        break;
+      }
+    }
+    if (i >= 40) {
+      Assert.fail("TT on " + tcli.getHostName() + " Should have been down.");
+    }
+  }
+  cluster.start();
+  cli=cluster.getJTClient();
+  i=1;
+  while (i < 40) {
+    try {
+      cli.ping();
+      break;
+    }
+ catch (    Exception e) {
+      i++;
+      Thread.sleep(1000);
+      LOG.info("Waiting for Jobtracker on host : " + cli.getHostName() + " to come up.");
+    }
+  }
+  if (i >= 40) {
+    Assert.fail("JT on " + cli.getHostName() + " Should have been up.");
+  }
+  for (  AbstractDaemonClient tcli : cluster.getTTClients()) {
+    i=1;
+    while (i < 40) {
+      try {
+        tcli.ping();
+        break;
+      }
+ catch (      Exception e) {
+        i++;
+        Thread.sleep(1000);
+        LOG.info("Waiting for Tasktracker on host : " + tcli.getHostName() + " to come up.");
+      }
+    }
+    if (i >= 40) {
+      Assert.fail("TT on " + tcli.getHostName() + " Should have been Up.");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestControlledJob </h4><pre class="type-11 type-13 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testControlledJob() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JTProtocol wovenClient=cluster.getJTClient().getProxy();
+  FinishTaskControlAction.configureControlActionForJob(conf);
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(1,0,100,100,100,100);
+  slpJob.submit();
+  JobClient client=cluster.getJTClient().getClient();
+  RunningJob rJob=client.getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  JobID id=rJob.getID();
+  JobInfo jInfo=wovenClient.getJobInfo(id);
+  while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+    Thread.sleep(1000);
+    jInfo=wovenClient.getJobInfo(id);
+  }
+  LOG.info("Waiting till job starts running one map");
+  jInfo=wovenClient.getJobInfo(id);
+  Assert.assertEquals(jInfo.runningMaps(),1);
+  LOG.info("waiting for another cycle to " + "check if the maps dont finish off");
+  Thread.sleep(1000);
+  jInfo=wovenClient.getJobInfo(id);
+  Assert.assertEquals(jInfo.runningMaps(),1);
+  TaskInfo[] taskInfos=wovenClient.getTaskInfo(id);
+  for (  TaskInfo info : taskInfos) {
+    LOG.info("constructing control action to signal task to finish");
+    FinishTaskControlAction action=new FinishTaskControlAction(TaskID.downgrade(info.getTaskID()));
+    for (    TTClient cli : cluster.getTTClients()) {
+      cli.getProxy().sendAction(action);
+    }
+  }
+  jInfo=wovenClient.getJobInfo(id);
+  int i=1;
+  if (jInfo != null) {
+    while (!jInfo.getStatus().isJobComplete()) {
+      Thread.sleep(1000);
+      jInfo=wovenClient.getJobInfo(id);
+      if (jInfo == null) {
+        break;
+      }
+      if (i > 40) {
+        Assert.fail("Controlled Job with ID : " + jInfo.getID() + " has not completed in 40 seconds after signalling.");
+      }
+      i++;
+    }
+  }
+  LOG.info("Job sucessfully completed after signalling!!!!");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestDistributedCacheModifiedFile </h4><pre class="type-10 type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDistributedCache() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JTProtocol wovenClient=cluster.getJTClient().getProxy();
+  int count=0;
+  boolean continueLoop=true;
+  int countLoop=0;
+  int taskTrackerCounter=0;
+  ArrayList<String> taskTrackerCollection=new ArrayList<String>();
+  boolean taskTrackerFound=false;
+  do {
+    SleepJob job=new SleepJob();
+    job.setConf(conf);
+    Job slpJob=job.createJob(5,1,1000,1000,100,100);
+    String input="This will be the content of\n" + "distributed cache\n";
+    DataOutputStream file=UtilsForTests.createTmpFileDFS(dfs,URIPATH,permission,input);
+    DistributedCache.createSymlink(conf);
+    URI uri=URI.create(uriPath);
+    DistributedCache.addCacheFile(uri,conf);
+    JobConf jconf=new JobConf(conf);
+    FinishTaskControlAction.configureControlActionForJob(conf);
+    slpJob.submit();
+    RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+    countLoop++;
+    TTClient tClient=null;
+    JobInfo jInfo=wovenClient.getJobInfo(rJob.getID());
+    LOG.info("jInfo is :" + jInfo);
+    Assert.assertNotNull("jobInfo is null",jInfo);
+    count=0;
+    while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+      UtilsForTests.waitFor(10000);
+      count++;
+      jInfo=wovenClient.getJobInfo(rJob.getID());
+      if (count > 10) {
+        Assert.fail("job has not reached running state for more than" + "100 seconds. Failing at this point");
+      }
+    }
+    LOG.info("job id is :" + rJob.getID().toString());
+    TaskInfo[] taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    boolean distCacheFileIsFound;
+    for (    TaskInfo taskInfo : taskInfos) {
+      distCacheFileIsFound=false;
+      String[] taskTrackers=taskInfo.getTaskTrackers();
+      for (      String taskTracker : taskTrackers) {
+        taskTracker=UtilsForTests.getFQDNofTT(taskTracker);
+        LOG.info("taskTracker is :" + taskTracker);
+        taskTrackerFound=false;
+        if (countLoop > 1) {
+          if (taskTracker != null) {
+            continueLoop=taskTrackerCollection.contains(taskTracker);
+          }
+          if (continueLoop) {
+            taskTrackerFound=true;
+          }
+        }
+        if (taskTracker != null)         taskTrackerCollection.add(taskTracker);
+        if (countLoop > 1) {
+          continueLoop=false;
+        }
+        tClient=cluster.getTTClient(taskTracker);
+        if (tClient == null) {
+          continue;
+        }
+        String[] localDirs=tClient.getMapredLocalDirs();
+        int distributedFileCount=0;
+        for (        String localDir : localDirs) {
+          localDir=localDir + Path.SEPARATOR + TaskTracker.getPublicDistributedCacheDir();
+          LOG.info("localDir is : " + localDir);
+          FileStatus[] fileStatuses=tClient.listStatus(localDir,true,true);
+          for (          FileStatus fileStatus : fileStatuses) {
+            Path path=fileStatus.getPath();
+            LOG.info("path is :" + path.toString());
+            distCacheFileIsFound=(path.toString()).endsWith(distributedFileName);
+            if (distCacheFileIsFound) {
+              LOG.info("PATH found is :" + path.toString());
+              distributedFileCount++;
+              String filename=path.getName();
+              FsPermission fsPerm=fileStatus.getPermission();
+              Assert.assertTrue("File Permission is not 777",fsPerm.equals(new FsPermission("777")));
+            }
+          }
+        }
+        LOG.debug("The distributed FileCount is :" + distributedFileCount);
+        LOG.debug("The taskTrackerFound is :" + taskTrackerFound);
+        if (distributedFileCount != 2 && taskTrackerFound) {
+          Assert.fail("The distributed cache file has to be two. " + "But found was " + distributedFileCount);
+        }
+ else         if (distributedFileCount > 1 && !taskTrackerFound) {
+          Assert.fail("The distributed cache file cannot more than one." + " But found was " + distributedFileCount);
+        }
+ else         if (distributedFileCount < 1)         Assert.fail("The distributed cache file is less than one. " + "But found was " + distributedFileCount);
+        if (!distCacheFileIsFound) {
+          Assert.assertEquals("The distributed cache file does not exist",distCacheFileIsFound,false);
+        }
+      }
+    }
+    for (    TaskInfo taskInfoRemaining : taskInfos) {
+      FinishTaskControlAction action=new FinishTaskControlAction(TaskID.downgrade(taskInfoRemaining.getTaskID()));
+      Collection<TTClient> tts=cluster.getTTClients();
+      for (      TTClient cli : tts) {
+        cli.getProxy().sendAction(action);
+      }
+    }
+    rJob.killJob();
+    Thread.sleep(3000);
+    TaskInfo[] myTaskInfos=wovenClient.getTaskInfo(rJob.getID());
+    if (myTaskInfos != null) {
+      for (      TaskInfo info : myTaskInfos) {
+        if (info.isSetupOrCleanup()) {
+          String[] taskTrackers=info.getTaskTrackers();
+          for (          String taskTracker : taskTrackers) {
+            taskTracker=UtilsForTests.getFQDNofTT(taskTracker);
+            LOG.info("taskTracker is :" + taskTracker);
+            if (taskTracker != null)             taskTrackerCollection.add(taskTracker);
+          }
+        }
+      }
+    }
+    while (jInfo != null && !jInfo.getStatus().isJobComplete()) {
+      Thread.sleep(10000);
+      jInfo=wovenClient.getJobInfo(rJob.getID());
+    }
+  }
+ while (continueLoop);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestDistributedCachePrivateFile </h4><pre class="type-10 type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDistributedCache() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JTProtocol wovenClient=cluster.getJTClient().getProxy();
+  int count=0;
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(5,1,1000,1000,100,100);
+  DistributedCache.createSymlink(conf);
+  URI uri=URI.create(uriPath);
+  DistributedCache.addCacheFile(uri,conf);
+  JobConf jconf=new JobConf(conf);
+  FinishTaskControlAction.configureControlActionForJob(conf);
+  slpJob.submit();
+  RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  JobStatus[] jobStatus=client.getAllJobs();
+  String userName=jobStatus[0].getUsername();
+  TTClient tClient=null;
+  JobInfo jInfo=wovenClient.getJobInfo(rJob.getID());
+  LOG.info("jInfo is :" + jInfo);
+  Assert.assertNotNull("jobInfo is null",jInfo);
+  count=0;
+  while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+    UtilsForTests.waitFor(10000);
+    count++;
+    jInfo=wovenClient.getJobInfo(rJob.getID());
+    if (count > 10) {
+      Assert.fail("job has not reached running state for more than" + "100 seconds. Failing at this point");
+    }
+  }
+  LOG.info("job id is :" + rJob.getID().toString());
+  TaskInfo[] taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+  boolean distCacheFileIsFound;
+  for (  TaskInfo taskInfo : taskInfos) {
+    distCacheFileIsFound=false;
+    String[] taskTrackers=taskInfo.getTaskTrackers();
+    for (    String taskTracker : taskTrackers) {
+      taskTracker=UtilsForTests.getFQDNofTT(taskTracker);
+      tClient=cluster.getTTClient(taskTracker);
+      String[] localDirs=tClient.getMapredLocalDirs();
+      int distributedFileCount=0;
+      String localDirOnly=null;
+      boolean FileNotPresentForThisDirectoryPath=false;
+      for (      String localDir : localDirs) {
+        FileNotPresentForThisDirectoryPath=false;
+        localDirOnly=localDir;
+        localDirOnly=localDir + Path.SEPARATOR + TaskTracker.SUBDIR+ Path.SEPARATOR+ userName;
+        localDir=localDir + Path.SEPARATOR + TaskTracker.getPrivateDistributedCacheDir(userName);
+        FileStatus fileStatusMapredLocalDirUserName=null;
+        try {
+          fileStatusMapredLocalDirUserName=tClient.getFileStatus(localDirOnly,true);
+        }
+ catch (        Exception e) {
+          LOG.info("LocalDirOnly :" + localDirOnly + " not found");
+          FileNotPresentForThisDirectoryPath=true;
+        }
+        if (FileNotPresentForThisDirectoryPath)         continue;
+        Path pathMapredLocalDirUserName=fileStatusMapredLocalDirUserName.getPath();
+        FsPermission fsPermMapredLocalDirUserName=fileStatusMapredLocalDirUserName.getPermission();
+        Assert.assertTrue("Directory Permission is not 700",fsPermMapredLocalDirUserName.equals(new FsPermission("700")));
+        FileStatus[] fileStatuses=tClient.listStatus(localDir,true,true);
+        for (        FileStatus fileStatus : fileStatuses) {
+          Path path=fileStatus.getPath();
+          LOG.info("path is :" + path.toString());
+          distCacheFileIsFound=(path.toString()).endsWith(distributedFileName);
+          if (distCacheFileIsFound) {
+            LOG.info("PATH found is :" + path.toString());
+            distributedFileCount++;
+            String filename=path.getName();
+            FsPermission fsPerm=fileStatus.getPermission();
+            Assert.assertTrue("File Permission is not 777",fsPerm.equals(new FsPermission("777")));
+          }
+        }
+      }
+      LOG.info("Distributed File count is :" + distributedFileCount);
+      if (distributedFileCount > 1) {
+        Assert.fail("The distributed cache file is more than one");
+      }
+ else       if (distributedFileCount < 1)       Assert.fail("The distributed cache file is less than one");
+      if (!distCacheFileIsFound) {
+        Assert.assertEquals("The distributed cache file does not exist",distCacheFileIsFound,false);
+      }
+    }
+    for (    TaskInfo taskInfoRemaining : taskInfos) {
+      FinishTaskControlAction action=new FinishTaskControlAction(TaskID.downgrade(taskInfoRemaining.getTaskID()));
+      Collection<TTClient> tts=cluster.getTTClients();
+      for (      TTClient cli : tts) {
+        cli.getProxy().sendAction(action);
+      }
+    }
+    rJob.killJob();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestDistributedCacheUnModifiedFile </h4><pre class="type-10 type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDistributedCache() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JTProtocol wovenClient=cluster.getJTClient().getProxy();
+  int count=0;
+  boolean continueLoop=true;
+  int countLoop=0;
+  int taskTrackerCounter=0;
+  ArrayList<String> taskTrackerCollection=new ArrayList<String>();
+  do {
+    SleepJob job=new SleepJob();
+    job.setConf(conf);
+    Job slpJob=job.createJob(5,1,1000,1000,100,100);
+    DistributedCache.createSymlink(conf);
+    URI uri=URI.create(uriPath);
+    DistributedCache.addCacheFile(uri,conf);
+    JobConf jconf=new JobConf(conf);
+    FinishTaskControlAction.configureControlActionForJob(conf);
+    slpJob.submit();
+    RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+    countLoop++;
+    TTClient tClient=null;
+    JobInfo jInfo=wovenClient.getJobInfo(rJob.getID());
+    LOG.info("jInfo is :" + jInfo);
+    Assert.assertNotNull("jobInfo is null",jInfo);
+    count=0;
+    while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+      UtilsForTests.waitFor(10000);
+      count++;
+      jInfo=wovenClient.getJobInfo(rJob.getID());
+      if (count > 10) {
+        Assert.fail("job has not reached running state for more than" + "100 seconds. Failing at this point");
+      }
+    }
+    LOG.info("job id is :" + rJob.getID().toString());
+    TaskInfo[] taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    boolean distCacheFileIsFound;
+    for (    TaskInfo taskInfo : taskInfos) {
+      distCacheFileIsFound=false;
+      String[] taskTrackers=taskInfo.getTaskTrackers();
+      for (      String taskTracker : taskTrackers) {
+        taskTracker=UtilsForTests.getFQDNofTT(taskTracker);
+        LOG.info("taskTracker is :" + taskTracker);
+        if (countLoop > 1) {
+          if (taskTracker != null) {
+            continueLoop=taskTrackerCollection.contains(taskTracker);
+          }
+          if (!continueLoop) {
+            break;
+          }
+        }
+        if (taskTracker != null)         taskTrackerCollection.add(taskTracker);
+        if (countLoop > 2) {
+          continueLoop=false;
+        }
+        tClient=cluster.getTTClient(taskTracker);
+        if (tClient == null) {
+          continue;
+        }
+        String[] localDirs=tClient.getMapredLocalDirs();
+        int distributedFileCount=0;
+        for (        String localDir : localDirs) {
+          localDir=localDir + Path.SEPARATOR + TaskTracker.getPublicDistributedCacheDir();
+          LOG.info("localDir is : " + localDir);
+          FileStatus[] fileStatuses=tClient.listStatus(localDir,true,true);
+          for (          FileStatus fileStatus : fileStatuses) {
+            Path path=fileStatus.getPath();
+            LOG.info("path is :" + path.toString());
+            distCacheFileIsFound=(path.toString()).endsWith(distributedFileName);
+            if (distCacheFileIsFound) {
+              LOG.info("PATH found is :" + path.toString());
+              distributedFileCount++;
+              String filename=path.getName();
+              FsPermission fsPerm=fileStatus.getPermission();
+              Assert.assertTrue("File Permission is not 777",fsPerm.equals(new FsPermission("777")));
+            }
+          }
+        }
+        if (distributedFileCount > 1) {
+          Assert.fail("The distributed cache file is more than one");
+        }
+ else         if (distributedFileCount < 1)         Assert.fail("The distributed cache file is less than one");
+        if (!distCacheFileIsFound) {
+          Assert.assertEquals("The distributed cache file does not exist",distCacheFileIsFound,false);
+        }
+      }
+    }
+    for (    TaskInfo taskInfoRemaining : taskInfos) {
+      FinishTaskControlAction action=new FinishTaskControlAction(TaskID.downgrade(taskInfoRemaining.getTaskID()));
+      Collection<TTClient> tts=cluster.getTTClients();
+      for (      TTClient cli : tts) {
+        cli.getProxy().sendAction(action);
+      }
+    }
+    rJob.killJob();
+  }
+ while (continueLoop);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestQueueManager </h4><pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testValidation() throws Exception {
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  Element queues=createQueuesNode(doc);
+  Element q1=createQueue(doc,"q1");
+  q1.appendChild(createAcls(doc,"acl-submit-job","u1"));
+  q1.appendChild(createAcls(doc,"acl-administer-jobs","u2"));
+  q1.appendChild(createQueue(doc,"p15"));
+  q1.appendChild(createQueue(doc,"p16"));
+  queues.appendChild(q1);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  try {
+    new QueueManager(QUEUES_CONFIG_FILE_PATH,false);
+    fail("Should throw an exception as configuration is wrong ");
+  }
+ catch (  RuntimeException re) {
+    LOG.info(re.getMessage());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testInvalidName() throws Exception {
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  Element queues=createQueuesNode(doc);
+  Element q1=createQueue(doc,"");
+  queues.appendChild(q1);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  try {
+    new QueueManager(QUEUES_CONFIG_FILE_PATH,false);
+    fail("Should throw an exception as configuration is wrong ");
+  }
+ catch (  Exception re) {
+    re.printStackTrace();
+    LOG.info(re.getMessage());
+  }
+  deleteQueuesConfigFile();
+  doc=createDocument();
+  queues=createQueuesNode(doc);
+  q1=doc.createElement("queue");
+  queues.appendChild(q1);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  try {
+    new QueueManager(QUEUES_CONFIG_FILE_PATH,true);
+    fail("Should throw an exception as configuration is wrong ");
+  }
+ catch (  RuntimeException re) {
+    re.printStackTrace();
+    LOG.info(re.getMessage());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testEmptyFile() throws Exception {
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  try {
+    new QueueManager(QUEUES_CONFIG_FILE_PATH,true);
+    fail("Should throw an exception as configuration is wrong ");
+  }
+ catch (  Exception re) {
+    re.printStackTrace();
+    LOG.info(re.getMessage());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-13 type-14 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJobQueueInfoGeneration() throws Exception {
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  createSimpleDocument(doc);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  QueueManager qm=new QueueManager(QUEUES_CONFIG_FILE_PATH,true);
+  List<JobQueueInfo> rootQueues=qm.getRoot().getJobQueueInfo().getChildren();
+  assertEquals(rootQueues.size(),2);
+  List<String> names=new ArrayList<String>();
+  for (  JobQueueInfo q : rootQueues) {
+    names.add(q.getQueueName());
+    if (q.getQueueName().equals("q1")) {
+      Properties p=q.getProperties();
+      assertEquals(p.getProperty("capacity"),"10");
+      assertEquals(p.getProperty("maxCapacity"),"35");
+      assertTrue(q.getChildren().isEmpty());
+    }
+ else     if (q.getQueueName().equals("p1")) {
+      List<JobQueueInfo> children=q.getChildren();
+      assertEquals(children.size(),2);
+      for (      JobQueueInfo child : children) {
+        if (child.getQueueName().equals("p1" + NAME_SEPARATOR + "p12")) {
+          assertEquals(child.getQueueState(),QueueState.STOPPED.getStateName());
+        }
+ else         if (child.getQueueName().equals("p1" + NAME_SEPARATOR + "p11")) {
+          assertEquals(child.getQueueState(),QueueState.RUNNING.getStateName());
+        }
+ else {
+          fail("Only 2 children");
+        }
+      }
+    }
+ else {
+      fail("Only 2 queues with q1 and p1 ");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testRefreshWithInvalidFile() throws Exception {
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  createSimpleDocument(doc);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  QueueManager qm=new QueueManager(QUEUES_CONFIG_FILE_PATH,false);
+  deleteQueuesConfigFile();
+  doc=createDocument();
+  Element queues=createQueuesNode(doc);
+  Element q1=createQueue(doc,"");
+  queues.appendChild(q1);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  try {
+    QueueConfigurationParser cp=new QueueConfigurationParser(QUEUES_CONFIG_FILE_PATH,false);
+    fail("Should throw an exception as configuration is wrong ");
+  }
+ catch (  Throwable re) {
+    re.printStackTrace();
+    LOG.info(re.getMessage());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMissingConfigFile() throws Exception {
+  deleteQueuesConfigFile();
+  try {
+    new QueueManager(QUEUES_CONFIG_FILE_PATH,true);
+    fail("Should throw an exception for missing file when " + "explicitly passed.");
+  }
+ catch (  RuntimeException re) {
+  }
+  QueueManager qm=new QueueManager();
+  List<JobQueueInfo> rootQueues=qm.getRoot().getJobQueueInfo().getChildren();
+  assertEquals(1,rootQueues.size());
+  assertEquals("default",rootQueues.get(0).getQueueName());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestQueueManagerWithJobTracker </h4><pre class="type-14 type-17 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to check that jobs cannot be submitted to a queue in STOPPED state
+ * @throws Exception
+ */
+@Test(expected=IOException.class) public void testSubmitJobForStoppedQueue() throws Exception {
+  startCluster(true);
+  submitSleepJob(10,10,100,100,false,null,"p1" + NAME_SEPARATOR + "p14",conf);
+  fail("queue p1:p14 is in stopped state and should not accept jobs");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-14 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the accessibility to kill a job
+ * @throws Exception
+ */
+@Test public void testAccessToKillJob() throws Exception {
+  startCluster(true);
+  Job job=submitSleepJob(1,1,100,100,false,"u1,g1","p1" + NAME_SEPARATOR + "p11",conf);
+  final JobConf jobConf=miniMRCluster.createJobConf();
+  Cluster cluster=null;
+  JobID jobID=job.getStatus().getJobID();
+  JobTracker tracker=miniMRCluster.getJobTrackerRunner().getJobTracker();
+  JobInProgress jip=tracker.getJob(org.apache.hadoop.mapred.JobID.downgrade(jobID));
+  tracker.initJob(jip);
+  try {
+    final Configuration userConf=new Configuration(miniMRCluster.createJobConf());
+    UserGroupInformation ugi=UserGroupInformation.createUserForTesting("someRandomUser",new String[]{"someRandomGroup"});
+    cluster=ugi.doAs(new PrivilegedExceptionAction<Cluster>(){
+      public Cluster run() throws IOException {
+        return new Cluster(userConf);
+      }
+    }
+);
+    cluster.getJob(jobID).killJob();
+    fail("user 'someRandomeUser' is neither u1 nor in the administer group list");
+  }
+ catch (  Exception e) {
+    final Configuration userConf=new Configuration(miniMRCluster.createJobConf());
+    UserGroupInformation ugi=UserGroupInformation.createUserForTesting("u1",new String[]{"g1"});
+    cluster=ugi.doAs(new PrivilegedExceptionAction<Cluster>(){
+      public Cluster run() throws IOException {
+        return new Cluster(userConf);
+      }
+    }
+);
+    cluster.getJob(jobID).killJob();
+    assertEquals("job submitted for u1 and queue p1:p11 is not killed.",cluster.getJob(jobID).getStatus().getState(),(State.KILLED));
+  }
+  job=submitSleepJob(1,1,100,100,false,"u1,g1","p1" + NAME_SEPARATOR + "p12",conf);
+  jobID=job.getStatus().getJobID();
+  jip=tracker.getJob(org.apache.hadoop.mapred.JobID.downgrade(jobID));
+  tracker.initJob(jip);
+  tracker.killJob(job.getJobID());
+  assertEquals("job submitted for u1 and queue p1:p11 is not killed.",cluster.getJob(jobID).getStatus().getState(),(State.KILLED));
+  final Configuration userConf=new Configuration(miniMRCluster.createJobConf());
+  UserGroupInformation ugi=UserGroupInformation.createUserForTesting("u1",new String[]{"g1"});
+  cluster=ugi.doAs(new PrivilegedExceptionAction<Cluster>(){
+    public Cluster run() throws IOException {
+      return new Cluster(userConf);
+    }
+  }
+);
+  job=submitSleepJob(1,1,10,10,false,"u1,g1","p1" + NAME_SEPARATOR + "p11",conf);
+  jobID=job.getStatus().getJobID();
+  jip=tracker.getJob(org.apache.hadoop.mapred.JobID.downgrade(jobID));
+  tracker.initJob(jip);
+  ugi=UserGroupInformation.createUserForTesting("u3",new String[]{"g3"});
+  cluster=ugi.doAs(new PrivilegedExceptionAction<Cluster>(){
+    public Cluster run() throws IOException {
+      return new Cluster(jobConf);
+    }
+  }
+);
+  try {
+    cluster.getJob(jobID).killJob();
+    fail("u3 not in administer list");
+  }
+ catch (  Exception e) {
+    ugi=UserGroupInformation.createUserForTesting("u1",new String[]{"g1"});
+    cluster=ugi.doAs(new PrivilegedExceptionAction<Cluster>(){
+      public Cluster run() throws IOException {
+        return new Cluster(jobConf);
+      }
+    }
+);
+    assertFalse(cluster.getJob(jobID).isComplete());
+    cluster.getJob(jobID).killJob();
+    assertEquals("job submitted for u1 and queue p1:p11 is not killed.",cluster.getJob(jobID).getStatus().getState(),(State.KILLED));
+  }
+  ugi=UserGroupInformation.createUserForTesting("adminUser",new String[]{"g3"});
+  checkAccessToKill(tracker,jobConf,ugi);
+  ugi=UserGroupInformation.createUserForTesting("u3",new String[]{adminGroup});
+  checkAccessToKill(tracker,jobConf,ugi);
+  ugi=UserGroupInformation.createUserForTesting("u3",new String[]{deprecatedSuperGroup});
+  checkAccessToKill(tracker,jobConf,ugi);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 type-17 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies that exceptions are thrown during the test case execution">ExceptionVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies that exceptions are thrown during the test case execution
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to check that jobs cannot be submitted to a container queue
+ * @throws Exception
+ */
+@Test(expected=IOException.class) public void testSubmitJobForContainerQueue() throws Exception {
+  startCluster(true);
+  submitSleepJob(10,10,100,100,false,null,"p1",conf);
+  fail("queue p1 is a container queue and cannot have jobs");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Tests job submission after refresh
+ * @throws Exception
+ */
+@Test public void testSubmitJobsAfterRefresh() throws Exception {
+  startCluster(true);
+  deleteQueuesConfigFile();
+  Document doc=createDocument();
+  refreshDocument(doc);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  MRAdmin admin=new MRAdmin(miniMRCluster.createJobConf());
+  admin.run(new String[]{"-refreshQueues"});
+  try {
+    submitSleepJob(10,10,100,100,false,"u1,g1","p1" + NAME_SEPARATOR + "p11",conf);
+    fail("user u1 is not in the submit jobs' list");
+  }
+ catch (  Exception e) {
+  }
+  deleteQueuesConfigFile();
+  doc=createDocument();
+  createSimpleDocumentWithAcls(doc);
+  writeToFile(doc,QUEUES_CONFIG_FILE_PATH);
+  admin.run(new String[]{"-refreshQueues"});
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-14 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the submission of job with specified acls
+ * @throws Exception
+ */
+@Test public void testAclsForSubmitJob() throws Exception {
+  startCluster(true);
+  Job job;
+  try {
+    job=submitSleepJob(0,0,0,0,true,"u1,g1","p1" + NAME_SEPARATOR + "p13",conf);
+    fail("user u1 cannot submit jobs to queue p1:p13");
+  }
+ catch (  Exception e) {
+  }
+  job=submitSleepJob(0,0,0,0,true,adminUser + ",g1","p1" + NAME_SEPARATOR + "p13",conf);
+  assertTrue("Admin user cannot submit jobs to queue p1:p13",job.isSuccessful());
+  job=submitSleepJob(0,0,0,0,true,"u1," + adminGroup,"p1" + NAME_SEPARATOR + "p13",conf);
+  assertTrue("Admin group member cannot submit jobs to queue p1:p13",job.isSuccessful());
+  job=submitSleepJob(0,0,0,0,true,"u1," + deprecatedSuperGroup,"p1" + NAME_SEPARATOR + "p13",conf);
+  assertTrue("Deprecated super group member cannot submit jobs to queue" + " p1:p13",job.isSuccessful());
+  try {
+    job=submitSleepJob(0,0,0,0,false,"u2,g1","p1" + NAME_SEPARATOR + "p11",conf);
+    fail("user u2 cannot submit jobs to queue p1:p11");
+  }
+ catch (  Exception e) {
+  }
+  job=submitSleepJob(0,0,0,0,true,"u1,g1","p1" + NAME_SEPARATOR + "p11",conf);
+  assertTrue("Job submission for u1 failed in queue : p1:p11.",job.isSuccessful());
+  job=submitSleepJob(0,0,0,0,true,"u2,g1","p1" + NAME_SEPARATOR + "p12",conf);
+  assertTrue("Job submission for u2 failed in queue : p1:p12.",job.isSuccessful());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestRefreshOfQueues </h4><pre class="type-14 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test to verify that the refresh of the scheduler fails when modified
+ * configuration overflows 100%
+ * @throws Throwable
+ */
+@Test public void testFailingCapacityRefresh() throws Throwable {
+  JobQueueInfo[] queues=TestQueueManagerRefresh.getSimpleQueueHierarchy();
+  queues[0].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(100));
+  queues[1].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(70));
+  queues[2].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(50));
+  QueueManagerTestUtils.writeQueueConfigurationFile(queueConfigFile.getAbsolutePath(),new JobQueueInfo[]{queues[0]});
+  try {
+    setupAndStartSchedulerFramework(2,2,2);
+    fail("Scheduler should have failed to start!");
+  }
+ catch (  IOException ioe) {
+    assertTrue(ioe.getMessage().contains(String.format(QueueHierarchyBuilder.TOTAL_CAPACITY_OVERFLOWN_MSG,queues[1].getQueueName() + "," + queues[2].getQueueName(),Float.valueOf(120.0f))));
+  }
+  queues[1].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(50));
+  QueueManagerTestUtils.writeQueueConfigurationFile(queueConfigFile.getAbsolutePath(),new JobQueueInfo[]{queues[0]});
+  setupAndStartSchedulerFramework(2,2,2);
+  queues[1].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(35));
+  queues[2].getProperties().setProperty(CapacitySchedulerConf.CAPACITY_PROPERTY,String.valueOf(95));
+  QueueManagerTestUtils.writeQueueConfigurationFile(queueConfigFile.getAbsolutePath(),new JobQueueInfo[]{queues[0]});
+  try {
+    refreshQueues(taskTrackerManager.getQueueManager(),null,scheduler);
+  }
+ catch (  IOException ioe) {
+    assertTrue(ioe.getMessage().contains(String.format(QueueHierarchyBuilder.TOTAL_CAPACITY_OVERFLOWN_MSG,queues[1].getQueueName() + "," + queues[2].getQueueName(),Float.valueOf(130.0f))));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestRemoveIpsFromLoggedNetworkTopology </h4><pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testIpRemoval() throws IOException {
+  final Configuration conf=new Configuration();
+  final FileSystem lfs=FileSystem.getLocal(conf);
+  final Path rootInputDir=new Path(System.getProperty("src.test.data","data")).makeQualified(lfs.getUri(),lfs.getWorkingDirectory());
+  final LoggedNetworkTopology topoWithIps=new ClusterTopologyReader(new Path(rootInputDir,"topo-with-numeric-ips.json"),conf).get();
+  final LoggedNetworkTopology topoWithoutIps=new ClusterTopologyReader(new Path(rootInputDir,"topo-without-numeric-ips.json"),conf).get();
+  try {
+    topoWithIps.deepCompare(topoWithoutIps,new TreePath(null,"<root>"));
+    Assert.fail("Expecting two topologies to differ");
+  }
+ catch (  DeepInequalityException e) {
+  }
+  SimulatorEngine.removeIpHosts(topoWithIps);
+  try {
+    topoWithIps.deepCompare(topoWithoutIps,new TreePath(null,"<root>"));
+  }
+ catch (  DeepInequalityException e) {
+    Assert.fail("Expecting two topologies to be equal");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestShuffleJobToken </h4><pre class="type-13 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * try positive and negative case with invalid urlHash
+ */
+@Test public void testInvalidJobToken() throws IOException, GeneralSecurityException {
+  URL url=getMapOutputURL(baseUrl.toString());
+  String enc_str=SecureShuffleUtils.buildMsgFrom(url);
+  URLConnection connectionGood=url.openConnection();
+  TaskTracker tt=new TaskTracker();
+  JobTokenSecretManager jtSecretManager=new JobTokenSecretManager();
+  JobTokenIdentifier identifier=new JobTokenIdentifier(new Text(JOB_ID));
+  Token<JobTokenIdentifier> jt=new Token<JobTokenIdentifier>(identifier,jtSecretManager);
+  SecretKey tokenSecret=JobTokenSecretManager.createSecretKey(jt.getPassword());
+  addJobToken(tt,JOB_ID,jt);
+  server.setAttribute("task.tracker",tt);
+  String urlHashGood=SecureShuffleUtils.generateHash(enc_str.getBytes(),tokenSecret);
+  JobTokenIdentifier badIdentifier=new JobTokenIdentifier(new Text(BAD_JOB_ID));
+  Token<JobTokenIdentifier> badToken=new Token<JobTokenIdentifier>(badIdentifier,jtSecretManager);
+  SecretKey badSecret=JobTokenSecretManager.createSecretKey(badToken.getPassword());
+  String urlHashBad=SecureShuffleUtils.generateHash(enc_str.getBytes(),badSecret);
+  connectionGood.addRequestProperty(SecureShuffleUtils.HTTP_HEADER_URL_HASH,urlHashGood);
+  try {
+    connectionGood.getInputStream();
+  }
+ catch (  IOException ie) {
+    String msg=ie.getLocalizedMessage();
+    if (msg.contains("Server returned HTTP response code: 401 for URL:")) {
+      fail("securtity failure with valid urlHash:" + ie);
+    }
+    System.out.println("valid urlhash passed validation");
+  }
+  URLConnection connectionBad=url.openConnection();
+  connectionBad.addRequestProperty(SecureShuffleUtils.HTTP_HEADER_URL_HASH,urlHashBad);
+  try {
+    connectionBad.getInputStream();
+    fail("Connection should've failed because of invalid urlHash");
+  }
+ catch (  IOException ie) {
+    String msg=ie.getLocalizedMessage();
+    if (!msg.contains("Server returned HTTP response code: 401 for URL:")) {
+      fail("connection failed with other then validation error:" + ie);
+    }
+    System.out.println("validation worked, failed with:" + ie);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestSimulatorEventQueue </h4><pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testInsertEventIntoPast(){
+  SimulatorEventQueue queue=new SimulatorEventQueue();
+  SimulatorEventListener listener=new TestListener();
+  queue.add(new TestEvent(listener,10));
+  queue.get();
+  try {
+    queue.add(new TestEvent(listener,5));
+    Assert.fail("Added Event occurred in the past");
+  }
+ catch (  Exception e) {
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestSimulatorJobClient </h4><pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public final void testRelativeStartTime() throws IOException {
+  long relativeStartTime=jobSubmissionTimes[0] - simulationStartTime;
+  MockJobStoryProducer jobStoryProducer=new MockJobStoryProducer(jobSubmissionTimes,relativeStartTime);
+  try {
+    jobTracker=new MockSimulatorJobTracker(simulationStartTime,heartbeatInterval,true);
+  }
+ catch (  Exception e) {
+    Assert.fail("Couldn't set up the mock job tracker: " + e);
+  }
+  eventQueue=new CheckedEventQueue(simulationStartTime);
+  jobClient=new SimulatorJobClient(jobTracker,jobStoryProducer);
+  eventQueue.addExpected(simulationStartTime,new JobSubmissionEvent(jobClient,simulationStartTime,jobStoryProducer.getJob(0)));
+  for (int i=1; i < jobSubmissionTimes.length; i++) {
+    eventQueue.addExpected(jobSubmissionTimes[i - 1] - relativeStartTime,new JobSubmissionEvent(jobClient,jobSubmissionTimes[i] - relativeStartTime,jobStoryProducer.getJob(i)));
+  }
+  long runUntil=eventQueue.getLastCheckTime();
+  LOG.debug("Running until simulation time=" + runUntil);
+  List<SimulatorEvent> events=jobClient.init(simulationStartTime);
+  eventQueue.addAll(events);
+  while (true) {
+    SimulatorEvent currentEvent=eventQueue.get();
+    long now=currentEvent.getTimeStamp();
+    LOG.debug("Number of events to deliver=" + (eventQueue.getSize() + 1) + ", now="+ now);
+    LOG.debug("Calling accept(), event=" + currentEvent + ", now="+ now);
+    events=jobClient.accept(currentEvent);
+    if (now > runUntil) {
+      break;
+    }
+    LOG.debug("Accept() returned " + events.size() + " new event(s)");
+    for (    SimulatorEvent newEvent : events) {
+      LOG.debug("New event " + newEvent);
+    }
+    eventQueue.addAll(events);
+    LOG.debug("Done checking and enqueuing new events");
+  }
+  LOG.debug("going to check if all expected events have been processed");
+  eventQueue.checkMissingExpected();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestSimulatorTaskTracker </h4><pre class="type-3 type-14 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setUp(){
+  try {
+    jobTracker=new MockSimulatorJobTracker(simulationStartTime,heartbeatInterval,true);
+  }
+ catch (  Exception e) {
+    Assert.fail("Couldn't set up the mock job tracker: " + e);
+  }
+  Configuration ttConf=new Configuration();
+  ttConf.set("mumak.tasktracker.tracker.name",taskTrackerName);
+  ttConf.set("mumak.tasktracker.host.name","test_host");
+  ttConf.setInt("mapred.tasktracker.map.tasks.maximum",3);
+  ttConf.setInt("mapred.tasktracker.reduce.tasks.maximum",3);
+  ttConf.setInt("mumak.tasktracker.heartbeat.fuzz",-1);
+  taskTracker=new SimulatorTaskTracker(jobTracker,ttConf);
+  eventQueue=new CheckedEventQueue(simulationStartTime);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestTaskKilling </h4><pre class="type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAllTaskAttemptKill() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JobStatus[] jobStatus=null;
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(3,1,40000,1000,100,100);
+  JobConf jconf=new JobConf(conf);
+  slpJob.submit();
+  RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  int MAX_MAP_TASK_ATTEMPTS=Integer.parseInt(jconf.get(MRJobConfig.MAP_MAX_ATTEMPTS));
+  LOG.info("MAX_MAP_TASK_ATTEMPTS is : " + MAX_MAP_TASK_ATTEMPTS);
+  Assert.assertTrue(MAX_MAP_TASK_ATTEMPTS > 0);
+  TTClient tClient=null;
+  TTClient[] ttClients=null;
+  JobInfo jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  Assert.assertNotNull(jInfo.getStatus().getRunState());
+  while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+    try {
+      Thread.sleep(10000);
+    }
+ catch (    InterruptedException e) {
+    }
+    ;
+    jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  }
+  JobID jobidStore=rJob.getID();
+  jobidStore=JobID.downgrade(jobidStore);
+  LOG.info("job id is :" + jobidStore.toString());
+  TaskInfo[] taskInfos=null;
+  boolean runningCount=false;
+  int count=0;
+  do {
+    taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    runningCount=false;
+    for (    TaskInfo taskInfo : taskInfos) {
+      TaskStatus[] taskStatuses=taskInfo.getTaskStatus();
+      if (taskStatuses.length > 0) {
+        LOG.info("taskStatuses[0].getRunState() is :" + taskStatuses[0].getRunState());
+        if (taskStatuses[0].getRunState() == TaskStatus.State.RUNNING) {
+          runningCount=true;
+          break;
+        }
+ else {
+          LOG.info("Sleeping 5 seconds");
+          Thread.sleep(5000);
+        }
+      }
+    }
+    count++;
+    if (count > 10) {
+      Assert.fail("Since the sleep count has reached beyond a point" + "failing at this point");
+    }
+  }
+ while (!runningCount);
+  String taskIdKilled=null;
+  for (int i=0; i < MAX_MAP_TASK_ATTEMPTS; i++) {
+    taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    for (    TaskInfo taskInfo : taskInfos) {
+      TaskAttemptID taskAttemptID;
+      if (!taskInfo.isSetupOrCleanup()) {
+        TaskID taskid=TaskID.downgrade(taskInfo.getTaskID());
+        LOG.info("taskid is :" + taskid);
+        if (i == 0) {
+          taskIdKilled=taskid.toString();
+          taskAttemptID=new TaskAttemptID(taskid,i);
+          LOG.info("taskAttemptid going to be killed is : " + taskAttemptID);
+          (new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster)).killTask(taskAttemptID,true);
+          checkTaskCompletionEvent(taskAttemptID,jInfo);
+          break;
+        }
+ else {
+          if (taskIdKilled.equals(taskid.toString())) {
+            taskAttemptID=new TaskAttemptID(taskid,i);
+            LOG.info("taskAttemptid going to be killed is : " + taskAttemptID);
+            (new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster)).killTask(taskAttemptID,true);
+            checkTaskCompletionEvent(taskAttemptID,jInfo);
+            break;
+          }
+        }
+      }
+    }
+  }
+  while (jInfo != null && !jInfo.getStatus().isJobComplete()) {
+    Thread.sleep(10000);
+    jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  }
+  jobStatus=jobClient.getAllJobs();
+  JobStatus jobStatusFound=null;
+  for (  JobStatus jobStatusTmp : jobStatus) {
+    if (JobID.downgrade(jobStatusTmp.getJobID()).equals(jobidStore)) {
+      jobStatusFound=jobStatusTmp;
+      LOG.info("jobStatus found is :" + jobStatusFound.getJobId().toString());
+    }
+  }
+  Assert.assertEquals("The job should have failed at this stage",JobStatus.FAILED,jobStatusFound.getRunState());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestTaskTrackerDirectories </h4><pre class="type-14 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * If the log dir can't be created, the TT should fail to start since
+ * it will be unable to localize or run tasks.
+ */
+@Test public void testCantCreateLogDir() throws Exception {
+  File dir=TaskLog.getUserLogDir();
+  FileUtil.fullyDelete(dir);
+  assertTrue("Making file in place of log dir",dir.createNewFile());
+  try {
+    setupTaskController(new Configuration());
+    fail("Didn't throw!");
+  }
+ catch (  IOException ioe) {
+    System.err.println("Got expected exception");
+    ioe.printStackTrace(System.out);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.gridmix.TestFilePool </h4><pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testUnsuitable() throws Exception {
+  try {
+    final Configuration conf=new Configuration();
+    conf.setLong(FilePool.GRIDMIX_MIN_FILE,14 * 1024);
+    final FilePool pool=new FilePool(conf,base);
+    pool.refresh();
+  }
+ catch (  IOException e) {
+    return;
+  }
+  fail();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapreduce.security.TestBinaryTokenFile </h4><pre class="type-10 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * run a distributed job and verify that TokenCache is available
+ * @throws IOException
+ */
+@Test public void testBinaryTokenFile() throws IOException {
+  System.out.println("running dist job");
+  jConf=mrCluster.createJobConf();
+  String nnUri=dfsCluster.getURI().toString();
+  jConf.set(MRJobConfig.JOB_NAMENODES,nnUri + "," + nnUri);
+  jConf.set(JTConfig.JT_USER_NAME,"jt_id");
+  String[] args={"-m","1","-r","1","-mt","1","-rt","1"};
+  int res=-1;
+  try {
+    res=ToolRunner.run(jConf,new MySleepJob(),args);
+  }
+ catch (  Exception e) {
+    System.out.println("Job failed with" + e.getLocalizedMessage());
+    e.printStackTrace(System.out);
+    fail("Job failed");
+  }
+  assertEquals("dist job res is not 0",res,0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapreduce.security.TestTokenCache </h4><pre class="type-10 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * run a local job and verify that TokenCache is available
+ * @throws NoSuchAlgorithmException
+ * @throws IOException
+ */
+@Test public void testLocalJobTokenCache() throws NoSuchAlgorithmException, IOException {
+  System.out.println("running local job");
+  String[] args={"-m","1","-r","1","-mt","1","-rt","1"};
+  jConf.set("mapreduce.job.credentials.json",tokenFileName.toString());
+  int res=-1;
+  try {
+    res=ToolRunner.run(jConf,new MySleepJob(),args);
+  }
+ catch (  Exception e) {
+    System.out.println("Job failed with" + e.getLocalizedMessage());
+    e.printStackTrace(System.out);
+    fail("local Job failed");
+  }
+  assertEquals("local job res is not 0",res,0);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * run a distributed job and verify that TokenCache is available
+ * @throws IOException
+ */
+@Test public void testTokenCache() throws IOException {
+  System.out.println("running dist job");
+  jConf=mrCluster.createJobConf();
+  String nnUri=dfsCluster.getURI().toString();
+  jConf.set(MRJobConfig.JOB_NAMENODES,nnUri + "," + nnUri);
+  jConf.set(JTConfig.JT_USER_NAME,"jt_id");
+  String[] args={"-tokenCacheFile",tokenFileName.toString(),"-m","1","-r","1","-mt","1","-rt","1"};
+  int res=-1;
+  try {
+    res=ToolRunner.run(jConf,new MySleepJob(),args);
+  }
+ catch (  Exception e) {
+    System.out.println("Job failed with" + e.getLocalizedMessage());
+    e.printStackTrace(System.out);
+    fail("Job failed");
+  }
+  assertEquals("dist job res is not 0",res,0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapreduce.security.TestTokenCacheOldApi </h4><pre class="type-10 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * run a local job and verify that TokenCache is available
+ * @throws NoSuchAlgorithmException
+ * @throws IOException
+ */
+@Test public void testLocalJobTokenCache() throws NoSuchAlgorithmException, IOException {
+  String[] args={"-m","1","-r","1","-mt","1","-rt","1"};
+  jConf.set("mapreduce.job.credentials.json",tokenFileName.toString());
+  int res=-1;
+  try {
+    res=ToolRunner.run(jConf,new MyDummyJob(),args);
+  }
+ catch (  Exception e) {
+    System.out.println("Job failed with" + e.getLocalizedMessage());
+    e.printStackTrace(System.out);
+    fail("local Job failed");
+  }
+  assertEquals("local job res is not 0",res,0);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-14 type-4 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * run a distributed job and verify that TokenCache is available
+ * @throws IOException
+ */
+@Test public void testTokenCache() throws IOException {
+  jConf=mrCluster.createJobConf();
+  NameNode nn=dfsCluster.getNameNode();
+  URI nnUri=NameNode.getUri(nn.getNameNodeAddress());
+  jConf.set(JobContext.JOB_NAMENODES,nnUri + "," + nnUri.toString());
+  jConf.set(JobTracker.JT_USER_NAME,"jt_id");
+  String[] args={"-tokenCacheFile",tokenFileName.toString(),"-m","1","-r","1","-mt","1","-rt","1"};
+  int res=-1;
+  try {
+    res=ToolRunner.run(jConf,new MyDummyJob(),args);
+  }
+ catch (  Exception e) {
+    System.out.println("Job failed with" + e.getLocalizedMessage());
+    e.printStackTrace(System.out);
+    Assert.fail("Job failed");
+  }
+  assertEquals("dist job res is not 0",res,0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapreduce.security.token.delegation.TestDelegationToken </h4><pre class="type-14 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDelegationToken() throws Exception {
+  JobClient client;
+  client=user1.doAs(new PrivilegedExceptionAction<JobClient>(){
+    @Override public JobClient run() throws Exception {
+      return new JobClient(cluster.createJobConf());
+    }
+  }
+);
+  JobClient bobClient;
+  bobClient=user2.doAs(new PrivilegedExceptionAction<JobClient>(){
+    @Override public JobClient run() throws Exception {
+      return new JobClient(cluster.createJobConf());
+    }
+  }
+);
+  Token<DelegationTokenIdentifier> token=client.getDelegationToken(new Text(user1.getUserName()));
+  DataInputBuffer inBuf=new DataInputBuffer();
+  byte[] bytes=token.getIdentifier();
+  inBuf.reset(bytes,bytes.length);
+  DelegationTokenIdentifier ident=new DelegationTokenIdentifier();
+  ident.readFields(inBuf);
+  assertEquals("alice",ident.getUser().getUserName());
+  long createTime=ident.getIssueDate();
+  long maxTime=ident.getMaxDate();
+  long currentTime=System.currentTimeMillis();
+  System.out.println("create time: " + createTime);
+  System.out.println("current time: " + currentTime);
+  System.out.println("max time: " + maxTime);
+  assertTrue("createTime < current",createTime < currentTime);
+  assertTrue("current < maxTime",currentTime < maxTime);
+  client.renewDelegationToken(token);
+  client.renewDelegationToken(token);
+  try {
+    bobClient.renewDelegationToken(token);
+    Assert.fail("bob renew");
+  }
+ catch (  AccessControlException ace) {
+  }
+  try {
+    bobClient.cancelDelegationToken(token);
+    Assert.fail("bob renew");
+  }
+ catch (  AccessControlException ace) {
+  }
+  client.cancelDelegationToken(token);
+  try {
+    client.cancelDelegationToken(token);
+    Assert.fail("second alice cancel");
+  }
+ catch (  InvalidToken it) {
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.security.TestMapredGroupMappingServiceRefresh </h4><pre class="type-14 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testRefreshSuperUserGroupsConfiguration() throws Exception {
+  final String SUPER_USER="super_user";
+  final String[] GROUP_NAMES1=new String[]{"gr1","gr2"};
+  final String[] GROUP_NAMES2=new String[]{"gr3","gr4"};
+  String userKeyGroups=ProxyUsers.getProxySuperuserGroupConfKey(SUPER_USER);
+  String userKeyHosts=ProxyUsers.getProxySuperuserIpConfKey(SUPER_USER);
+  config.set(userKeyGroups,"gr3,gr4,gr5");
+  config.set(userKeyHosts,"127.0.0.1");
+  ProxyUsers.refreshSuperUserGroupsConfiguration(config);
+  UserGroupInformation ugi1=mock(UserGroupInformation.class);
+  UserGroupInformation ugi2=mock(UserGroupInformation.class);
+  UserGroupInformation suUgi=mock(UserGroupInformation.class);
+  when(ugi1.getRealUser()).thenReturn(suUgi);
+  when(ugi2.getRealUser()).thenReturn(suUgi);
+  when(suUgi.getShortUserName()).thenReturn(SUPER_USER);
+  when(suUgi.getUserName()).thenReturn(SUPER_USER + "L");
+  when(ugi1.getShortUserName()).thenReturn("user1");
+  when(ugi2.getShortUserName()).thenReturn("user2");
+  when(ugi1.getUserName()).thenReturn("userL1");
+  when(ugi2.getUserName()).thenReturn("userL2");
+  when(ugi1.getGroupNames()).thenReturn(GROUP_NAMES1);
+  when(ugi2.getGroupNames()).thenReturn(GROUP_NAMES2);
+  try {
+    ProxyUsers.authorize(ugi1,"127.0.0.1",config);
+    fail("first auth for " + ugi1.getShortUserName() + " should've failed ");
+  }
+ catch (  AuthorizationException e) {
+    System.err.println("auth for " + ugi1.getUserName() + " failed");
+  }
+  try {
+    ProxyUsers.authorize(ugi2,"127.0.0.1",config);
+    System.err.println("auth for " + ugi2.getUserName() + " succeeded");
+  }
+ catch (  AuthorizationException e) {
+    fail("first auth for " + ugi2.getShortUserName() + " should've succeeded: "+ e.getLocalizedMessage());
+  }
+  String rsrc="testRefreshSuperUserGroupsConfiguration_rsrc.xml";
+  addNewConfigResource(rsrc,userKeyGroups,"gr2",userKeyHosts,"127.0.0.1");
+  MRAdmin admin=new MRAdmin(config);
+  String[] args=new String[]{"-refreshSuperUserGroupsConfiguration"};
+  admin.run(args);
+  try {
+    ProxyUsers.authorize(ugi2,"127.0.0.1",config);
+    fail("second auth for " + ugi2.getShortUserName() + " should've failed ");
+  }
+ catch (  AuthorizationException e) {
+    System.err.println("auth for " + ugi2.getUserName() + " failed");
+  }
+  try {
+    ProxyUsers.authorize(ugi1,"127.0.0.1",config);
+    System.err.println("auth for " + ugi1.getUserName() + " succeeded");
+  }
+ catch (  AuthorizationException e) {
+    fail("second auth for " + ugi1.getShortUserName() + " should've succeeded: "+ e.getLocalizedMessage());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.streaming.TestStreamingTaskLog </h4><pre class="type-10 type-14 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test validates the setting of HADOOP_ROOT_LOGGER to 'INFO,TLA' and the
+ * dependent properties
+ * (a) hadoop.tasklog.taskid and
+ * (b) hadoop.tasklog.totalLogFileSize
+ * for the children of java tasks in streaming jobs.
+ */
+@Test public void testStreamingTaskLogWithHadoopCmd(){
+  try {
+    final int numSlaves=1;
+    JobConf conf=new JobConf();
+    fs=FileSystem.getLocal(conf);
+    Path testDir=new Path(System.getProperty("test.build.data","/tmp"));
+    if (fs.exists(testDir)) {
+      fs.delete(testDir,true);
+    }
+    fs.mkdirs(testDir);
+    File scriptFile=createScript(testDir.toString() + "/testTaskLog.sh");
+    conf.setBoolean(JTConfig.JT_PERSIST_JOBSTATUS,false);
+    mr=new MiniMRCluster(numSlaves,fs.getUri().toString(),1,null,null,conf);
+    writeInputFile(fs,inputPath);
+    map=scriptFile.getAbsolutePath();
+    runStreamJobAndValidateEnv();
+    fs.delete(outputPath,true);
+    assertFalse("output not cleaned up",fs.exists(outputPath));
+    mr.waitUntilIdle();
+  }
+ catch (  IOException e) {
+    fail(e.toString());
+  }
+ finally {
+    if (mr != null) {
+      mr.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.streaming.TestUlimit </h4><pre class="type-14 type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests the setting of memory limit for streaming processes.
+ * This will launch a streaming app which will allocate 10MB memory.
+ * First, program is launched with sufficient memory. And test expects
+ * it to succeed. Then program is launched with insufficient memory and 
+ * is expected to be a failure.  
+ */
+@Test public void testCommandLine(){
+  if (UtilTest.isCygwin()) {
+    return;
+  }
+  try {
+    final int numSlaves=2;
+    Configuration conf=new Configuration();
+    dfs=new MiniDFSCluster(conf,numSlaves,true,null);
+    fs=dfs.getFileSystem();
+    mr=new MiniMRCluster(numSlaves,fs.getUri().toString(),1);
+    writeInputFile(fs,inputPath);
+    map=UtilTest.makeJavaCommand(UlimitApp.class,new String[]{});
+    runProgram(SET_MEMORY_LIMIT);
+    fs.delete(outputPath,true);
+    assertFalse("output not cleaned up",fs.exists(outputPath));
+    mr.waitUntilIdle();
+  }
+ catch (  IOException e) {
+    fail(StringUtils.stringifyException(e));
+  }
+ finally {
+    if (mr != null) {
+      mr.shutdown();
+    }
+    if (dfs != null) {
+      dfs.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.tools.rumen.TestConcurrentRead </h4><pre class="type-13 type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testConcurrentRead() throws InterruptedException {
+  int nThr=conf.getInt("test.rumen.concurrent-read.threads",4);
+  int repeat=conf.getInt("test.rumen.concurrent-read.repeat",10);
+  CountDownLatch startSignal=new CountDownLatch(1);
+  CountDownLatch doneSignal=new CountDownLatch(nThr);
+  Map<String,Throwable> errors=Collections.synchronizedMap(new TreeMap<String,Throwable>());
+  for (int i=0; i < nThr; ++i) {
+    new TestThread(i,repeat,startSignal,doneSignal,errors).start();
+  }
+  startSignal.countDown();
+  doneSignal.await();
+  if (!errors.isEmpty()) {
+    StringBuilder sb=new StringBuilder();
+    for (    Map.Entry<String,Throwable> e : errors.entrySet()) {
+      sb.append(String.format("%s:\n%s\n",e.getKey(),e.getValue().toString()));
+    }
+    fail(sb.toString());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.tools.rumen.TestHistograms </h4><pre class="type-10 type-11 type-13 type-14 type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * @throws IOExceptionThere should be files in the directory named by
+ * ${test.build.data}/rumen/histogram-test .
+ * There will be pairs of files, inputXxx.json and goldXxx.json .
+ * We read the input file as a HistogramRawTestData in json. Then we
+ * create a Histogram using the data field, and then a
+ * LoggedDiscreteCDF using the percentiles and scale field. Finally,
+ * we read the corresponding goldXxx.json as a LoggedDiscreteCDF and
+ * deepCompare them.
+ */
+@Test public void testHistograms() throws IOException {
+  final Configuration conf=new Configuration();
+  final FileSystem lfs=FileSystem.getLocal(conf);
+  final Path rootInputDir=new Path(System.getProperty("test.tools.input.dir","")).makeQualified(lfs);
+  final Path rootInputFile=new Path(rootInputDir,"rumen/histogram-tests");
+  FileStatus[] tests=lfs.listStatus(rootInputFile);
+  for (int i=0; i < tests.length; ++i) {
+    Path filePath=tests[i].getPath();
+    String fileName=filePath.getName();
+    if (fileName.startsWith("input")) {
+      String testName=fileName.substring("input".length());
+      Path goldFilePath=new Path(rootInputFile,"gold" + testName);
+      assertTrue("Gold file dies not exist",lfs.exists(goldFilePath));
+      LoggedDiscreteCDF newResult=histogramFileToCDF(filePath,lfs);
+      System.out.println("Testing a Histogram for " + fileName);
+      FSDataInputStream goldStream=lfs.open(goldFilePath);
+      JsonObjectMapperParser<LoggedDiscreteCDF> parser=new JsonObjectMapperParser<LoggedDiscreteCDF>(goldStream,LoggedDiscreteCDF.class);
+      try {
+        LoggedDiscreteCDF dcdf=parser.getNext();
+        dcdf.deepCompare(newResult,new TreePath(null,"<root>"));
+      }
+ catch (      DeepInequalityException e) {
+        fail(e.path.toString());
+      }
+ finally {
+        parser.close();
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

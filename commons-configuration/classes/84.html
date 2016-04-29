@@ -1,0 +1,127 @@
+<h3 style="margin:0px">Class: org.apache.commons.configuration2.builder.combined.TestReloadingCombinedConfigurationBuilderFileBased (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-5 type-1 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests concurrent access to a reloading builder for combined
+ * configurations.
+ */
+@Test public void testConcurrentGetAndReload() throws Exception {
+  final int threadCount=4;
+  final int loopCount=100;
+  ReloadingDetectorFactory detectorFactory=new ReloadingDetectorFactory(){
+    @Override public ReloadingDetector createReloadingDetector(    FileHandler handler,    FileBasedBuilderParametersImpl params) throws ConfigurationException {
+      return new RandomReloadingDetector();
+    }
+  }
+;
+  BaseHierarchicalConfiguration defConf=new BaseHierarchicalConfiguration();
+  defConf.addProperty("header.result.nodeCombiner[@config-class]",MergeCombiner.class.getName());
+  defConf.addProperty("header.result.expressionEngine[@config-class]",XPathExpressionEngine.class.getName());
+  addReloadSource(defConf,"configA.xml");
+  addReloadSource(defConf,"configB.xml");
+  Synchronizer sync=new ReadWriteSynchronizer();
+  builder.configure(parameters.combined().setDefinitionBuilder(new ConstantConfigurationBuilder(defConf)).setSynchronizer(sync).registerChildDefaultsHandler(BasicBuilderProperties.class,new CopyObjectDefaultHandler(new BasicBuilderParameters().setSynchronizer(sync))).registerChildDefaultsHandler(FileBasedBuilderProperties.class,new CopyObjectDefaultHandler(new FileBasedBuilderParametersImpl().setReloadingDetectorFactory(detectorFactory))));
+  assertEquals("Wrong initial value","100",builder.getConfiguration().getString("/property[@name='config']/@value"));
+  Thread testThreads[]=new Thread[threadCount];
+  int failures[]=new int[threadCount];
+  for (int i=0; i < testThreads.length; ++i) {
+    testThreads[i]=new ReloadThread(builder,failures,i,loopCount);
+    testThreads[i].start();
+  }
+  int totalFailures=0;
+  for (int i=0; i < testThreads.length; ++i) {
+    testThreads[i].join();
+    totalFailures+=failures[i];
+  }
+  assertTrue(totalFailures + " failures Occurred",totalFailures == 0);
+}
+
+</code></pre>
+
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  parameters=new Parameters();
+  builder=new ReloadingCombinedConfigurationBuilder();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests whether the default definition builder is capable of detecting a
+ * change in the definition configuration.
+ */
+@Test public void testReloadDefinitionFileDefaultBuilder() throws ConfigurationException, IOException, InterruptedException {
+  File defFile=folder.newFile();
+  builder.configure(parameters.combined().setDefinitionBuilderParameters(parameters.xml().setReloadingRefreshDelay(0L).setFile(defFile)));
+  checkReloadDefinitionFile(defFile);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests whether a change in the definition file is detected and causes a
+ * reload if a specific builder for the definition configuration is
+ * provided.
+ */
+@Test public void testReloadDefinitionFileExplicitBuilder() throws ConfigurationException, IOException, InterruptedException {
+  File defFile=folder.newFile();
+  builder.configure(parameters.combined().setDefinitionBuilder(new ReloadingFileBasedConfigurationBuilder<XMLConfiguration>(XMLConfiguration.class).configure(parameters.xml().setReloadingRefreshDelay(0L).setFile(defFile))));
+  checkReloadDefinitionFile(defFile);
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests whether a changed file is detected on disk.
+ */
+@Test public void testReloadFromFile() throws ConfigurationException, IOException {
+  File xmlConf1=writeReloadFile(null,1,0);
+  File xmlConf2=writeReloadFile(null,2,0);
+  ReloadingDetectorFactory detectorFactory=new ReloadingDetectorFactory(){
+    @Override public ReloadingDetector createReloadingDetector(    FileHandler handler,    FileBasedBuilderParametersImpl params) throws ConfigurationException {
+      return new AlwaysReloadingDetector();
+    }
+  }
+;
+  BaseHierarchicalConfiguration defConf=new BaseHierarchicalConfiguration();
+  addReloadSource(defConf,xmlConf1.getAbsolutePath());
+  addReloadSource(defConf,xmlConf2.getAbsolutePath());
+  builder.configure(parameters.combined().setDefinitionBuilder(new ConstantConfigurationBuilder(defConf)).registerChildDefaultsHandler(FileBasedBuilderProperties.class,new CopyObjectDefaultHandler(new FileBasedBuilderParametersImpl().setReloadingDetectorFactory(detectorFactory))));
+  CombinedConfiguration config=builder.getConfiguration();
+  assertEquals("Wrong initial value (1)",0,config.getInt(testProperty(1)));
+  assertEquals("Wrong initial value (2)",0,config.getInt(testProperty(2)));
+  writeReloadFile(xmlConf1,1,1);
+  builder.getReloadingController().checkForReloading(null);
+  config=builder.getConfiguration();
+  assertEquals("Updated value not reloaded (1)",1,config.getInt(testProperty(1)));
+  assertEquals("Value modified",0,config.getInt(testProperty(2)));
+  writeReloadFile(xmlConf2,2,2);
+  builder.getReloadingController().checkForReloading(null);
+  config=builder.getConfiguration();
+  assertEquals("Wrong value for config 1",1,config.getInt(testProperty(1)));
+  assertEquals("Updated value not reloaded (2)",2,config.getInt(testProperty(2)));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

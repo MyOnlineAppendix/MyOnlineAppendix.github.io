@@ -1,0 +1,372 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.startupprogress.TestStartupProgress (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testThreadSafety() throws Exception {
+  int numThreads=100;
+  Phase[] phases={LOADING_FSIMAGE,LOADING_FSIMAGE,LOADING_EDITS,LOADING_EDITS};
+  Step[] steps=new Step[]{new Step(INODES),new Step(DELEGATION_KEYS),new Step(INODES),new Step(DELEGATION_KEYS)};
+  String[] files={"file1","file1","file2","file2"};
+  long[] sizes={1000L,1000L,2000L,2000L};
+  long[] totals={10000L,20000L,30000L,40000L};
+  ExecutorService exec=Executors.newFixedThreadPool(numThreads);
+  try {
+    for (int i=0; i < numThreads; ++i) {
+      final Phase phase=phases[i % phases.length];
+      final Step step=steps[i % steps.length];
+      final String file=files[i % files.length];
+      final long size=sizes[i % sizes.length];
+      final long total=totals[i % totals.length];
+      exec.submit(new Callable<Void>(){
+        @Override public Void call(){
+          startupProgress.beginPhase(phase);
+          startupProgress.setFile(phase,file);
+          startupProgress.setSize(phase,size);
+          startupProgress.setTotal(phase,step,total);
+          incrementCounter(startupProgress,phase,step,100L);
+          startupProgress.endStep(phase,step);
+          startupProgress.endPhase(phase);
+          return null;
+        }
+      }
+);
+    }
+  }
+  finally {
+    exec.shutdown();
+    assertTrue(exec.awaitTermination(10000L,TimeUnit.MILLISECONDS));
+  }
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals("file1",view.getFile(LOADING_FSIMAGE));
+  assertEquals(1000L,view.getSize(LOADING_FSIMAGE));
+  assertEquals(10000L,view.getTotal(LOADING_FSIMAGE,new Step(INODES)));
+  assertEquals(2500L,view.getCount(LOADING_FSIMAGE,new Step(INODES)));
+  assertEquals(20000L,view.getTotal(LOADING_FSIMAGE,new Step(DELEGATION_KEYS)));
+  assertEquals(2500L,view.getCount(LOADING_FSIMAGE,new Step(DELEGATION_KEYS)));
+  assertEquals("file2",view.getFile(LOADING_EDITS));
+  assertEquals(2000L,view.getSize(LOADING_EDITS));
+  assertEquals(30000L,view.getTotal(LOADING_EDITS,new Step(INODES)));
+  assertEquals(2500L,view.getCount(LOADING_EDITS,new Step(INODES)));
+  assertEquals(40000L,view.getTotal(LOADING_EDITS,new Step(DELEGATION_KEYS)));
+  assertEquals(2500L,view.getCount(LOADING_EDITS,new Step(DELEGATION_KEYS)));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testCounter(){
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  Step loadingFsImageInodes=new Step(INODES);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,loadingFsImageInodes,100L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  Step loadingFsImageDelegationKeys=new Step(DELEGATION_KEYS);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,loadingFsImageDelegationKeys,200L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.beginPhase(LOADING_EDITS);
+  Step loadingEditsFile=new Step("file",1000L);
+  startupProgress.beginStep(LOADING_EDITS,loadingEditsFile);
+  incrementCounter(startupProgress,LOADING_EDITS,loadingEditsFile,5000L);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(100L,view.getCount(LOADING_FSIMAGE,loadingFsImageInodes));
+  assertEquals(200L,view.getCount(LOADING_FSIMAGE,loadingFsImageDelegationKeys));
+  assertEquals(5000L,view.getCount(LOADING_EDITS,loadingEditsFile));
+  assertEquals(0L,view.getCount(SAVING_CHECKPOINT,new Step(INODES)));
+  incrementCounter(startupProgress,LOADING_EDITS,loadingEditsFile,1000L);
+  startupProgress.endStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.endPhase(LOADING_EDITS);
+  assertEquals(5000L,view.getCount(LOADING_EDITS,loadingEditsFile));
+  view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(6000L,view.getCount(LOADING_EDITS,loadingEditsFile));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testStepSequence(){
+  Step[] expectedSteps=new Step[]{new Step(INODES,"file1"),new Step(DELEGATION_KEYS,"file1"),new Step(INODES,"file2"),new Step(DELEGATION_KEYS,"file2"),new Step(INODES,"file3"),new Step(DELEGATION_KEYS,"file3")};
+  List<Step> shuffledSteps=new ArrayList<Step>(Arrays.asList(expectedSteps));
+  Collections.shuffle(shuffledSteps);
+  startupProgress.beginPhase(SAVING_CHECKPOINT);
+  for (  Step step : shuffledSteps) {
+    startupProgress.beginStep(SAVING_CHECKPOINT,step);
+  }
+  List<Step> actualSteps=new ArrayList<Step>(expectedSteps.length);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  for (  Step step : view.getSteps(SAVING_CHECKPOINT)) {
+    actualSteps.add(step);
+  }
+  assertArrayEquals(expectedSteps,actualSteps.toArray());
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testElapsedTime() throws Exception {
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  Step loadingFsImageInodes=new Step(INODES);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  Thread.sleep(50L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  Step loadingFsImageDelegationKeys=new Step(DELEGATION_KEYS);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  Thread.sleep(50L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.beginPhase(LOADING_EDITS);
+  Step loadingEditsFile=new Step("file",1000L);
+  startupProgress.beginStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.setTotal(LOADING_EDITS,loadingEditsFile,10000L);
+  incrementCounter(startupProgress,LOADING_EDITS,loadingEditsFile,5000L);
+  Thread.sleep(50L);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertTrue(view.getElapsedTime() > 0);
+  assertTrue(view.getElapsedTime(LOADING_FSIMAGE) > 0);
+  assertTrue(view.getElapsedTime(LOADING_FSIMAGE,loadingFsImageInodes) > 0);
+  assertTrue(view.getElapsedTime(LOADING_FSIMAGE,loadingFsImageDelegationKeys) > 0);
+  assertTrue(view.getElapsedTime(LOADING_EDITS) > 0);
+  assertTrue(view.getElapsedTime(LOADING_EDITS,loadingEditsFile) > 0);
+  assertTrue(view.getElapsedTime(SAVING_CHECKPOINT) == 0);
+  assertTrue(view.getElapsedTime(SAVING_CHECKPOINT,new Step(INODES)) == 0);
+  long totalTime=view.getElapsedTime();
+  long loadingFsImageTime=view.getElapsedTime(LOADING_FSIMAGE);
+  long loadingFsImageInodesTime=view.getElapsedTime(LOADING_FSIMAGE,loadingFsImageInodes);
+  long loadingFsImageDelegationKeysTime=view.getElapsedTime(LOADING_FSIMAGE,loadingFsImageInodes);
+  long loadingEditsTime=view.getElapsedTime(LOADING_EDITS);
+  long loadingEditsFileTime=view.getElapsedTime(LOADING_EDITS,loadingEditsFile);
+  Thread.sleep(50L);
+  assertTrue(totalTime < view.getElapsedTime());
+  assertEquals(loadingFsImageTime,view.getElapsedTime(LOADING_FSIMAGE));
+  assertEquals(loadingFsImageInodesTime,view.getElapsedTime(LOADING_FSIMAGE,loadingFsImageInodes));
+  assertTrue(loadingEditsTime < view.getElapsedTime(LOADING_EDITS));
+  assertTrue(loadingEditsFileTime < view.getElapsedTime(LOADING_EDITS,loadingEditsFile));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testPercentComplete(){
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  Step loadingFsImageInodes=new Step(INODES);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  startupProgress.setTotal(LOADING_FSIMAGE,loadingFsImageInodes,1000L);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,loadingFsImageInodes,100L);
+  Step loadingFsImageDelegationKeys=new Step(DELEGATION_KEYS);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.setTotal(LOADING_FSIMAGE,loadingFsImageDelegationKeys,800L);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,loadingFsImageDelegationKeys,200L);
+  startupProgress.beginPhase(LOADING_EDITS);
+  Step loadingEditsFile=new Step("file",1000L);
+  startupProgress.beginStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.setTotal(LOADING_EDITS,loadingEditsFile,10000L);
+  incrementCounter(startupProgress,LOADING_EDITS,loadingEditsFile,5000L);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(0.167f,view.getPercentComplete(),0.001f);
+  assertEquals(0.167f,view.getPercentComplete(LOADING_FSIMAGE),0.001f);
+  assertEquals(0.10f,view.getPercentComplete(LOADING_FSIMAGE,loadingFsImageInodes),0.001f);
+  assertEquals(0.25f,view.getPercentComplete(LOADING_FSIMAGE,loadingFsImageDelegationKeys),0.001f);
+  assertEquals(0.5f,view.getPercentComplete(LOADING_EDITS),0.001f);
+  assertEquals(0.5f,view.getPercentComplete(LOADING_EDITS,loadingEditsFile),0.001f);
+  assertEquals(0.0f,view.getPercentComplete(SAVING_CHECKPOINT),0.001f);
+  assertEquals(0.0f,view.getPercentComplete(SAVING_CHECKPOINT,new Step(INODES)),0.001f);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.endStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.endPhase(LOADING_EDITS);
+  view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(0.5f,view.getPercentComplete(),0.001f);
+  assertEquals(1.0f,view.getPercentComplete(LOADING_FSIMAGE),0.001f);
+  assertEquals(1.0f,view.getPercentComplete(LOADING_FSIMAGE,loadingFsImageInodes),0.001f);
+  assertEquals(1.0f,view.getPercentComplete(LOADING_FSIMAGE,loadingFsImageDelegationKeys),0.001f);
+  assertEquals(1.0f,view.getPercentComplete(LOADING_EDITS),0.001f);
+  assertEquals(1.0f,view.getPercentComplete(LOADING_EDITS,loadingEditsFile),0.001f);
+  assertEquals(0.0f,view.getPercentComplete(SAVING_CHECKPOINT),0.001f);
+  assertEquals(0.0f,view.getPercentComplete(SAVING_CHECKPOINT,new Step(INODES)),0.001f);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testInitialState(){
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(0L,view.getElapsedTime());
+  assertEquals(0.0f,view.getPercentComplete(),0.001f);
+  List<Phase> phases=new ArrayList<Phase>();
+  for (  Phase phase : view.getPhases()) {
+    phases.add(phase);
+    assertEquals(0L,view.getElapsedTime(phase));
+    assertNull(view.getFile(phase));
+    assertEquals(0.0f,view.getPercentComplete(phase),0.001f);
+    assertEquals(Long.MIN_VALUE,view.getSize(phase));
+    assertEquals(PENDING,view.getStatus(phase));
+    assertEquals(0L,view.getTotal(phase));
+    for (    Step step : view.getSteps(phase)) {
+      fail(String.format("unexpected step %s in phase %s at initial state",step,phase));
+    }
+  }
+  assertArrayEquals(EnumSet.allOf(Phase.class).toArray(),phases.toArray());
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testFrozenAfterStartupCompletes(){
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  startupProgress.setFile(LOADING_FSIMAGE,"file1");
+  startupProgress.setSize(LOADING_FSIMAGE,1000L);
+  Step step=new Step(INODES);
+  startupProgress.beginStep(LOADING_FSIMAGE,step);
+  startupProgress.setTotal(LOADING_FSIMAGE,step,10000L);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,step,100L);
+  startupProgress.endStep(LOADING_FSIMAGE,step);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  for (  Phase phase : EnumSet.allOf(Phase.class)) {
+    if (startupProgress.getStatus(phase) != Status.COMPLETE) {
+      startupProgress.beginPhase(phase);
+      startupProgress.endPhase(phase);
+    }
+  }
+  StartupProgressView before=startupProgress.createView();
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  startupProgress.setFile(LOADING_FSIMAGE,"file2");
+  startupProgress.setSize(LOADING_FSIMAGE,2000L);
+  startupProgress.beginStep(LOADING_FSIMAGE,step);
+  startupProgress.setTotal(LOADING_FSIMAGE,step,20000L);
+  incrementCounter(startupProgress,LOADING_FSIMAGE,step,100L);
+  startupProgress.endStep(LOADING_FSIMAGE,step);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.beginPhase(LOADING_EDITS);
+  Step newStep=new Step("file1");
+  startupProgress.beginStep(LOADING_EDITS,newStep);
+  incrementCounter(startupProgress,LOADING_EDITS,newStep,100L);
+  startupProgress.endStep(LOADING_EDITS,newStep);
+  startupProgress.endPhase(LOADING_EDITS);
+  StartupProgressView after=startupProgress.createView();
+  assertEquals(before.getCount(LOADING_FSIMAGE),after.getCount(LOADING_FSIMAGE));
+  assertEquals(before.getCount(LOADING_FSIMAGE,step),after.getCount(LOADING_FSIMAGE,step));
+  assertEquals(before.getElapsedTime(),after.getElapsedTime());
+  assertEquals(before.getElapsedTime(LOADING_FSIMAGE),after.getElapsedTime(LOADING_FSIMAGE));
+  assertEquals(before.getElapsedTime(LOADING_FSIMAGE,step),after.getElapsedTime(LOADING_FSIMAGE,step));
+  assertEquals(before.getFile(LOADING_FSIMAGE),after.getFile(LOADING_FSIMAGE));
+  assertEquals(before.getSize(LOADING_FSIMAGE),after.getSize(LOADING_FSIMAGE));
+  assertEquals(before.getTotal(LOADING_FSIMAGE),after.getTotal(LOADING_FSIMAGE));
+  assertEquals(before.getTotal(LOADING_FSIMAGE,step),after.getTotal(LOADING_FSIMAGE,step));
+  assertFalse(after.getSteps(LOADING_EDITS).iterator().hasNext());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  startupProgress=new StartupProgress();
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testTotal(){
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  Step loadingFsImageInodes=new Step(INODES);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  startupProgress.setTotal(LOADING_FSIMAGE,loadingFsImageInodes,1000L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageInodes);
+  Step loadingFsImageDelegationKeys=new Step(DELEGATION_KEYS);
+  startupProgress.beginStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.setTotal(LOADING_FSIMAGE,loadingFsImageDelegationKeys,800L);
+  startupProgress.endStep(LOADING_FSIMAGE,loadingFsImageDelegationKeys);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.beginPhase(LOADING_EDITS);
+  Step loadingEditsFile=new Step("file",1000L);
+  startupProgress.beginStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.setTotal(LOADING_EDITS,loadingEditsFile,10000L);
+  startupProgress.endStep(LOADING_EDITS,loadingEditsFile);
+  startupProgress.endPhase(LOADING_EDITS);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(1000L,view.getTotal(LOADING_FSIMAGE,loadingFsImageInodes));
+  assertEquals(800L,view.getTotal(LOADING_FSIMAGE,loadingFsImageDelegationKeys));
+  assertEquals(10000L,view.getTotal(LOADING_EDITS,loadingEditsFile));
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testStatus(){
+  startupProgress.beginPhase(LOADING_FSIMAGE);
+  startupProgress.endPhase(LOADING_FSIMAGE);
+  startupProgress.beginPhase(LOADING_EDITS);
+  StartupProgressView view=startupProgress.createView();
+  assertNotNull(view);
+  assertEquals(COMPLETE,view.getStatus(LOADING_FSIMAGE));
+  assertEquals(RUNNING,view.getStatus(LOADING_EDITS));
+  assertEquals(PENDING,view.getStatus(SAVING_CHECKPOINT));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

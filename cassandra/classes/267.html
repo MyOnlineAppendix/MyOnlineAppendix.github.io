@@ -1,0 +1,182 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.locator.PropertyFileSnitchTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(5)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws ConfigurationException, IOException {
+  String confFile=FBUtilities.resourceToFile(PropertyFileSnitch.SNITCH_PROPERTIES_FILENAME);
+  effectiveFile=Paths.get(confFile);
+  backupFile=Paths.get(confFile + ".bak");
+  restoreOrigConfigFile();
+  InetAddress[] hosts={InetAddress.getByName("127.0.0.1"),InetAddress.getByName("127.0.0.2"),InetAddress.getByName("127.0.0.9")};
+  IPartitioner partitioner=new RandomPartitioner();
+  valueFactory=new VersionedValue.VersionedValueFactory(partitioner);
+  tokenMap=new HashMap<>();
+  for (  InetAddress host : hosts) {
+    Set<Token> tokens=Collections.singleton(partitioner.getRandomToken());
+    Gossiper.instance.initializeNodeUnsafe(host,UUID.randomUUID(),1);
+    Gossiper.instance.injectApplicationState(host,ApplicationState.TOKENS,valueFactory.tokens(tokens));
+    setNodeShutdown(host);
+    tokenMap.put(host,tokens);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that removing a host from the configuration file changes the host rack only if the host
+ * is not live. The original configuration file contains 127.0.0.2=DC1:RAC2 and default=DC1:r1 so removing
+ * this host should result in a different rack if the host is not live.
+ */
+@Test public void testRemoveHost() throws Exception {
+  final InetAddress host=InetAddress.getByName("127.0.0.2");
+  final PropertyFileSnitch snitch=new PropertyFileSnitch(1);
+  checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC2");
+  try {
+    setNodeLive(host);
+    Files.copy(effectiveFile,backupFile);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),""));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC2");
+    setNodeShutdown(host);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),""));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","r1");
+  }
+  finally {
+    restoreOrigConfigFile();
+    setNodeShutdown(host);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that adding a host to the configuration file changes the host dc and rack only if the host
+ * is not live. The original configuration file does not contain 127.0.0.9 and so it should use
+ * the default default=DC1:r1.
+ */
+@Test public void testAddHost() throws Exception {
+  final InetAddress host=InetAddress.getByName("127.0.0.9");
+  final PropertyFileSnitch snitch=new PropertyFileSnitch(1);
+  checkEndpoint(snitch,host.getHostAddress(),"DC1","r1");
+  try {
+    setNodeLive(host);
+    Files.copy(effectiveFile,backupFile);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC2:RAC2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","r1");
+    setNodeShutdown(host);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC2:RAC2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC2","RAC2");
+  }
+  finally {
+    restoreOrigConfigFile();
+    setNodeShutdown(host);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that we can change the default only if this does not result in any live node changing dc or rack.
+ * The configuration file contains default=DC1:r1 and we change it to default=DC2:r2. Let's use host 127.0.0.9
+ * since it is not in the configuration file.
+ */
+@Test public void testChangeDefault() throws Exception {
+  final InetAddress host=InetAddress.getByName("127.0.0.9");
+  final PropertyFileSnitch snitch=new PropertyFileSnitch(1);
+  checkEndpoint(snitch,host.getHostAddress(),"DC1","r1");
+  try {
+    setNodeLive(host);
+    Files.copy(effectiveFile,backupFile);
+    replaceConfigFile(Collections.singletonMap("default","DC2:r2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","r1");
+    setNodeShutdown(host);
+    replaceConfigFile(Collections.singletonMap("default","DC2:r2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC2","r2");
+  }
+  finally {
+    restoreOrigConfigFile();
+    setNodeShutdown(host);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that changing dc for a host in the configuration file is only effective if the host is not live.
+ * The original configuration file contains: 127.0.0.1=DC1:RAC1
+ */
+@Test public void testChangeHostDc() throws Exception {
+  final InetAddress host=InetAddress.getByName("127.0.0.1");
+  final PropertyFileSnitch snitch=new PropertyFileSnitch(1);
+  checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC1");
+  try {
+    setNodeLive(host);
+    Files.copy(effectiveFile,backupFile);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC2:RAC1"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC1");
+    setNodeShutdown(host);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC2:RAC1"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC2","RAC1");
+  }
+  finally {
+    restoreOrigConfigFile();
+    setNodeShutdown(host);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that changing rack for a host in the configuration file is only effective if the host is not live.
+ * The original configuration file contains: 127.0.0.1=DC1:RAC1
+ */
+@Test public void testChangeHostRack() throws Exception {
+  final InetAddress host=InetAddress.getByName("127.0.0.1");
+  final PropertyFileSnitch snitch=new PropertyFileSnitch(1);
+  checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC1");
+  try {
+    setNodeLive(host);
+    Files.copy(effectiveFile,backupFile);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC1:RAC2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC1");
+    setNodeShutdown(host);
+    replaceConfigFile(Collections.singletonMap(host.getHostAddress(),"DC1:RAC2"));
+    Thread.sleep(1500);
+    checkEndpoint(snitch,host.getHostAddress(),"DC1","RAC2");
+  }
+  finally {
+    restoreOrigConfigFile();
+    setNodeShutdown(host);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

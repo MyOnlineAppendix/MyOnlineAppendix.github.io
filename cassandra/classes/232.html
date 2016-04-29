@@ -1,0 +1,394 @@
+<h3 style="margin:0px">Class: org.apache.cassandra.io.sstable.IndexSummaryManagerTest (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-13 type-4 type-5 type-2 type-8 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=10000) public void testRedistributeSummaries() throws IOException {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  int numSSTables=4;
+  int numRows=256;
+  createSSTables(ksname,cfname,numSSTables,numRows);
+  int minSamplingLevel=(BASE_SAMPLING_LEVEL * cfs.metadata.params.minIndexInterval) / cfs.metadata.params.maxIndexInterval;
+  List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   sstable.overrideReadMeter(new RestorableMeter(100.0,100.0));
+  long singleSummaryOffHeapSpace=sstables.get(0).getIndexSummaryOffHeapSize();
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * numSSTables));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL,sstable.getIndexSummarySamplingLevel());
+  assertEquals(singleSummaryOffHeapSpace * numSSTables,totalOffHeapSize(sstables));
+  validateData(cfs,numRows);
+  assert sstables.size() == 4;
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 2)));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 2,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 4)));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 4,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * (numSSTables / 2) + 4));
+  }
+   assert sstables.size() == 4;
+  for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL / 2,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * numSSTables));
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(BASE_SAMPLING_LEVEL,sstable.getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(50.0,50.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(50.0,50.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(1).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  double lowerRate=50.0 * (DOWNSAMPLE_THESHOLD + (DOWNSAMPLE_THESHOLD * 0.10));
+  double higherRate=50.0 * (UPSAMPLE_THRESHOLD - (UPSAMPLE_THRESHOLD * 0.10));
+  sstables.get(0).overrideReadMeter(new RestorableMeter(lowerRate,lowerRate));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(higherRate,higherRate));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL / 2,sstables.get(1).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables=resetSummaries(cfs,sstables,singleSummaryOffHeapSpace);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(1.0,1.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(2.0,2.0));
+  sstables.get(2).overrideReadMeter(new RestorableMeter(1000.0,1000.0));
+  sstables.get(3).overrideReadMeter(new RestorableMeter(1000.0,1000.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(singleSummaryOffHeapSpace * 3) + 50);
+  }
+   Collections.sort(sstables,hotnessComparator);
+  if (sstables.get(0).getIndexSummarySamplingLevel() == minSamplingLevel)   assertEquals(BASE_SAMPLING_LEVEL,sstables.get(1).getIndexSummarySamplingLevel());
+ else   assertEquals(BASE_SAMPLING_LEVEL,sstables.get(0).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(2).getIndexSummarySamplingLevel());
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  sstables.get(0).overrideReadMeter(new RestorableMeter(0.0,0.0));
+  sstables.get(1).overrideReadMeter(new RestorableMeter(0.0,0.0));
+  sstables.get(2).overrideReadMeter(new RestorableMeter(92,92));
+  sstables.get(3).overrideReadMeter(new RestorableMeter(128.0,128.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(long)(singleSummaryOffHeapSpace + (singleSummaryOffHeapSpace * (92.0 / BASE_SAMPLING_LEVEL))));
+  }
+   Collections.sort(sstables,hotnessComparator);
+  assertEquals(1,sstables.get(0).getIndexSummarySize());
+  assertEquals(1,sstables.get(0).getIndexSummarySize());
+  assertTrue(sstables.get(2).getIndexSummarySamplingLevel() > minSamplingLevel);
+  assertTrue(sstables.get(2).getIndexSummarySamplingLevel() < BASE_SAMPLING_LEVEL);
+  assertEquals(BASE_SAMPLING_LEVEL,sstables.get(3).getIndexSummarySamplingLevel());
+  validateData(cfs,numRows);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    sstables=redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),10);
+  }
+   for (  SSTableReader sstable : sstables)   assertEquals(1,sstable.getIndexSummarySize());
+  validateData(cfs,numRows);
+}
+
+</code></pre>
+
+<pre class="type-7 type-13 type-4 type-5 type-2 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJMXFunctions() throws IOException {
+  IndexSummaryManager manager=IndexSummaryManager.instance;
+  manager.setResizeIntervalInMinutes(-1);
+  assertNull(manager.getTimeToNextResize(TimeUnit.MINUTES));
+  manager.setResizeIntervalInMinutes(10);
+  assertEquals(10,manager.getResizeIntervalInMinutes());
+  assertEquals(10,manager.getTimeToNextResize(TimeUnit.MINUTES),1);
+  manager.setResizeIntervalInMinutes(15);
+  assertEquals(15,manager.getResizeIntervalInMinutes());
+  assertEquals(15,manager.getTimeToNextResize(TimeUnit.MINUTES),2);
+  assertTrue(manager.getMemoryPoolCapacityInMB() >= 0);
+  manager.setMemoryPoolCapacityInMB(10);
+  assertEquals(10,manager.getMemoryPoolCapacityInMB());
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  cfs.truncateBlocking();
+  cfs.disableAutoCompaction();
+  ByteBuffer value=ByteBuffer.wrap(new byte[100]);
+  int numSSTables=2;
+  int numRows=10;
+  for (int sstable=0; sstable < numSSTables; sstable++) {
+    for (int row=0; row < numRows; row++) {
+      String key=String.format("%3d",row);
+      new RowUpdateBuilder(cfs.metadata,0,key).clustering("column").add("val",value).build().applyUnsafe();
+    }
+    cfs.forceBlockingFlush();
+  }
+  assertTrue(manager.getAverageIndexInterval() >= cfs.metadata.params.minIndexInterval);
+  Map<String,Integer> intervals=manager.getIndexIntervals();
+  for (  Map.Entry<String,Integer> entry : intervals.entrySet())   if (entry.getKey().contains(CF_STANDARDLOWiINTERVAL))   assertEquals(cfs.metadata.params.minIndexInterval,entry.getValue(),0.001);
+  manager.setMemoryPoolCapacityInMB(0);
+  manager.redistributeSummaries();
+  assertTrue(manager.getAverageIndexInterval() > cfs.metadata.params.minIndexInterval);
+  intervals=manager.getIndexIntervals();
+  for (  Map.Entry<String,Integer> entry : intervals.entrySet()) {
+    if (entry.getKey().contains(CF_STANDARDLOWiINTERVAL))     assertTrue(entry.getValue() >= cfs.metadata.params.minIndexInterval);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testChangeMaxIndexInterval() throws IOException {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  int numSSTables=1;
+  int numRows=256;
+  createSSTables(ksname,cfname,numSSTables,numRows);
+  List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   sstable.overrideReadMeter(new RestorableMeter(100.0,100.0));
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),10);
+  }
+   sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   assertEquals(cfs.metadata.params.maxIndexInterval,sstable.getEffectiveIndexInterval(),0.01);
+  cfs.metadata.maxIndexInterval(cfs.metadata.params.maxIndexInterval / 2);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),1);
+  }
+   sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables) {
+    assertEquals(cfs.metadata.params.maxIndexInterval,sstable.getEffectiveIndexInterval(),0.01);
+    assertEquals(numRows / cfs.metadata.params.maxIndexInterval,sstable.getIndexSummarySize());
+  }
+  cfs.metadata.maxIndexInterval(cfs.metadata.params.maxIndexInterval * 2);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),1);
+  }
+   for (  SSTableReader sstable : cfs.getLiveSSTables()) {
+    assertEquals(cfs.metadata.params.maxIndexInterval,sstable.getEffectiveIndexInterval(),0.01);
+    assertEquals(numRows / cfs.metadata.params.maxIndexInterval,sstable.getIndexSummarySize());
+  }
+}
+
+</code></pre>
+
+<pre class="type-6 type-7 type-4 type-2 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testRebuildAtSamplingLevel() throws IOException {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  cfs.truncateBlocking();
+  cfs.disableAutoCompaction();
+  ByteBuffer value=ByteBuffer.wrap(new byte[100]);
+  int numRows=256;
+  for (int row=0; row < numRows; row++) {
+    String key=String.format("%3d",row);
+    new RowUpdateBuilder(cfs.metadata,0,key).clustering("column").add("val",value).build().applyUnsafe();
+  }
+  cfs.forceBlockingFlush();
+  List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  assertEquals(1,sstables.size());
+  SSTableReader original=sstables.get(0);
+  SSTableReader sstable=original;
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(asList(sstable),OperationType.UNKNOWN)){
+    for (int samplingLevel=1; samplingLevel < BASE_SAMPLING_LEVEL; samplingLevel++) {
+      sstable=sstable.cloneWithNewSummarySamplingLevel(cfs,samplingLevel);
+      assertEquals(samplingLevel,sstable.getIndexSummarySamplingLevel());
+      int expectedSize=(numRows * samplingLevel) / (sstable.metadata.params.minIndexInterval * BASE_SAMPLING_LEVEL);
+      assertEquals(expectedSize,sstable.getIndexSummarySize(),1);
+      txn.update(sstable,true);
+      txn.checkpoint();
+    }
+    txn.finish();
+  }
+ }
+
+</code></pre>
+
+<pre class="type-7 type-4 type-5 type-12 type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCancelIndex() throws Exception {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  final ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  final int numSSTables=4;
+  int numRows=256;
+  createSSTables(ksname,cfname,numSSTables,numRows);
+  final List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   sstable.overrideReadMeter(new RestorableMeter(100.0,100.0));
+  final long singleSummaryOffHeapSpace=sstables.get(0).getIndexSummaryOffHeapSize();
+  final AtomicReference<CompactionInterruptedException> exception=new AtomicReference<>();
+  Thread t=new Thread(new Runnable(){
+    public void run(){
+      try {
+        try (LifecycleTransaction txn=cfs.getTracker().tryModify(sstables,OperationType.UNKNOWN)){
+          redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),singleSummaryOffHeapSpace);
+        }
+       }
+ catch (      CompactionInterruptedException ex) {
+        exception.set(ex);
+      }
+catch (      IOException ignored) {
+      }
+    }
+  }
+);
+  t.start();
+  while (CompactionManager.instance.getActiveCompactions() == 0 && t.isAlive())   Thread.sleep(1);
+  CompactionManager.instance.stopCompaction("INDEX_SUMMARY");
+  t.join();
+  assertNotNull("Expected compaction interrupted exception",exception.get());
+  assertTrue("Expected no active compactions",CompactionMetrics.getCompactions().isEmpty());
+  Set<SSTableReader> beforeRedistributionSSTables=new HashSet<>(sstables);
+  Set<SSTableReader> afterCancelSSTables=new HashSet<>(cfs.getLiveSSTables());
+  Set<SSTableReader> disjoint=Sets.symmetricDifference(beforeRedistributionSSTables,afterCancelSSTables);
+  assertTrue(String.format("Mismatched files before and after cancelling redistribution: %s",Joiner.on(",").join(disjoint)),disjoint.isEmpty());
+  validateData(cfs,numRows);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void beforeTest(){
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  originalMinIndexInterval=cfs.metadata.params.minIndexInterval;
+  originalMaxIndexInterval=cfs.metadata.params.maxIndexInterval;
+  originalCapacity=IndexSummaryManager.instance.getMemoryPoolCapacityInMB();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void afterTest(){
+  for (  CompactionInfo.Holder holder : CompactionMetrics.getCompactions()) {
+    holder.stop();
+  }
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  cfs.metadata.minIndexInterval(originalMinIndexInterval);
+  cfs.metadata.maxIndexInterval(originalMaxIndexInterval);
+  IndexSummaryManager.instance.setMemoryPoolCapacityInMB(originalCapacity);
+}
+
+</code></pre>
+
+<pre class="type-7 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testChangeMinIndexInterval() throws IOException {
+  String ksname=KEYSPACE1;
+  String cfname=CF_STANDARDLOWiINTERVAL;
+  Keyspace keyspace=Keyspace.open(ksname);
+  ColumnFamilyStore cfs=keyspace.getColumnFamilyStore(cfname);
+  int numSSTables=1;
+  int numRows=256;
+  createSSTables(ksname,cfname,numSSTables,numRows);
+  List<SSTableReader> sstables=new ArrayList<>(cfs.getLiveSSTables());
+  for (  SSTableReader sstable : sstables)   sstable.overrideReadMeter(new RestorableMeter(100.0,100.0));
+  for (  SSTableReader sstable : sstables)   assertEquals(cfs.metadata.params.minIndexInterval,sstable.getEffectiveIndexInterval(),0.001);
+  cfs.metadata.minIndexInterval(originalMinIndexInterval * 2);
+  IndexSummaryManager.instance.redistributeSummaries();
+  for (  SSTableReader sstable : cfs.getLiveSSTables()) {
+    assertEquals(cfs.metadata.params.minIndexInterval,sstable.getEffectiveIndexInterval(),0.001);
+    assertEquals(numRows / cfs.metadata.params.minIndexInterval,sstable.getIndexSummarySize());
+  }
+  cfs.metadata.minIndexInterval(originalMinIndexInterval);
+  IndexSummaryManager.instance.redistributeSummaries();
+  for (  SSTableReader sstable : cfs.getLiveSSTables()) {
+    assertEquals(cfs.metadata.params.minIndexInterval,sstable.getEffectiveIndexInterval(),0.001);
+    assertEquals(numRows / cfs.metadata.params.minIndexInterval,sstable.getIndexSummarySize());
+  }
+  cfs.metadata.minIndexInterval(originalMinIndexInterval / 2);
+  SSTableReader sstable=cfs.getLiveSSTables().iterator().next();
+  long summarySpace=sstable.getIndexSummaryOffHeapSize();
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(asList(sstable),OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),summarySpace);
+  }
+   sstable=cfs.getLiveSSTables().iterator().next();
+  assertEquals(originalMinIndexInterval,sstable.getEffectiveIndexInterval(),0.001);
+  assertEquals(numRows / originalMinIndexInterval,sstable.getIndexSummarySize());
+  double previousInterval=sstable.getEffectiveIndexInterval();
+  int previousSize=sstable.getIndexSummarySize();
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(asList(sstable),OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(long)Math.ceil(summarySpace * 1.5));
+  }
+   sstable=cfs.getLiveSSTables().iterator().next();
+  assertEquals(previousSize * 1.5,(double)sstable.getIndexSummarySize(),1);
+  assertEquals(previousInterval * (1.0 / 1.5),sstable.getEffectiveIndexInterval(),0.001);
+  cfs.metadata.minIndexInterval(originalMinIndexInterval);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(asList(sstable),OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),(long)Math.ceil(summarySpace / 2.0));
+  }
+   sstable=cfs.getLiveSSTables().iterator().next();
+  assertEquals(originalMinIndexInterval * 2,sstable.getEffectiveIndexInterval(),0.001);
+  assertEquals(numRows / (originalMinIndexInterval * 2),sstable.getIndexSummarySize());
+  cfs.metadata.minIndexInterval(originalMinIndexInterval * 4);
+  cfs.metadata.maxIndexInterval(originalMinIndexInterval * 4);
+  try (LifecycleTransaction txn=cfs.getTracker().tryModify(asList(sstable),OperationType.UNKNOWN)){
+    redistributeSummaries(Collections.EMPTY_LIST,of(cfs.metadata.cfId,txn),10);
+  }
+   sstable=cfs.getLiveSSTables().iterator().next();
+  assertEquals(cfs.metadata.params.minIndexInterval,sstable.getEffectiveIndexInterval(),0.001);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,1542 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.mahout.cf.taste.hadoop.item.RecommenderJobTest </h4><pre class="type-3 type-8 type-5 type-9 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * small integration test that runs the full job
+ * As a tribute to http://www.slideshare.net/srowen/collaborative-filtering-at-scale,
+ * we recommend people food to animals in this test :)
+ * <pre>
+ * user-item-matrix
+ * burger  hotdog  berries  icecream
+ * dog       5       5        2        -
+ * rabbit    2       -        3        5
+ * cow       -       5        -        3
+ * donkey    3       -        -        5
+ * item-item-similarity-matrix (tanimoto-coefficient of the item-vectors of the user-item-matrix)
+ * burger  hotdog  berries icecream
+ * burger    -      0.25    0.66    0.5
+ * hotdog   0.25     -      0.33    0.25
+ * berries  0.66    0.33     -      0.25
+ * icecream 0.5     0.25    0.25     -
+ * Prediction(dog, icecream)   = (0.5 * 5 + 0.25 * 5 + 0.25 * 2 ) / (0.5 + 0.25 + 0.25)  ~ 4.3
+ * Prediction(rabbit, hotdog)  = (0.25 * 2 + 0.33 * 3 + 0.25 * 5) / (0.25 + 0.33 + 0.25) ~ 3,3
+ * Prediction(cow, burger)     = (0.25 * 5 + 0.5 * 3) / (0.25 + 0.5)                     ~ 3,7
+ * Prediction(cow, berries)    = (0.33 * 5 + 0.25 * 3) / (0.33 + 0.25)                   ~ 4,1
+ * Prediction(donkey, hotdog)  = (0.25 * 3 + 0.25 * 5) / (0.25 + 0.25)                   ~ 4
+ * Prediction(donkey, berries) = (0.66 * 3 + 0.25 * 5) / (0.66 + 0.25)                   ~ 3,5
+ * </pre>
+ */
+@Test public void testCompleteJob() throws Exception {
+  File inputFile=getTestTempFile("prefs.txt");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File similaritiesOutputDir=getTestTempDir("outputSimilarities");
+  similaritiesOutputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  writeLines(inputFile,"1,1,5","1,2,5","1,3,2","2,1,2","2,3,3","2,4,5","3,2,5","3,4,3","4,1,3","4,4,5");
+  RecommenderJob recommenderJob=new RecommenderJob();
+  Configuration conf=getConfiguration();
+  conf.set("mapred.input.dir",inputFile.getAbsolutePath());
+  conf.set("mapred.output.dir",outputDir.getAbsolutePath());
+  conf.setBoolean("mapred.output.compress",false);
+  recommenderJob.setConf(conf);
+  recommenderJob.run(new String[]{"--tempDir",tmpDir.getAbsolutePath(),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--numRecommendations","4","--outputPathForSimilarityMatrix",similaritiesOutputDir.getAbsolutePath()});
+  Map<Long,List<RecommendedItem>> recommendations=readRecommendations(new File(outputDir,"part-r-00000"));
+  assertEquals(4,recommendations.size());
+  for (  Entry<Long,List<RecommendedItem>> entry : recommendations.entrySet()) {
+    long userID=entry.getKey();
+    List<RecommendedItem> items=entry.getValue();
+    assertNotNull(items);
+    RecommendedItem item1=items.get(0);
+    if (userID == 1L) {
+      assertEquals(1,items.size());
+      assertEquals(4L,item1.getItemID());
+      assertEquals(4.3,item1.getValue(),0.05);
+    }
+    if (userID == 2L) {
+      assertEquals(1,items.size());
+      assertEquals(2L,item1.getItemID());
+      assertEquals(3.3,item1.getValue(),0.05);
+    }
+    if (userID == 3L) {
+      assertEquals(2,items.size());
+      assertEquals(3L,item1.getItemID());
+      assertEquals(4.1,item1.getValue(),0.05);
+      RecommendedItem item2=items.get(1);
+      assertEquals(1L,item2.getItemID());
+      assertEquals(3.7,item2.getValue(),0.05);
+    }
+    if (userID == 4L) {
+      assertEquals(2,items.size());
+      assertEquals(2L,item1.getItemID());
+      assertEquals(4.0,item1.getValue(),0.05);
+      RecommendedItem item2=items.get(1);
+      assertEquals(3L,item2.getItemID());
+      assertEquals(3.5,item2.getValue(),0.05);
+    }
+  }
+  Map<Pair<Long,Long>,Double> similarities=readSimilarities(new File(similaritiesOutputDir,"part-r-00000"));
+  assertEquals(6,similarities.size());
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(1L,2L)),EPSILON);
+  assertEquals(0.6666666666666666,similarities.get(new Pair<Long,Long>(1L,3L)),EPSILON);
+  assertEquals(0.5,similarities.get(new Pair<Long,Long>(1L,4L)),EPSILON);
+  assertEquals(0.3333333333333333,similarities.get(new Pair<Long,Long>(2L,3L)),EPSILON);
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(2L,4L)),EPSILON);
+  assertEquals(0.25,similarities.get(new Pair<Long,Long>(3L,4L)),EPSILON);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.hadoop.similarity.item.ItemSimilarityJobTest </h4><pre class="type-11 type-3 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Integration test with a tiny data set
+ * <pre>
+ * user-item-matrix
+ * Game   Mouse   PC    Disk
+ * Jane    -       1      2      -
+ * Paul    1       -      1      -
+ * Fred    -       -      -      1
+ * </pre>
+ */
+@Test public void testCompleteJob() throws Exception {
+  File inputFile=getTestTempFile("prefs.txt");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  writeLines(inputFile,"2,1,1","1,2,1","3,4,1","1,3,2","2,3,1");
+  ItemSimilarityJob similarityJob=new ItemSimilarityJob();
+  Configuration conf=getConfiguration();
+  conf.set("mapred.input.dir",inputFile.getAbsolutePath());
+  conf.set("mapred.output.dir",outputDir.getAbsolutePath());
+  conf.setBoolean("mapred.output.compress",false);
+  similarityJob.setConf(conf);
+  similarityJob.run(new String[]{"--tempDir",tmpDir.getAbsolutePath(),"--similarityClassname",CosineSimilarity.class.getName()});
+  File outPart=outputDir.listFiles(new FilenameFilter(){
+    @Override public boolean accept(    File dir,    String name){
+      return name.startsWith("part-");
+    }
+  }
+)[0];
+  BufferedReader reader=Files.newReader(outPart,Charsets.UTF_8);
+  String line;
+  int currentLine=1;
+  while ((line=reader.readLine()) != null) {
+    String[] tokens=TAB.split(line);
+    long itemAID=Long.parseLong(tokens[0]);
+    long itemBID=Long.parseLong(tokens[1]);
+    double similarity=Double.parseDouble(tokens[2]);
+    if (currentLine == 1) {
+      assertEquals(1L,itemAID);
+      assertEquals(3L,itemBID);
+      assertEquals(0.45,similarity,0.01);
+    }
+    if (currentLine == 2) {
+      assertEquals(2L,itemAID);
+      assertEquals(3L,itemBID);
+      assertEquals(0.89,similarity,0.01);
+    }
+    currentLine++;
+  }
+  int linesWritten=currentLine - 1;
+  assertEquals(2,linesWritten);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-3 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * integration test for the limitation of the number of computed similarities
+ * <pre>
+ * user-item-matrix
+ * i1  i2  i3
+ * u1   1   0   1
+ * u2   0   1   1
+ * u3   1   1   0
+ * u4   1   1   1
+ * u5   0   1   0
+ * u6   1   1   0
+ * tanimoto(i1,i2) = 0.5
+ * tanimoto(i2,i3) = 0.333
+ * tanimoto(i3,i1) = 0.4
+ * When we set maxSimilaritiesPerItem to 1 the following pairs should be found:
+ * i1 --> i2
+ * i2 --> i1
+ * i3 --> i1
+ * </pre>
+ */
+@Test public void testMaxSimilaritiesPerItem() throws Exception {
+  File inputFile=getTestTempFile("prefsForMaxSimilarities.txt");
+  File outputDir=getTestTempDir("output");
+  outputDir.delete();
+  File tmpDir=getTestTempDir("tmp");
+  writeLines(inputFile,"1,1,1","1,3,1","2,2,1","2,3,1","3,1,1","3,2,1","4,1,1","4,2,1","4,3,1","5,2,1","6,1,1","6,2,1");
+  ItemSimilarityJob similarityJob=new ItemSimilarityJob();
+  Configuration conf=getConfiguration();
+  conf.set("mapred.input.dir",inputFile.getAbsolutePath());
+  conf.set("mapred.output.dir",outputDir.getAbsolutePath());
+  conf.setBoolean("mapred.output.compress",false);
+  similarityJob.setConf(conf);
+  similarityJob.run(new String[]{"--tempDir",tmpDir.getAbsolutePath(),"--similarityClassname",TanimotoCoefficientSimilarity.class.getName(),"--maxSimilaritiesPerItem","1"});
+  File outPart=outputDir.listFiles(new FilenameFilter(){
+    @Override public boolean accept(    File dir,    String name){
+      return name.startsWith("part-");
+    }
+  }
+)[0];
+  BufferedReader reader=Files.newReader(outPart,Charsets.UTF_8);
+  String line;
+  int currentLine=1;
+  while ((line=reader.readLine()) != null) {
+    String[] tokens=TAB.split(line);
+    long itemAID=Long.parseLong(tokens[0]);
+    long itemBID=Long.parseLong(tokens[1]);
+    double similarity=Double.parseDouble(tokens[2]);
+    if (currentLine == 1) {
+      assertEquals(1L,itemAID);
+      assertEquals(2L,itemBID);
+      assertEquals(0.5,similarity,0.0001);
+    }
+    if (currentLine == 2) {
+      assertEquals(1L,itemAID);
+      assertEquals(3L,itemBID);
+      assertEquals(0.4,similarity,0.0001);
+    }
+    currentLine++;
+  }
+  int linesWritten=currentLine - 1;
+  assertEquals(2,linesWritten);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.CacheTest </h4><pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMixedUsage() throws TasteException {
+  Random random=RandomUtils.getRandom();
+  Retriever<Object,Object> retriever=new IdentityRetriever();
+  Cache<Object,Object> cache=new Cache<Object,Object>(retriever,1000);
+  for (int i=0; i < 1000000; i++) {
+    double r=random.nextDouble();
+    if (r < 0.01) {
+      cache.clear();
+    }
+ else     if (r < 0.1) {
+      cache.remove(r - 100);
+    }
+ else {
+      assertEquals(i,cache.get(i));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.FastByIDMapTest </h4><pre class="type-11 type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testVersusHashMap(){
+  FastByIDMap<String> actual=new FastByIDMap<String>();
+  Map<Long,String> expected=Maps.newHashMapWithExpectedSize(1000000);
+  Random r=RandomUtils.getRandom();
+  for (int i=0; i < 1000000; i++) {
+    double d=r.nextDouble();
+    Long key=(long)r.nextInt(100);
+    if (d < 0.4) {
+      assertEquals(expected.get(key),actual.get(key));
+    }
+ else {
+      if (d < 0.7) {
+        assertEquals(expected.put(key,"bang"),actual.put(key,"bang"));
+      }
+ else {
+        assertEquals(expected.remove(key),actual.remove(key));
+      }
+      assertEquals(expected.size(),actual.size());
+      assertEquals(expected.isEmpty(),actual.isEmpty());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.FastIDSetTest </h4><pre class="type-11 type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testVersusHashSet(){
+  FastIDSet actual=new FastIDSet(1);
+  Collection<Integer> expected=Sets.newHashSetWithExpectedSize(1000000);
+  Random r=RandomUtils.getRandom();
+  for (int i=0; i < 1000000; i++) {
+    double d=r.nextDouble();
+    Integer key=r.nextInt(100);
+    if (d < 0.4) {
+      assertEquals(expected.contains(key),actual.contains(key));
+    }
+ else {
+      if (d < 0.7) {
+        assertEquals(expected.add(key),actual.add(key));
+      }
+ else {
+        assertEquals(expected.remove(key),actual.remove(key));
+      }
+      assertEquals(expected.size(),actual.size());
+      assertEquals(expected.isEmpty(),actual.isEmpty());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.cf.taste.impl.common.FastMapTest </h4><pre class="type-11 type-3 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testVersusHashMap(){
+  Map<Integer,String> actual=new FastMap<Integer,String>(1,1000000);
+  Map<Integer,String> expected=Maps.newHashMapWithExpectedSize(1000000);
+  Random r=RandomUtils.getRandom();
+  for (int i=0; i < 1000000; i++) {
+    double d=r.nextDouble();
+    Integer key=r.nextInt(100);
+    if (d < 0.4) {
+      assertEquals(expected.get(key),actual.get(key));
+    }
+ else {
+      if (d < 0.7) {
+        assertEquals(expected.put(key,"foo"),actual.put(key,"foo"));
+      }
+ else {
+        assertEquals(expected.remove(key),actual.remove(key));
+      }
+      assertEquals(expected.size(),actual.size());
+      assertEquals(expected.isEmpty(),actual.isEmpty());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.df.data.DataTest </h4><pre class="type-11 type-3 type-8 type-2 type-5 type-15 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Test method for{@link org.apache.mahout.classifier.df.data.Data#subset(org.apache.mahout.classifier.df.data.conditions.Condition)}.
+ */
+@Test public void testSubset(){
+  int n=10;
+  for (int nloop=0; nloop < n; nloop++) {
+    int attr=rng.nextInt(classifierData.getDataset().nbAttributes());
+    double[] values=classifierData.values(attr);
+    double value=values[rng.nextInt(values.length)];
+    Data eSubset=classifierData.subset(Condition.equals(attr,value));
+    Data lSubset=classifierData.subset(Condition.lesser(attr,value));
+    Data gSubset=classifierData.subset(Condition.greaterOrEquals(attr,value));
+    for (int index=0; index < DATA_SIZE; index++) {
+      Instance instance=classifierData.get(index);
+      if (instance.get(attr) < value) {
+        assertTrue(lSubset.contains(instance));
+        assertFalse(eSubset.contains(instance));
+        assertFalse(gSubset.contains(instance));
+      }
+ else       if (instance.get(attr) == value) {
+        assertFalse(lSubset.contains(instance));
+        assertTrue(eSubset.contains(instance));
+        assertTrue(gSubset.contains(instance));
+      }
+ else {
+        assertFalse(lSubset.contains(instance));
+        assertFalse(eSubset.contains(instance));
+        assertTrue(gSubset.contains(instance));
+      }
+    }
+    attr=rng.nextInt(regressionData.getDataset().nbAttributes());
+    values=regressionData.values(attr);
+    value=values[rng.nextInt(values.length)];
+    eSubset=regressionData.subset(Condition.equals(attr,value));
+    lSubset=regressionData.subset(Condition.lesser(attr,value));
+    gSubset=regressionData.subset(Condition.greaterOrEquals(attr,value));
+    for (int index=0; index < DATA_SIZE; index++) {
+      Instance instance=regressionData.get(index);
+      if (instance.get(attr) < value) {
+        assertTrue(lSubset.contains(instance));
+        assertFalse(eSubset.contains(instance));
+        assertFalse(gSubset.contains(instance));
+      }
+ else       if (instance.get(attr) == value) {
+        assertFalse(lSubset.contains(instance));
+        assertTrue(eSubset.contains(instance));
+        assertTrue(gSubset.contains(instance));
+      }
+ else {
+        assertFalse(lSubset.contains(instance));
+        assertFalse(eSubset.contains(instance));
+        assertTrue(gSubset.contains(instance));
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.df.data.DescriptorUtilsTest </h4><pre class="type-11 type-3 type-8 type-2 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test method for{@link org.apache.mahout.classifier.df.data.DescriptorUtils#parseDescriptor(java.lang.CharSequence)}.
+ */
+@Test public void testParseDescriptor() throws Exception {
+  int n=10;
+  int maxnbAttributes=100;
+  Random rng=RandomUtils.getRandom();
+  for (int nloop=0; nloop < n; nloop++) {
+    int nbAttributes=rng.nextInt(maxnbAttributes) + 1;
+    char[] tokens=Utils.randomTokens(rng,nbAttributes);
+    Attribute[] attrs=DescriptorUtils.parseDescriptor(Utils.generateDescriptor(tokens));
+    assertEquals("attributes size",nbAttributes,attrs.length);
+    for (int attr=0; attr < nbAttributes; attr++) {
+switch (tokens[attr]) {
+case 'I':
+        assertTrue(attrs[attr].isIgnored());
+      break;
+case 'N':
+    assertTrue(attrs[attr].isNumerical());
+  break;
+case 'C':
+assertTrue(attrs[attr].isCategorical());
+break;
+case 'L':
+assertTrue(attrs[attr].isLabel());
+break;
+}
+}
+}
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.df.mapreduce.inmem.InMemInputFormatTest </h4><pre class="type-11 type-3 type-8 type-2 type-5 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSplits() throws Exception {
+  int n=1;
+  int maxNumSplits=100;
+  int maxNbTrees=1000;
+  Random rng=RandomUtils.getRandom();
+  for (int nloop=0; nloop < n; nloop++) {
+    int numSplits=rng.nextInt(maxNumSplits) + 1;
+    int nbTrees=rng.nextInt(maxNbTrees) + 1;
+    Configuration conf=getConfiguration();
+    Builder.setNbTrees(conf,nbTrees);
+    InMemInputFormat inputFormat=new InMemInputFormat();
+    List<InputSplit> splits=inputFormat.getSplits(conf,numSplits);
+    assertEquals(numSplits,splits.size());
+    int nbTreesPerSplit=nbTrees / numSplits;
+    int totalTrees=0;
+    int expectedId=0;
+    for (int index=0; index < numSplits; index++) {
+      assertTrue(splits.get(index) instanceof InMemInputSplit);
+      InMemInputSplit split=(InMemInputSplit)splits.get(index);
+      assertEquals(expectedId,split.getFirstId());
+      if (index < numSplits - 1) {
+        assertEquals(nbTreesPerSplit,split.getNbTrees());
+      }
+ else {
+        assertEquals(nbTrees - totalTrees,split.getNbTrees());
+      }
+      totalTrees+=split.getNbTrees();
+      expectedId+=split.getNbTrees();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.sequencelearning.hmm.HMMUtilsTest </h4><pre class="type-11 type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTruncateModel(){
+  DenseVector ip=new DenseVector(new double[]{0.0001,0.0001,0.9998});
+  DenseMatrix tr=new DenseMatrix(new double[][]{{0.9998,0.0001,0.0001},{0.0001,0.9998,0.0001},{0.0001,0.0001,0.9998}});
+  DenseMatrix em=new DenseMatrix(new double[][]{{0.9998,0.0001,0.0001},{0.0001,0.9998,0.0001},{0.0001,0.0001,0.9998}});
+  HmmModel model=new HmmModel(tr,em,ip);
+  HmmModel sparseModel=HmmUtils.truncateModel(model,0.01);
+  HmmUtils.validate(sparseModel);
+  Vector sparse_ip=sparseModel.getInitialProbabilities();
+  Matrix sparse_tr=sparseModel.getTransitionMatrix();
+  Matrix sparse_em=sparseModel.getEmissionMatrix();
+  for (int i=0; i < sparseModel.getNrOfHiddenStates(); ++i) {
+    assertEquals(i == 2 ? 1.0 : 0.0,sparse_ip.getQuick(i),EPSILON);
+    for (int j=0; j < sparseModel.getNrOfHiddenStates(); ++j) {
+      if (i == j) {
+        assertEquals(1.0,sparse_tr.getQuick(i,j),EPSILON);
+        assertEquals(1.0,sparse_em.getQuick(i,j),EPSILON);
+      }
+ else {
+        assertEquals(0.0,sparse_tr.getQuick(i,j),EPSILON);
+        assertEquals(0.0,sparse_em.getQuick(i,j),EPSILON);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.classifier.sgd.AdaptiveLogisticRegressionTest </h4><pre class="type-11 type-8 type-2 type-5 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void copyLearnsAsExpected(){
+  Random gen=RandomUtils.getRandom();
+  Exponential exp=new Exponential(0.5,gen);
+  Vector beta=new DenseVector(200);
+  for (  Vector.Element element : beta.all()) {
+    int sign=1;
+    if (gen.nextDouble() < 0.5) {
+      sign=-1;
+    }
+    element.set(sign * exp.nextDouble());
+  }
+  AdaptiveLogisticRegression.Wrapper w=new AdaptiveLogisticRegression.Wrapper(2,200,new L1());
+  for (int i=0; i < 3000; i++) {
+    AdaptiveLogisticRegression.TrainingExample r=getExample(i,gen,beta);
+    w.train(r);
+    if (i % 1000 == 0) {
+      System.out.printf("%10d %.3f\n",i,w.getLearner().auc());
+    }
+  }
+  System.out.printf("%10d %.3f\n",3000,w.getLearner().auc());
+  double auc1=w.getLearner().auc();
+  AdaptiveLogisticRegression.Wrapper w2=w.copy();
+  for (int i=0; i < 5000; i++) {
+    if (i % 1000 == 0) {
+      if (i == 0) {
+        assertEquals("Should have started with no data",0.5,w2.getLearner().auc(),0.0001);
+      }
+      if (i == 1000) {
+        double auc2=w2.getLearner().auc();
+        assertTrue("Should have had head-start",Math.abs(auc2 - 0.5) > 0.1);
+        assertTrue("AUC should improve quickly on copy",auc1 < auc2);
+      }
+      System.out.printf("%10d %.3f\n",i,w2.getLearner().auc());
+    }
+    AdaptiveLogisticRegression.TrainingExample r=getExample(i,gen,beta);
+    w2.train(r);
+  }
+  assertEquals("Original should not change after copy is updated",auc1,w.getLearner().auc(),1.0e-5);
+  assertTrue("AUC should improve significantly on copy",auc1 < w2.getLearner().auc() - 0.05);
+  assertEquals(auc1,w.getLearner().auc(),0);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.clustering.kmeans.TestKmeansClustering </h4><pre class="type-3 type-8 type-10 type-2 type-5 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Story: User wants to use canopy clustering to input the initial clusters
+ * for kmeans job.
+ */
+@Test public void testKMeansWithCanopyClusterInput() throws Exception {
+  List<VectorWritable> points=getPointsWritable(REFERENCE);
+  Path pointsPath=getTestTempDirPath("points");
+  Configuration conf=getConfiguration();
+  ClusteringTestUtils.writePointsToFile(points,true,new Path(pointsPath,"file1"),fs,conf);
+  ClusteringTestUtils.writePointsToFile(points,true,new Path(pointsPath,"file2"),fs,conf);
+  Path outputPath=getTestTempDirPath("output");
+  CanopyDriver.run(conf,pointsPath,outputPath,new ManhattanDistanceMeasure(),3.1,2.1,false,0.0,false);
+  DummyOutputCollector<Text,ClusterWritable> collector1=new DummyOutputCollector<Text,ClusterWritable>();
+  FileStatus[] outParts=FileSystem.get(conf).globStatus(new Path(outputPath,"clusters-0-final/*-0*"));
+  for (  FileStatus outPartStat : outParts) {
+    for (    Pair<Text,ClusterWritable> record : new SequenceFileIterable<Text,ClusterWritable>(outPartStat.getPath(),conf)) {
+      collector1.collect(record.getFirst(),record.getSecond());
+    }
+  }
+  boolean got15=false;
+  boolean got43=false;
+  int count=0;
+  for (  Text k : collector1.getKeys()) {
+    count++;
+    List<ClusterWritable> vl=collector1.getValue(k);
+    assertEquals("non-singleton centroid!",1,vl.size());
+    ClusterWritable clusterWritable=vl.get(0);
+    Vector v=clusterWritable.getValue().getCenter();
+    assertEquals("cetriod vector is wrong length",2,v.size());
+    if ((Math.abs(v.get(0) - 1.5) < EPSILON) && (Math.abs(v.get(1) - 1.5) < EPSILON) && !got15) {
+      got15=true;
+    }
+ else     if ((Math.abs(v.get(0) - 4.333333333333334) < EPSILON) && (Math.abs(v.get(1) - 4.333333333333334) < EPSILON) && !got43) {
+      got43=true;
+    }
+ else {
+      fail("got unexpected center: " + v + " ["+ v.getClass().toString()+ ']');
+    }
+  }
+  assertEquals("got unexpected number of centers",2,count);
+  Path kmeansOutput=new Path(outputPath,"kmeans");
+  KMeansDriver.run(getConfiguration(),pointsPath,new Path(outputPath,"clusters-0-final"),kmeansOutput,0.001,10,true,0.0,false);
+  Path clusteredPointsPath=new Path(kmeansOutput,"clusteredPoints");
+  DummyOutputCollector<IntWritable,WeightedPropertyVectorWritable> collector=new DummyOutputCollector<IntWritable,WeightedPropertyVectorWritable>();
+  for (  Pair<IntWritable,WeightedPropertyVectorWritable> record : new SequenceFileIterable<IntWritable,WeightedPropertyVectorWritable>(new Path(clusteredPointsPath,"part-m-00000"),conf)) {
+    collector.collect(record.getFirst(),record.getSecond());
+  }
+  for (  IntWritable k : collector.getKeys()) {
+    List<WeightedPropertyVectorWritable> wpvList=collector.getValue(k);
+    assertTrue("empty cluster!",!wpvList.isEmpty());
+    if (wpvList.get(0).getVector().get(0) <= 2.0) {
+      for (      WeightedPropertyVectorWritable wv : wpvList) {
+        Vector v=wv.getVector();
+        int idx=v.maxValueIndex();
+        assertTrue("bad cluster!",v.get(idx) <= 2.0);
+      }
+      assertEquals("Wrong size cluster",4,wpvList.size());
+    }
+ else {
+      for (      WeightedPropertyVectorWritable wv : wpvList) {
+        Vector v=wv.getVector();
+        int idx=v.minValueIndex();
+        assertTrue("bad cluster!",v.get(idx) > 2.0);
+      }
+      assertEquals("Wrong size cluster",5,wpvList.size());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.common.iterator.SamplerCase </h4><pre class="type-11 type-3 type-8 type-2 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSample(){
+  Iterator<Integer> source=new CountingIterator(100);
+  Iterator<Integer> t=createSampler(15,source);
+  List<Integer> expectedValues=Arrays.asList(52,28,2,60,50,32,65,79,78,9,40,33,96,25,48);
+  if (isSorted()) {
+    Collections.sort(expectedValues);
+  }
+  Iterator<Integer> expected=expectedValues.iterator();
+  int last=Integer.MIN_VALUE;
+  for (int i=0; i < 15; i++) {
+    assertTrue(t.hasNext());
+    int actual=t.next();
+    if (isSorted()) {
+      assertTrue(actual >= last);
+      last=actual;
+    }
+ else {
+      if (actual < 15) {
+        assertEquals(i,actual);
+      }
+    }
+    assertTrue(actual >= 0 && actual < 100);
+    assertEquals(expected.next().intValue(),actual);
+    assertFalse(source.hasNext());
+  }
+  assertFalse(t.hasNext());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.AbstractVectorTest </h4><pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTimesDouble(){
+  Vector val=test.times(3);
+  assertEquals("size",test.size(),val.size());
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2] * 3.0,val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testNormalize(){
+  Vector val=test.normalize();
+  double mag=Math.sqrt(1.1 * 1.1 + 2.2 * 2.2 + 3.3 * 3.3);
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("dot",values[i / 2] / mag,val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAssignBinaryFunction2(){
+  test.assign(Functions.plus(4));
+  for (int i=0; i < values.length; i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',4.0,test.get(i),EPSILON);
+    }
+ else {
+      assertEquals("value[" + i + ']',values[i - 1] + 4,test.getQuick(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTimesVector(){
+  Vector val=test.times(test);
+  assertEquals("size",test.size(),val.size());
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2] * values[i / 2],val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGet(){
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,test.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2],test.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAssignBinaryFunction(){
+  test.assign(test,Functions.PLUS);
+  for (int i=0; i < values.length; i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,test.get(i),EPSILON);
+    }
+ else {
+      assertEquals("value[" + i + ']',2 * values[i - 1],test.getQuick(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-3 type-8 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testSmallDistances(){
+  for (  double fuzz : new double[]{1.0e-5,1.0e-6,1.0e-7,1.0e-8,1.0e-9,1.0e-10}) {
+    MultiNormal x=new MultiNormal(fuzz,new ConstantVector(0,20));
+    for (int i=0; i < 10000; i++) {
+      final T v1=vectorToTest(20);
+      Vector v2=v1.plus(x.sample());
+      if (1 + fuzz * fuzz > 1) {
+        String msg=String.format("fuzz = %.1g, >",fuzz);
+        assertTrue(msg,v1.getDistanceSquared(v2) > 0);
+        assertTrue(msg,v2.getDistanceSquared(v1) > 0);
+      }
+ else {
+        String msg=String.format("fuzz = %.1g, >=",fuzz);
+        assertTrue(msg,v1.getDistanceSquared(v2) >= 0);
+        assertTrue(msg,v2.getDistanceSquared(v1) >= 0);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testAssignBinaryFunction3(){
+  test.assign(Functions.mult(4));
+  for (int i=0; i < values.length; i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,test.get(i),EPSILON);
+    }
+ else {
+      assertEquals("value[" + i + ']',values[i - 1] * 4,test.getQuick(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPlusVector(){
+  Vector val=test.plus(test);
+  assertEquals("size",test.size(),val.size());
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2] * 2.0,val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPlusDouble(){
+  Vector val=test.plus(1);
+  assertEquals("size",test.size(),val.size());
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',1.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2] + 1.0,val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDivideDouble(){
+  Vector val=test.divide(3);
+  assertEquals("size",test.size(),val.size());
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,val.get(i),EPSILON);
+    }
+ else {
+      assertEquals("get [" + i + ']',values[i / 2] / 3.0,val.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testSet(){
+  test.set(3,4.5);
+  for (int i=0; i < test.size(); i++) {
+    if (i % 2 == 0) {
+      assertEquals("get [" + i + ']',0.0,test.get(i),EPSILON);
+    }
+ else     if (i == 3) {
+      assertEquals("set [" + i + ']',4.5,test.get(i),EPSILON);
+    }
+ else {
+      assertEquals("set [" + i + ']',values[i / 2],test.get(i),EPSILON);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.DiagonalMatrixTest </h4><pre class="type-11 type-3 type-8 type-2 type-5 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSparsity(){
+  Vector d=new DenseVector(10);
+  for (int i=0; i < 10; i++) {
+    d.set(i,i * i);
+  }
+  DiagonalMatrix m=new DiagonalMatrix(d);
+  Assert.assertFalse(m.viewRow(0).isDense());
+  Assert.assertFalse(m.viewColumn(0).isDense());
+  for (int i=0; i < 10; i++) {
+    assertEquals(i * i,m.viewRow(i).zSum(),0);
+    assertEquals(i * i,m.viewRow(i).get(i),0);
+    assertEquals(i * i,m.viewColumn(i).zSum(),0);
+    assertEquals(i * i,m.viewColumn(i).get(i),0);
+  }
+  Iterator<Vector.Element> ix=m.viewRow(7).nonZeroes().iterator();
+  assertTrue(ix.hasNext());
+  Vector.Element r=ix.next();
+  assertEquals(7,r.index());
+  assertEquals(49,r.get(),0);
+  assertFalse(ix.hasNext());
+  assertEquals(0,m.viewRow(5).get(3),0);
+  assertEquals(0,m.viewColumn(8).get(3),0);
+  m.viewRow(3).set(3,1);
+  assertEquals(1,m.get(3,3),0);
+  for (  Vector.Element element : m.viewRow(6).all()) {
+    if (element.index() == 6) {
+      assertEquals(36,element.get(),0);
+    }
+ else {
+      assertEquals(0,element.get(),0);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.FunctionTest </h4><pre class="type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testIsDensifying(){
+  if (!function.isDensifying()) {
+    assertEquals(functionName,0,function.apply(0,0),0);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.jet.random.NegativeBinomialTest </h4><pre class="type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDistributionFunctions() throws Exception {
+  InputSupplier<InputStreamReader> input=Resources.newReaderSupplier(Resources.getResource("negative-binomial-test-data.csv"),Charsets.UTF_8);
+  boolean header=true;
+  for (  String line : CharStreams.readLines(input)) {
+    if (header) {
+      header=false;
+    }
+ else {
+      Iterable<String> values=onComma.split(line);
+      int k=Integer.parseInt(Iterables.get(values,0));
+      double p=Double.parseDouble(Iterables.get(values,1));
+      int r=Integer.parseInt(Iterables.get(values,2));
+      double density=Double.parseDouble(Iterables.get(values,3));
+      double cume=Double.parseDouble(Iterables.get(values,4));
+      NegativeBinomial nb=new NegativeBinomial(r,p,RandomUtils.getRandom());
+      assertEquals("cumulative " + k + ','+ p+ ','+ r,cume,nb.cdf(k),cume * 1.0e-5);
+      assertEquals("density " + k + ','+ p+ ','+ r,density,nb.pdf(k),density * 1.0e-5);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.jet.stat.GammaTest </h4><pre class="type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void incompleteBeta() throws IOException {
+  Splitter onComma=Splitter.on(",").trimResults();
+  InputSupplier<InputStreamReader> input=Resources.newReaderSupplier(Resources.getResource("beta-test-data.csv"),Charsets.UTF_8);
+  boolean header=true;
+  for (  String line : CharStreams.readLines(input)) {
+    if (header) {
+      header=false;
+    }
+ else {
+      Iterable<String> values=onComma.split(line);
+      double alpha=Double.parseDouble(Iterables.get(values,0));
+      double beta=Double.parseDouble(Iterables.get(values,1));
+      double x=Double.parseDouble(Iterables.get(values,2));
+      double ref=Double.parseDouble(Iterables.get(values,3));
+      double actual=Gamma.incompleteBeta(alpha,beta,x);
+      assertEquals(alpha + "," + beta+ ','+ x,ref,actual,ref * 1.0e-5);
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.neighborhood.SearchSanityTest </h4><pre class="type-11 type-8 type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testRemove(){
+  searcher.clear();
+  for (int i=0; i < dataPoints.rowSize(); ++i) {
+    Vector datapoint=dataPoints.viewRow(i);
+    searcher.add(datapoint);
+    if (i % 2 == 0) {
+      assertTrue("Failed to find self [search]",searcher.search(datapoint,1).get(0).getWeight() < Constants.EPSILON);
+      assertTrue("Failed to find self [searchFirst]",searcher.searchFirst(datapoint,false).getWeight() < Constants.EPSILON);
+      assertTrue("Failed to remove self",searcher.remove(datapoint,Constants.EPSILON));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-3 type-8 type-10 type-2 type-5 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRemoval(){
+  searcher.clear();
+  searcher.addAllMatrixSlices(dataPoints);
+  if (searcher instanceof UpdatableSearcher) {
+    List<Vector> x=Lists.newArrayList(Iterables.limit(searcher,2));
+    int size0=searcher.size();
+    List<WeightedThing<Vector>> r0=searcher.search(x.get(0),2);
+    searcher.remove(x.get(0),1.0e-7);
+    assertEquals(size0 - 1,searcher.size());
+    List<WeightedThing<Vector>> r=searcher.search(x.get(0),1);
+    assertTrue("Vector should be gone",r.get(0).getWeight() > 0);
+    assertEquals("Previous second neighbor should be first",0,r.get(0).getValue().minus(r0.get(1).getValue()).norm(1),1.0e-8);
+    searcher.remove(x.get(1),1.0e-7);
+    assertEquals(size0 - 2,searcher.size());
+    r=searcher.search(x.get(1),1);
+    assertTrue("Vector should be gone",r.get(0).getWeight() > 0);
+    for (    Vector v : searcher) {
+      assertTrue(x.get(0).minus(v).norm(1) > 1.0e-6);
+      assertTrue(x.get(1).minus(v).norm(1) > 1.0e-6);
+    }
+  }
+ else {
+    try {
+      List<Vector> x=Lists.newArrayList(Iterables.limit(searcher,2));
+      searcher.remove(x.get(0),1.0e-7);
+      fail("Shouldn't be able to delete from " + searcher.getClass().getName());
+    }
+ catch (    UnsupportedOperationException e) {
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.random.ChineseRestaurantTest </h4><pre class="type-11 type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGrowth(){
+  ChineseRestaurant s0=new ChineseRestaurant(10,0.0);
+  ChineseRestaurant s5=new ChineseRestaurant(10,0.5);
+  ChineseRestaurant s9=new ChineseRestaurant(10,0.9);
+  Set<Double> splits=ImmutableSet.of(1.0,1.5,2.0,3.0,5.0,8.0);
+  double offset0=0;
+  int k=0;
+  int i=0;
+  Matrix m5=new DenseMatrix(20,3);
+  Matrix m9=new DenseMatrix(20,3);
+  while (i <= 200000) {
+    double n=i / Math.pow(10,Math.floor(Math.log10(i)));
+    if (splits.contains(n)) {
+      if (i > 900) {
+        double predict5=predictSize(m5.viewPart(0,k,0,3),i,0.5);
+        assertEquals(predict5,Math.log(s5.size()),1);
+        double predict9=predictSize(m9.viewPart(0,k,0,3),i,0.9);
+        assertEquals(predict9,Math.log(s9.size()),1);
+      }
+ else       if (i > 50) {
+        double x=10.5 * Math.log(i) - s0.size();
+        m5.viewRow(k).assign(new double[]{Math.log(s5.size()),Math.log(i),1});
+        m9.viewRow(k).assign(new double[]{Math.log(s9.size()),Math.log(i),1});
+        k++;
+        offset0+=(x - offset0) / k;
+      }
+      if (i > 10000) {
+        assertEquals(0.0,(double)hapaxCount(s0) / s0.size(),0.25);
+        assertEquals(0.5,(double)hapaxCount(s5) / s5.size(),0.1);
+        assertEquals(0.9,(double)hapaxCount(s9) / s9.size(),0.05);
+      }
+    }
+    s0.sample();
+    s5.sample();
+    s9.sample();
+    i++;
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.math.randomized.RandomBlasting </h4><pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @Repeat(iterations=20) public void testAgainstReferenceOpenIntObjectHashMap(){
+  OpenIntObjectHashMap<Integer> base=new OpenIntObjectHashMap<Integer>();
+  Map<Integer,Integer> reference=new HashMap<Integer,Integer>();
+  List<Operation> ops=Lists.newArrayList();
+  addOp(ops,Operation.ADD,60);
+  addOp(ops,Operation.REMOVE,30);
+  addOp(ops,Operation.INDEXOF,30);
+  addOp(ops,Operation.CLEAR,5);
+  addOp(ops,Operation.ISEMPTY,2);
+  addOp(ops,Operation.SIZE,2);
+  int max=randomIntBetween(1000,20000);
+  for (int reps=0; reps < max; reps++) {
+    int k=randomIntBetween(0,max / 4);
+    int v=randomInt();
+switch (randomFrom(ops)) {
+case ADD:
+      assertEquals(reference.put(k,v) == null,base.put(k,v));
+    break;
+case REMOVE:
+  assertEquals(reference.remove(k) != null,base.removeKey(k));
+break;
+case INDEXOF:
+assertEquals(reference.containsKey(k),base.containsKey(k));
+break;
+case CLEAR:
+reference.clear();
+base.clear();
+break;
+case ISEMPTY:
+assertEquals(reference.isEmpty(),base.isEmpty());
+break;
+case SIZE:
+assertEquals(reference.size(),base.size());
+break;
+default :
+throw new RuntimeException();
+}
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @Repeat(iterations=20) public void testAgainstReferenceOpenObjectIntHashMap(){
+  OpenObjectIntHashMap<Integer> base=new OpenObjectIntHashMap<Integer>();
+  Map<Integer,Integer> reference=new HashMap<Integer,Integer>();
+  List<Operation> ops=Lists.newArrayList();
+  addOp(ops,Operation.ADD,60);
+  addOp(ops,Operation.REMOVE,30);
+  addOp(ops,Operation.INDEXOF,30);
+  addOp(ops,Operation.CLEAR,5);
+  addOp(ops,Operation.ISEMPTY,2);
+  addOp(ops,Operation.SIZE,2);
+  int max=randomIntBetween(1000,20000);
+  for (int reps=0; reps < max; reps++) {
+    int k=randomIntBetween(0,max / 4);
+    int v=randomInt();
+switch (randomFrom(ops)) {
+case ADD:
+      assertEquals(reference.put(k,v) == null,base.put(k,v));
+    break;
+case REMOVE:
+  assertEquals(reference.remove(k) != null,base.removeKey(k));
+break;
+case INDEXOF:
+assertEquals(reference.containsKey(k),base.containsKey(k));
+break;
+case CLEAR:
+reference.clear();
+base.clear();
+break;
+case ISEMPTY:
+assertEquals(reference.isEmpty(),base.isEmpty());
+break;
+case SIZE:
+assertEquals(reference.size(),base.size());
+break;
+default :
+throw new RuntimeException();
+}
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Seed("deadbeef") @Test @Repeat(iterations=20) public void testAgainstReferenceOpenHashSet(){
+  Set<Integer> base=new OpenHashSet<Integer>();
+  Set<Integer> reference=Sets.newHashSet();
+  List<Operation> ops=Lists.newArrayList();
+  addOp(ops,Operation.ADD,60);
+  addOp(ops,Operation.REMOVE,30);
+  addOp(ops,Operation.INDEXOF,30);
+  addOp(ops,Operation.CLEAR,5);
+  addOp(ops,Operation.ISEMPTY,2);
+  addOp(ops,Operation.SIZE,2);
+  int max=randomIntBetween(1000,20000);
+  for (int reps=0; reps < max; reps++) {
+    int k=randomIntBetween(0,max / 4);
+switch (randomFrom(ops)) {
+case ADD:
+      assertEquals(reference.contains(k),base.contains(k));
+    break;
+case REMOVE:
+  assertEquals(reference.remove(k),base.remove(k));
+break;
+case INDEXOF:
+assertEquals(reference.contains(k),base.contains(k));
+break;
+case CLEAR:
+reference.clear();
+base.clear();
+break;
+case ISEMPTY:
+assertEquals(reference.isEmpty(),base.isEmpty());
+break;
+case SIZE:
+assertEquals(reference.size(),base.size());
+break;
+default :
+throw new RuntimeException();
+}
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @Repeat(iterations=20) public void testAgainstReferenceOpenIntHashSet(){
+  AbstractIntSet base=new OpenIntHashSet();
+  HashSet<Integer> reference=Sets.newHashSet();
+  List<Operation> ops=Lists.newArrayList();
+  addOp(ops,Operation.ADD,60);
+  addOp(ops,Operation.REMOVE,30);
+  addOp(ops,Operation.INDEXOF,30);
+  addOp(ops,Operation.CLEAR,5);
+  addOp(ops,Operation.ISEMPTY,2);
+  addOp(ops,Operation.SIZE,2);
+  int max=randomIntBetween(1000,20000);
+  for (int reps=0; reps < max; reps++) {
+    int k=randomIntBetween(0,max / 4);
+switch (randomFrom(ops)) {
+case ADD:
+      assertEquals(reference.add(k),base.add(k));
+    break;
+case REMOVE:
+  assertEquals(reference.remove(k),base.remove(k));
+break;
+case INDEXOF:
+assertEquals(reference.contains(k),base.contains(k));
+break;
+case CLEAR:
+reference.clear();
+base.clear();
+break;
+case ISEMPTY:
+assertEquals(reference.isEmpty(),base.isEmpty());
+break;
+case SIZE:
+assertEquals(reference.size(),base.size());
+break;
+default :
+throw new RuntimeException();
+}
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-3 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @Repeat(iterations=20) public void testAgainstReferenceOpenIntIntHashMap(){
+  OpenIntIntHashMap base=new OpenIntIntHashMap();
+  HashMap<Integer,Integer> reference=new HashMap<Integer,Integer>();
+  List<Operation> ops=Lists.newArrayList();
+  addOp(ops,Operation.ADD,60);
+  addOp(ops,Operation.REMOVE,30);
+  addOp(ops,Operation.INDEXOF,30);
+  addOp(ops,Operation.CLEAR,5);
+  addOp(ops,Operation.ISEMPTY,2);
+  addOp(ops,Operation.SIZE,2);
+  int max=randomIntBetween(1000,20000);
+  for (int reps=0; reps < max; reps++) {
+    int k=randomIntBetween(0,max / 4);
+    int v=randomInt();
+switch (randomFrom(ops)) {
+case ADD:
+      Integer prevValue=reference.put(k,v);
+    if (prevValue == null) {
+      assertEquals(true,base.put(k,v));
+    }
+ else {
+      assertEquals(prevValue.intValue(),base.get(k));
+      assertEquals(false,base.put(k,v));
+    }
+  break;
+case REMOVE:
+assertEquals(reference.containsKey(k),base.containsKey(k));
+Integer removed=reference.remove(k);
+if (removed == null) {
+assertEquals(false,base.removeKey(k));
+}
+ else {
+assertEquals(removed.intValue(),base.get(k));
+assertEquals(true,base.removeKey(k));
+}
+break;
+case INDEXOF:
+assertEquals(reference.containsKey(k),base.containsKey(k));
+break;
+case CLEAR:
+reference.clear();
+base.clear();
+break;
+case ISEMPTY:
+assertEquals(reference.isEmpty(),base.isEmpty());
+break;
+case SIZE:
+assertEquals(reference.size(),base.size());
+break;
+default :
+throw new RuntimeException();
+}
+}
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.mahout.utils.regex.RegexMapperTest </h4><pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testFPGFormatter() throws Exception {
+  RegexMapper mapper=new RegexMapper();
+  Configuration conf=getConfiguration();
+  conf.set(RegexMapper.REGEX,"(?<=(\\?|&)q=).*?(?=&|$)");
+  conf.set(RegexMapper.TRANSFORMER_CLASS,URLDecodeTransformer.class.getName());
+  conf.set(RegexMapper.FORMATTER_CLASS,FPGFormatter.class.getName());
+  DummyRecordWriter<LongWritable,Text> mapWriter=new DummyRecordWriter<>();
+  Mapper<LongWritable,Text,LongWritable,Text>.Context mapContext=DummyRecordWriter.build(mapper,conf,mapWriter);
+  mapper.setup(mapContext);
+  RegexFormatter formatter=new FPGFormatter();
+  for (int i=0; i < RegexUtilsTest.TEST_STRS.length; i++) {
+    String testStr=RegexUtilsTest.TEST_STRS[i];
+    LongWritable key=new LongWritable(i);
+    mapper.map(key,new Text(testStr),mapContext);
+    List<Text> value=mapWriter.getValue(key);
+    if (!RegexUtilsTest.GOLD[i].isEmpty()) {
+      assertEquals(1,value.size());
+      assertEquals(formatter.format(RegexUtilsTest.GOLD[i]),value.get(0).toString());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-5 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testRegex() throws Exception {
+  RegexMapper mapper=new RegexMapper();
+  Configuration conf=getConfiguration();
+  conf.set(RegexMapper.REGEX,"(?<=(\\?|&)q=).*?(?=&|$)");
+  conf.set(RegexMapper.TRANSFORMER_CLASS,URLDecodeTransformer.class.getName());
+  DummyRecordWriter<LongWritable,Text> mapWriter=new DummyRecordWriter<LongWritable,Text>();
+  Mapper<LongWritable,Text,LongWritable,Text>.Context mapContext=DummyRecordWriter.build(mapper,conf,mapWriter);
+  mapper.setup(mapContext);
+  for (int i=0; i < RegexUtilsTest.TEST_STRS.length; i++) {
+    String testStr=RegexUtilsTest.TEST_STRS[i];
+    LongWritable key=new LongWritable(i);
+    mapper.map(key,new Text(testStr),mapContext);
+    List<Text> value=mapWriter.getValue(key);
+    if (!RegexUtilsTest.GOLD[i].isEmpty()) {
+      assertEquals(1,value.size());
+      assertEquals(RegexUtilsTest.GOLD[i],value.get(0).toString());
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,55 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.document.CacheConsistencyRDBTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before @Override public void setUpConnection() throws Exception {
+  dataSource=RDBDataSourceFactory.forJdbcUrl(URL,USERNAME,PASSWD);
+  DocumentMK.Builder builder=new DocumentMK.Builder().clock(getTestClock()).setAsyncDelay(0);
+  RDBOptions opt=new RDBOptions().tablePrefix("T" + Long.toHexString(System.currentTimeMillis())).dropTablesOnClose(true);
+  store=new TestStore(dataSource,builder,opt);
+  mk=builder.setDocumentStore(store).setLeaseCheck(false).open();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void cacheConsistency() throws Exception {
+  mk.commit("/","+\"node\":{}",null,null);
+  mk.commit("/node","+\"child\":{}",null,null);
+  store.invalidateNodeDocument(Utils.getIdFromPath("/node"));
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      store.query(NODES,Utils.getKeyLowerLimit("/"),Utils.getKeyUpperLimit("/"),10);
+    }
+  }
+,"query");
+  store.semaphores.put(t,new Semaphore(0));
+  t.start();
+  while (!store.semaphores.get(t).hasQueuedThreads()) {
+    Thread.sleep(10);
+  }
+  final Semaphore done=new Semaphore(0);
+  new Thread(new Runnable(){
+    @Override public void run(){
+      mk.runBackgroundOperations();
+      done.release();
+    }
+  }
+,"mkbg").start();
+  done.tryAcquire(1,TimeUnit.SECONDS);
+  store.invalidateNodeDocument(Utils.getIdFromPath("/node"));
+  store.semaphores.get(t).release();
+  t.join();
+  NodeState root=mk.getNodeStore().getRoot();
+  assertTrue(root.getChildNode("node").getChildNode("child").exists());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

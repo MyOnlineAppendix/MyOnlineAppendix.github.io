@@ -1,0 +1,222 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.cleaner.TestCleanerChore (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testSavesFilesOnRequest() throws Exception {
+  Stoppable stop=new StoppableImplementation();
+  Configuration conf=UTIL.getConfiguration();
+  Path testDir=UTIL.getDataTestDir();
+  FileSystem fs=UTIL.getTestFileSystem();
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,NeverDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  Path parent=new Path(testDir,"parent");
+  Path file=new Path(parent,"someFile");
+  fs.mkdirs(parent);
+  fs.create(file).close();
+  assertTrue("Test file didn't get created.",fs.exists(file));
+  chore.chore();
+  assertTrue("File didn't get deleted",fs.exists(file));
+  assertTrue("Empty directory didn't get deleted",fs.exists(parent));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * While cleaning a directory, all the files in the directory may be deleted, but there may be
+ * another file added, in which case the directory shouldn't be deleted.
+ * @throws IOException on failure
+ */
+@Test public void testCleanerDoesNotDeleteDirectoryWithLateAddedFiles() throws IOException {
+  Stoppable stop=new StoppableImplementation();
+  Configuration conf=UTIL.getConfiguration();
+  final Path testDir=UTIL.getDataTestDir();
+  final FileSystem fs=UTIL.getTestFileSystem();
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,AlwaysDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  AlwaysDelete delegate=(AlwaysDelete)chore.cleanersChain.get(0);
+  AlwaysDelete spy=Mockito.spy(delegate);
+  chore.cleanersChain.set(0,spy);
+  final Path parent=new Path(testDir,"parent");
+  Path file=new Path(parent,"someFile");
+  fs.mkdirs(parent);
+  fs.create(file).close();
+  assertTrue("Test file didn't get created.",fs.exists(file));
+  final Path addedFile=new Path(parent,"addedFile");
+  Mockito.doAnswer(new Answer<Boolean>(){
+    @Override public Boolean answer(    InvocationOnMock invocation) throws Throwable {
+      fs.create(addedFile).close();
+      FSUtils.logFileSystemState(fs,testDir,LOG);
+      return (Boolean)invocation.callRealMethod();
+    }
+  }
+).when(spy).isFileDeletable(Mockito.any(FileStatus.class));
+  chore.chore();
+  assertTrue("Added file unexpectedly deleted",fs.exists(addedFile));
+  assertTrue("Parent directory deleted unexpectedly",fs.exists(parent));
+  assertFalse("Original file unexpectedly retained",fs.exists(file));
+  Mockito.verify(spy,Mockito.times(1)).isFileDeletable(Mockito.any(FileStatus.class));
+  Mockito.reset(spy);
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test to make sure that we don't attempt to ask the delegate whether or not we should preserve a
+ * directory.
+ * @throws Exception on failure
+ */
+@Test public void testDoesNotCheckDirectories() throws Exception {
+  Stoppable stop=new StoppableImplementation();
+  Configuration conf=UTIL.getConfiguration();
+  Path testDir=UTIL.getDataTestDir();
+  FileSystem fs=UTIL.getTestFileSystem();
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,AlwaysDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  AlwaysDelete delegate=(AlwaysDelete)chore.cleanersChain.get(0);
+  AlwaysDelete spy=Mockito.spy(delegate);
+  chore.cleanersChain.set(0,spy);
+  Path parent=new Path(testDir,"parent");
+  Path file=new Path(parent,"someFile");
+  fs.mkdirs(parent);
+  assertTrue("Test parent didn't get created.",fs.exists(parent));
+  fs.create(file).close();
+  assertTrue("Test file didn't get created.",fs.exists(file));
+  FileStatus fStat=fs.getFileStatus(parent);
+  chore.chore();
+  Mockito.verify(spy,Mockito.never()).isFileDeletable(fStat);
+  Mockito.reset(spy);
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDeletesEmptyDirectories() throws Exception {
+  Stoppable stop=new StoppableImplementation();
+  Configuration conf=UTIL.getConfiguration();
+  Path testDir=UTIL.getDataTestDir();
+  FileSystem fs=UTIL.getTestFileSystem();
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,AlwaysDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  Path parent=new Path(testDir,"parent");
+  Path child=new Path(parent,"child");
+  Path emptyChild=new Path(parent,"emptyChild");
+  Path file=new Path(child,"someFile");
+  fs.mkdirs(child);
+  fs.mkdirs(emptyChild);
+  fs.create(file).close();
+  Path topFile=new Path(testDir,"topFile");
+  fs.create(topFile).close();
+  assertTrue("Test file didn't get created.",fs.exists(file));
+  assertTrue("Test file didn't get created.",fs.exists(topFile));
+  chore.chore();
+  assertFalse("File didn't get deleted",fs.exists(topFile));
+  assertFalse("File didn't get deleted",fs.exists(file));
+  assertFalse("Empty directory didn't get deleted",fs.exists(child));
+  assertFalse("Empty directory didn't get deleted",fs.exists(parent));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testStoppedCleanerDoesNotDeleteFiles() throws Exception {
+  Stoppable stop=new StoppableImplementation();
+  Configuration conf=UTIL.getConfiguration();
+  Path testDir=UTIL.getDataTestDir();
+  FileSystem fs=UTIL.getTestFileSystem();
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,AlwaysDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  Path topFile=new Path(testDir,"topFile");
+  fs.create(topFile).close();
+  assertTrue("Test file didn't get created.",fs.exists(topFile));
+  stop.stop("testing stop");
+  chore.chore();
+  assertTrue("File got deleted while chore was stopped",fs.exists(topFile));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * The cleaner runs in a loop, where it first checks to see all the files under a directory can be
+ * deleted. If they all can, then we try to delete the directory. However, a file may be added
+ * that directory to after the original check. This ensures that we don't accidentally delete that
+ * directory on and don't get spurious IOExceptions.
+ * <p>
+ * This was from HBASE-7465.
+ * @throws Exception on failure
+ */
+@Test public void testNoExceptionFromDirectoryWithRacyChildren() throws Exception {
+  Stoppable stop=new StoppableImplementation();
+  HBaseTestingUtility localUtil=new HBaseTestingUtility();
+  Configuration conf=localUtil.getConfiguration();
+  final Path testDir=UTIL.getDataTestDir();
+  final FileSystem fs=UTIL.getTestFileSystem();
+  LOG.debug("Writing test data to: " + testDir);
+  String confKey="hbase.test.cleaner.delegates";
+  conf.set(confKey,AlwaysDelete.class.getName());
+  AllValidPaths chore=new AllValidPaths("test-file-cleaner",stop,conf,fs,testDir,confKey);
+  AlwaysDelete delegate=(AlwaysDelete)chore.cleanersChain.get(0);
+  AlwaysDelete spy=Mockito.spy(delegate);
+  chore.cleanersChain.set(0,spy);
+  final Path parent=new Path(testDir,"parent");
+  Path file=new Path(parent,"someFile");
+  fs.mkdirs(parent);
+  fs.create(file).close();
+  assertTrue("Test file didn't get created.",fs.exists(file));
+  final Path racyFile=new Path(parent,"addedFile");
+  Mockito.doAnswer(new Answer<Boolean>(){
+    @Override public Boolean answer(    InvocationOnMock invocation) throws Throwable {
+      fs.create(racyFile).close();
+      FSUtils.logFileSystemState(fs,testDir,LOG);
+      return (Boolean)invocation.callRealMethod();
+    }
+  }
+).when(spy).isFileDeletable(Mockito.any(FileStatus.class));
+  if (chore.checkAndDeleteDirectory(parent)) {
+    throw new Exception("Reported success deleting directory, should have failed when adding file mid-iteration");
+  }
+  assertTrue("Added file unexpectedly deleted",fs.exists(racyFile));
+  assertTrue("Parent directory deleted unexpectedly",fs.exists(parent));
+  assertFalse("Original file unexpectedly retained",fs.exists(file));
+  Mockito.verify(spy,Mockito.times(1)).isFileDeletable(Mockito.any(FileStatus.class));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void cleanup() throws Exception {
+  UTIL.cleanupTestDir();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

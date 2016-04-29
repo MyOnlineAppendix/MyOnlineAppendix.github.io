@@ -1,0 +1,88 @@
+<h3 style="margin:0px">Class: org.apache.directory.server.kerberos.protocol.EncTktInSkeyTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+/** 
+ * Creates a new instance of {@link EncTktInSkeyTest}.
+ */
+@Before public void setUp(){
+  kdcServer=new KdcServer();
+  config=kdcServer.getConfig();
+  config.setBodyChecksumVerified(false);
+  store=new MapPrincipalStoreImpl();
+  handler=new KerberosProtocolHandler(kdcServer,store);
+  session=new KrbDummySession();
+  lockBox=new CipherTextHandler();
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * If the ENC-TKT-IN-SKEY option has been specified and an additional ticket
+ * has been included in the request, it indicates that the client is using
+ * user-to-user authentication to prove its identity to a server that does
+ * not have access to a persistent key.  Section 3.7 describes the effect
+ * of this option on the entire Kerberos protocol.  When generating the
+ * KRB_TGS_REP message, this option in the KRB_TGS_REQ message tells the KDC
+ * to decrypt the additional ticket using the key for the server to which the
+ * additional ticket was issued and to verify that it is a TGT.  If the name
+ * of the requested server is missing from the request, the name of the client
+ * in the additional ticket will be used.  Otherwise, the name of the requested
+ * server will be compared to the name of the client in the additional ticket.
+ * If it is different, the request will be rejected.  If the request succeeds,
+ * the session key from the additional ticket will be used to encrypt the new
+ * ticket that is issued instead of using the key of the server for which the
+ * new ticket will be used.
+ * @throws Exception 
+ */
+@Test public void testEncTktInSkey() throws Exception {
+  KerberosPrincipal clientPrincipal=new KerberosPrincipal("hnelson@EXAMPLE.COM");
+  EncTicketPart encTicketPartModifier=getTicketArchetype(clientPrincipal);
+  KerberosPrincipal serverPrincipal=new KerberosPrincipal("krbtgt/EXAMPLE.COM@EXAMPLE.COM");
+  String passPhrase="randomKey";
+  EncryptionKey serverKey=getEncryptionKey(serverPrincipal,passPhrase);
+  Ticket tgt=getTicket(encTicketPartModifier,serverPrincipal,serverKey);
+  KdcReqBody modifier=new KdcReqBody();
+  modifier.setSName(getPrincipalName("ldap/ldap.example.com@EXAMPLE.COM"));
+  modifier.setRealm("EXAMPLE.COM");
+  modifier.setEType(config.getEncryptionTypes());
+  modifier.setNonce(random.nextInt());
+  KdcOptions kdcOptions=new KdcOptions();
+  kdcOptions.set(KdcOptions.ENC_TKT_IN_SKEY);
+  modifier.setKdcOptions(kdcOptions);
+  long now=System.currentTimeMillis();
+  KerberosTime requestedEndTime=new KerberosTime(now + 1 * KerberosTime.DAY);
+  modifier.setTill(requestedEndTime);
+  KerberosTime requestedRenewTillTime=new KerberosTime(now + KerberosTime.WEEK / 2);
+  modifier.setRtime(requestedRenewTillTime);
+  KdcReq message=getKdcRequest(tgt,modifier);
+  handler.messageReceived(session,message);
+  Object msg=session.getMessage();
+  assertEquals("session.getMessage() instanceOf",KrbError.class,msg.getClass());
+  KrbError error=(KrbError)msg;
+  assertEquals("KDC cannot accommodate requested option",ErrorType.KDC_ERR_BADOPTION,error.getErrorCode());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+/** 
+ * Shutdown the Kerberos server
+ */
+@After public void shutDown(){
+  kdcServer.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,218 @@
+<h3 style="margin:0px">Class: org.apache.pig.tez.TestTezGraceParallelism (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testIncreaseParallelism() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  StringWriter writer=new StringWriter();
+  Util.createLogAppender("testIncreaseParallelism",writer,new Class[]{PigGraceShuffleVertexManager.class,ShuffleVertexManager.class});
+  try {
+    pigServer.getPigContext().getProperties().setProperty(InputSizeReducerEstimator.BYTES_PER_REDUCER_PARAM,"80000");
+    pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE1+ "' as (name:chararray, age:int);");
+    pigServer.registerQuery("B = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("C = join A by 1, B by 1;");
+    pigServer.registerQuery("D = foreach C generate A::name as name, A::age as age, gender;");
+    pigServer.registerQuery("E = order D by name;");
+    pigServer.registerQuery("F = distinct E;");
+    Iterator<Tuple> iter=pigServer.openIterator("F");
+    int count=0;
+    while (iter.hasNext()) {
+      iter.next();
+      count++;
+    }
+    assertEquals(count,644);
+    System.out.println(writer.toString());
+    assertTrue(writer.toString().contains("Initialize parallelism for scope-64 to 50"));
+    assertTrue(Pattern.compile("Reduce auto parallelism for vertex: scope-64 to (\\d+)* from 50").matcher(writer.toString()).find());
+  }
+  finally {
+    Util.removeLogAppender("testIncreaseParallelism",PigGraceShuffleVertexManager.class,ShuffleVertexManager.class);
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testUDFContextSetInBackend() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  File outputDir=File.createTempFile("intemediate","txt");
+  outputDir.delete();
+  pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+  pigServer.registerQuery("B = order A by name;");
+  pigServer.registerQuery("C = distinct B;");
+  pigServer.registerQuery("D = load '" + INPUT_DIR + "/"+ INPUT_FILE1+ "' as (name:chararray, age:int);");
+  pigServer.registerQuery("E = group D by name;");
+  pigServer.registerQuery("F = foreach E generate group as name, AVG(D.age) as avg_age;");
+  pigServer.registerQuery("G = join C by name left, F by name;");
+  ExecJob job=pigServer.store("G",Util.removeColon(outputDir.getAbsolutePath()),StorerWithUDFContextCheck.class.getName());
+  assertTrue(job.getStatus() == ExecJob.JOB_STATUS.COMPLETED);
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJoinWithDifferentDepth() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  StringWriter writer=new StringWriter();
+  Util.createLogAppender("testJoinWithDifferentDepth",writer,PigGraceShuffleVertexManager.class);
+  try {
+    pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("B = order A by name;");
+    pigServer.registerQuery("C = distinct B;");
+    pigServer.registerQuery("D = load '" + INPUT_DIR + "/"+ INPUT_FILE1+ "' as (name:chararray, age:int);");
+    pigServer.registerQuery("E = group D by name;");
+    pigServer.registerQuery("F = foreach E generate group as name, AVG(D.age) as avg_age;");
+    pigServer.registerQuery("G = join C by name, F by name;");
+    Iterator<Tuple> iter=pigServer.openIterator("G");
+    int count=0;
+    while (iter.hasNext()) {
+      iter.next();
+      count++;
+    }
+    assertEquals(count,20);
+    assertTrue(writer.toString().contains("All predecessors for scope-84 are finished, time to set parallelism for scope-85"));
+    assertTrue(writer.toString().contains("Initialize parallelism for scope-85 to 101"));
+  }
+  finally {
+    Util.removeLogAppender("testJoinWithDifferentDepth",PigGraceShuffleVertexManager.class);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJoinWithDifferentDepth2() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  StringWriter writer=new StringWriter();
+  Util.createLogAppender("testJoinWithDifferentDepth2",writer,PigGraceShuffleVertexManager.class);
+  try {
+    pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("B = order A by name;");
+    pigServer.registerQuery("C = distinct B;");
+    pigServer.registerQuery("D = load '" + INPUT_DIR + "/"+ INPUT_FILE1+ "' as (name:chararray, age:int);");
+    pigServer.registerQuery("E = join C by name, D by name;");
+    Iterator<Tuple> iter=pigServer.openIterator("E");
+    int count=0;
+    while (iter.hasNext()) {
+      iter.next();
+      count++;
+    }
+    assertEquals(count,1000);
+    assertFalse(writer.toString().contains("scope-68"));
+  }
+  finally {
+    Util.removeLogAppender("testJoinWithDifferentDepth2",PigGraceShuffleVertexManager.class);
+  }
+}
+
+</code></pre>
+
+<pre class="type-14 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void oneTimeTearDown() throws Exception {
+  deleteFiles();
+}
+
+</code></pre>
+
+<pre class="type-4 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJoinWithUnion() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  StringWriter writer=new StringWriter();
+  Util.createLogAppender("testJoinWithUnion",writer,PigGraceShuffleVertexManager.class);
+  try {
+    pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("B = distinct A;");
+    pigServer.registerQuery("C = group B by name;");
+    pigServer.registerQuery("D = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("E = distinct D;");
+    pigServer.registerQuery("F = group E by name;");
+    pigServer.registerQuery("G = union C, F;");
+    pigServer.registerQuery("H = distinct G;");
+    Iterator<Tuple> iter=pigServer.openIterator("H");
+    int count=0;
+    while (iter.hasNext()) {
+      iter.next();
+      count++;
+    }
+    assertEquals(count,20);
+    assertTrue(writer.toString().contains("time to set parallelism for scope-41"));
+    assertTrue(writer.toString().contains("time to set parallelism for scope-54"));
+  }
+  finally {
+    Util.removeLogAppender("testJoinWithUnion",PigGraceShuffleVertexManager.class);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testDecreaseParallelism() throws IOException {
+  NodeIdGenerator.reset();
+  PigServer.resetScope();
+  StringWriter writer=new StringWriter();
+  Util.createLogAppender("testDecreaseParallelism",writer,new Class[]{PigGraceShuffleVertexManager.class,ShuffleVertexManager.class});
+  try {
+    pigServer.registerQuery("A = load '" + INPUT_DIR + "/"+ INPUT_FILE1+ "' as (name:chararray, age:int);");
+    pigServer.registerQuery("B = load '" + INPUT_DIR + "/"+ INPUT_FILE2+ "' as (name:chararray, gender:chararray);");
+    pigServer.registerQuery("C = join A by name, B by name;");
+    pigServer.registerQuery("D = foreach C generate A::name as name, A::age as age, gender;");
+    pigServer.registerQuery("E = distinct D;");
+    pigServer.registerQuery("F = group E by gender;");
+    pigServer.registerQuery("G = foreach F generate group as gender, SUM(E.age);");
+    Iterator<Tuple> iter=pigServer.openIterator("G");
+    List<Tuple> expectedResults=Util.getTuplesFromConstantTupleStrings(new String[]{"('F',1349L)","('M',1373L)"});
+    Util.checkQueryOutputsAfterSort(iter,expectedResults);
+    assertTrue(writer.toString().contains("Initialize parallelism for scope-52 to 20"));
+    assertTrue(writer.toString().contains("Initialize parallelism for scope-61 to 100"));
+    assertTrue(writer.toString().contains("Reduce auto parallelism for vertex: scope-49 to 1 from 2"));
+    assertTrue(writer.toString().contains("Reduce auto parallelism for vertex: scope-52 to 1 from 20"));
+    assertTrue(writer.toString().contains("Reduce auto parallelism for vertex: scope-61 to 1 from 100"));
+  }
+  finally {
+    Util.removeLogAppender("testDecreaseParallelism",PigGraceShuffleVertexManager.class,ShuffleVertexManager.class);
+  }
+}
+
+</code></pre>
+
+<pre class="type-11 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  pigServer=new PigServer(Util.getLocalTestMode());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

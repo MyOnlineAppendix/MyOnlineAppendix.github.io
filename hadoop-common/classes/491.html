@@ -1,0 +1,295 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestEditLogRace (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="20"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('20')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-20"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-13 type-7 type-10 type-6 type-20 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests rolling edit logs while transactions are ongoing.
+ */
+@Test public void testEditLogRolling() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FileSystem fileSys=null;
+  AtomicReference<Throwable> caughtErr=new AtomicReference<Throwable>();
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    FSImage fsimage=namesystem.getFSImage();
+    StorageDirectory sd=fsimage.getStorage().getStorageDir(0);
+    startTransactionWorkers(namesystem,caughtErr);
+    long previousLogTxId=1;
+    for (int i=0; i < NUM_ROLLS && caughtErr.get() == null; i++) {
+      try {
+        Thread.sleep(20);
+      }
+ catch (      InterruptedException e) {
+      }
+      LOG.info("Starting roll " + i + ".");
+      CheckpointSignature sig=namesystem.rollEditLog();
+      long nextLog=sig.curSegmentTxId;
+      String logFileName=NNStorage.getFinalizedEditsFileName(previousLogTxId,nextLog - 1);
+      previousLogTxId+=verifyEditLogs(namesystem,fsimage,logFileName,previousLogTxId);
+      assertEquals(previousLogTxId,nextLog);
+      File expectedLog=NNStorage.getInProgressEditsFile(sd,previousLogTxId);
+      assertTrue("Expect " + expectedLog + " to exist",expectedLog.exists());
+    }
+  }
+  finally {
+    stopTransactionWorkers();
+    if (caughtErr.get() != null) {
+      throw new RuntimeException(caughtErr.get());
+    }
+    if (fileSys != null)     fileSys.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Tests saving fs image while transactions are ongoing.
+ */
+@Test public void testSaveNamespace() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=null;
+  FileSystem fileSys=null;
+  AtomicReference<Throwable> caughtErr=new AtomicReference<Throwable>();
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATA_NODES).build();
+    cluster.waitActive();
+    fileSys=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    startTransactionWorkers(namesystem,caughtErr);
+    for (int i=0; i < NUM_SAVE_IMAGE && caughtErr.get() == null; i++) {
+      try {
+        Thread.sleep(20);
+      }
+ catch (      InterruptedException e) {
+      }
+      LOG.info("Save " + i + ": entering safe mode");
+      namesystem.enterSafeMode(false);
+      long logStartTxId=fsimage.getStorage().getMostRecentCheckpointTxId() + 1;
+      verifyEditLogs(namesystem,fsimage,NNStorage.getInProgressEditsFileName(logStartTxId),logStartTxId);
+      LOG.info("Save " + i + ": saving namespace");
+      namesystem.saveNamespace();
+      LOG.info("Save " + i + ": leaving safemode");
+      long savedImageTxId=fsimage.getStorage().getMostRecentCheckpointTxId();
+      verifyEditLogs(namesystem,fsimage,NNStorage.getFinalizedEditsFileName(logStartTxId,savedImageTxId),logStartTxId);
+      assertEquals(fsimage.getStorage().getMostRecentCheckpointTxId(),editLog.getLastWrittenTxId() - 1);
+      namesystem.leaveSafeMode();
+      LOG.info("Save " + i + ": complete");
+    }
+  }
+  finally {
+    stopTransactionWorkers();
+    if (caughtErr.get() != null) {
+      throw new RuntimeException(caughtErr.get());
+    }
+    if (fileSys != null)     fileSys.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * The logSync() method in FSEditLog is unsynchronized whiel syncing
+ * so that other threads can concurrently enqueue edits while the prior
+ * sync is ongoing. This test checks that the log is saved correctly
+ * if the saveImage occurs while the syncing thread is in the unsynchronized middle section.
+ * This replicates the following manual test proposed by Konstantin:
+ * I start the name-node in debugger.
+ * I do -mkdir and stop the debugger in logSync() just before it does flush.
+ * Then I enter safe mode with another client
+ * I start saveNamepsace and stop the debugger in
+ * FSImage.saveFSImage() -> FSEditLog.createEditLogFile()
+ * -> EditLogFileOutputStream.create() ->
+ * after truncating the file but before writing LAYOUT_VERSION into it.
+ * Then I let logSync() run.
+ * Then I terminate the name-node.
+ * After that the name-node wont start, since the edits file is broken.
+ */
+@Test public void testSaveImageWhileSyncInProgress() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  final FSNamesystem namesystem=FSNamesystem.loadFromDisk(conf);
+  try {
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=fsimage.getEditLog();
+    JournalAndStream jas=editLog.getJournals().get(0);
+    EditLogFileOutputStream spyElos=spy((EditLogFileOutputStream)jas.getCurrentStream());
+    jas.setCurrentStreamForTests(spyElos);
+    final AtomicReference<Throwable> deferredException=new AtomicReference<Throwable>();
+    final CountDownLatch waitToEnterFlush=new CountDownLatch(1);
+    final Thread doAnEditThread=new Thread(){
+      @Override public void run(){
+        try {
+          LOG.info("Starting mkdirs");
+          namesystem.mkdirs("/test",new PermissionStatus("test","test",new FsPermission((short)00755)),true);
+          LOG.info("mkdirs complete");
+        }
+ catch (        Throwable ioe) {
+          LOG.fatal("Got exception",ioe);
+          deferredException.set(ioe);
+          waitToEnterFlush.countDown();
+        }
+      }
+    }
+;
+    Answer<Void> blockingFlush=new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        LOG.info("Flush called");
+        if (Thread.currentThread() == doAnEditThread) {
+          LOG.info("edit thread: Telling main thread we made it to flush section...");
+          waitToEnterFlush.countDown();
+          LOG.info("edit thread: sleeping for " + BLOCK_TIME + "secs");
+          Thread.sleep(BLOCK_TIME * 1000);
+          LOG.info("Going through to flush. This will allow the main thread to continue.");
+        }
+        invocation.callRealMethod();
+        LOG.info("Flush complete");
+        return null;
+      }
+    }
+;
+    doAnswer(blockingFlush).when(spyElos).flush();
+    doAnEditThread.start();
+    LOG.info("Main thread: waiting to enter flush...");
+    waitToEnterFlush.await();
+    assertNull(deferredException.get());
+    LOG.info("Main thread: detected that logSync is in unsynchronized section.");
+    LOG.info("Trying to enter safe mode.");
+    LOG.info("This should block for " + BLOCK_TIME + "sec, since flush will sleep that long");
+    long st=Time.now();
+    namesystem.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    long et=Time.now();
+    LOG.info("Entered safe mode");
+    assertTrue(et - st > (BLOCK_TIME - 1) * 1000);
+    namesystem.saveNamespace();
+    LOG.info("Joining on edit thread...");
+    doAnEditThread.join();
+    assertNull(deferredException.get());
+    assertEquals(3,verifyEditLogs(namesystem,fsimage,NNStorage.getFinalizedEditsFileName(1,3),1));
+    assertEquals(1,verifyEditLogs(namesystem,fsimage,NNStorage.getInProgressEditsFileName(4),4));
+  }
+  finally {
+    LOG.info("Closing namesystem");
+    if (namesystem != null)     namesystem.close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Most of the FSNamesystem methods have a synchronized section where they
+ * update the name system itself and write to the edit log, and then
+ * unsynchronized, they call logSync. This test verifies that, if an
+ * operation has written to the edit log but not yet synced it,
+ * we wait for that sync before entering safe mode.
+ */
+@Test public void testSaveRightBeforeSync() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  final FSNamesystem namesystem=FSNamesystem.loadFromDisk(conf);
+  try {
+    FSImage fsimage=namesystem.getFSImage();
+    FSEditLog editLog=spy(fsimage.getEditLog());
+    fsimage.editLog=editLog;
+    final AtomicReference<Throwable> deferredException=new AtomicReference<Throwable>();
+    final CountDownLatch waitToEnterSync=new CountDownLatch(1);
+    final Thread doAnEditThread=new Thread(){
+      @Override public void run(){
+        try {
+          LOG.info("Starting mkdirs");
+          namesystem.mkdirs("/test",new PermissionStatus("test","test",new FsPermission((short)00755)),true);
+          LOG.info("mkdirs complete");
+        }
+ catch (        Throwable ioe) {
+          LOG.fatal("Got exception",ioe);
+          deferredException.set(ioe);
+          waitToEnterSync.countDown();
+        }
+      }
+    }
+;
+    Answer<Void> blockingSync=new Answer<Void>(){
+      @Override public Void answer(      InvocationOnMock invocation) throws Throwable {
+        LOG.info("logSync called");
+        if (Thread.currentThread() == doAnEditThread) {
+          LOG.info("edit thread: Telling main thread we made it just before logSync...");
+          waitToEnterSync.countDown();
+          LOG.info("edit thread: sleeping for " + BLOCK_TIME + "secs");
+          Thread.sleep(BLOCK_TIME * 1000);
+          LOG.info("Going through to logSync. This will allow the main thread to continue.");
+        }
+        invocation.callRealMethod();
+        LOG.info("logSync complete");
+        return null;
+      }
+    }
+;
+    doAnswer(blockingSync).when(editLog).logSync();
+    doAnEditThread.start();
+    LOG.info("Main thread: waiting to just before logSync...");
+    waitToEnterSync.await();
+    assertNull(deferredException.get());
+    LOG.info("Main thread: detected that logSync about to be called.");
+    LOG.info("Trying to enter safe mode.");
+    LOG.info("This should block for " + BLOCK_TIME + "sec, since we have pending edits");
+    long st=Time.now();
+    namesystem.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    long et=Time.now();
+    LOG.info("Entered safe mode");
+    assertTrue(et - st > (BLOCK_TIME - 1) * 1000);
+    namesystem.saveNamespace();
+    LOG.info("Joining on edit thread...");
+    doAnEditThread.join();
+    assertNull(deferredException.get());
+    assertEquals(3,verifyEditLogs(namesystem,fsimage,NNStorage.getFinalizedEditsFileName(1,3),1));
+    assertEquals(1,verifyEditLogs(namesystem,fsimage,NNStorage.getInProgressEditsFileName(4),4));
+  }
+  finally {
+    LOG.info("Closing namesystem");
+    if (namesystem != null)     namesystem.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

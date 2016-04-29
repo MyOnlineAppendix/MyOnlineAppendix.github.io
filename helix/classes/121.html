@@ -1,0 +1,182 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.task.TestTaskRebalancer (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-1 type-8 type-11 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testExpiry() throws Exception {
+  String jobName="Expiry";
+  long expiry=1000;
+  Map<String,String> commandConfig=ImmutableMap.of(TIMEOUT_CONFIG,String.valueOf(100));
+  Workflow flow=WorkflowGenerator.generateDefaultSingleJobWorkflowBuilderWithExtraConfigs(jobName,commandConfig).setExpiry(expiry).build();
+  _driver.start(flow);
+  TestUtil.pollForWorkflowState(_manager,jobName,TaskState.IN_PROGRESS);
+  HelixDataAccessor accessor=_manager.getHelixDataAccessor();
+  PropertyKey workflowCfgKey=accessor.keyBuilder().resourceConfig(jobName);
+  String workflowPropStoreKey=Joiner.on("/").join(TaskConstants.REBALANCER_CONTEXT_ROOT,jobName);
+  Assert.assertTrue(_manager.getHelixPropertyStore().exists(workflowPropStoreKey,AccessOption.PERSISTENT));
+  Assert.assertNotSame(accessor.getProperty(workflowCfgKey),null);
+  TestUtil.pollForWorkflowState(_manager,jobName,TaskState.COMPLETED);
+  Thread.sleep(expiry);
+  _driver.invokeRebalance();
+  Thread.sleep(expiry);
+  Assert.assertFalse(_manager.getHelixPropertyStore().exists(workflowPropStoreKey,AccessOption.PERSISTENT));
+  Assert.assertEquals(accessor.getProperty(workflowCfgKey),null);
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testRepeatedWorkflow() throws Exception {
+  String workflowName="SomeWorkflow";
+  Workflow flow=WorkflowGenerator.generateDefaultRepeatedJobWorkflowBuilder(workflowName).build();
+  new TaskDriver(_manager).start(flow);
+  TestUtil.pollForWorkflowState(_manager,workflowName,TaskState.COMPLETED);
+  for (  String task : flow.getJobConfigs().keySet()) {
+    TestUtil.pollForJobState(_manager,workflowName,task,TaskState.COMPLETED);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-14 type-1 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void timeouts() throws Exception {
+  final String jobResource="timeouts";
+  Workflow flow=WorkflowGenerator.generateDefaultSingleJobWorkflowBuilderWithExtraConfigs(jobResource,WorkflowGenerator.DEFAULT_COMMAND_CONFIG,JobConfig.MAX_ATTEMPTS_PER_TASK,String.valueOf(2),JobConfig.TIMEOUT_PER_TASK,String.valueOf(100)).build();
+  _driver.start(flow);
+  TestUtil.pollForWorkflowState(_manager,jobResource,TaskState.FAILED);
+  JobContext ctx=TaskUtil.getJobContext(_manager,TaskUtil.getNamespacedJobName(jobResource));
+  int maxAttempts=0;
+  for (int i=0; i < NUM_PARTITIONS; i++) {
+    TaskPartitionState state=ctx.getPartitionState(i);
+    if (state != null) {
+      Assert.assertEquals(state,TaskPartitionState.TIMED_OUT);
+      maxAttempts=Math.max(maxAttempts,ctx.getPartitionNumAttempts(i));
+    }
+  }
+  Assert.assertEquals(maxAttempts,2);
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void basic() throws Exception {
+  basic(100);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public void afterClass() throws Exception {
+  _controller.syncStop();
+  for (int i=0; i < n; i++) {
+    _participants[i].syncStop();
+  }
+  _manager.disconnect();
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-8 type-2 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNamedQueue() throws Exception {
+  String queueName=TestHelper.getTestMethodName();
+  JobQueue queue=new JobQueue.Builder(queueName).build();
+  _driver.createQueue(queue);
+  Set<String> master=Sets.newHashSet("MASTER");
+  Set<String> slave=Sets.newHashSet("SLAVE");
+  JobConfig.Builder job1=new JobConfig.Builder().setCommand("Reindex").setTargetResource(WorkflowGenerator.DEFAULT_TGT_DB).setTargetPartitionStates(master);
+  JobConfig.Builder job2=new JobConfig.Builder().setCommand("Reindex").setTargetResource(WorkflowGenerator.DEFAULT_TGT_DB).setTargetPartitionStates(slave);
+  _driver.enqueueJob(queueName,"masterJob",job1);
+  _driver.enqueueJob(queueName,"slaveJob",job2);
+  String namespacedJob1=queueName + "_masterJob";
+  String namespacedJob2=queueName + "_slaveJob";
+  TestUtil.pollForJobState(_manager,queueName,namespacedJob1,TaskState.COMPLETED);
+  TestUtil.pollForJobState(_manager,queueName,namespacedJob2,TaskState.COMPLETED);
+  JobContext masterJobContext=TaskUtil.getJobContext(_manager,namespacedJob1);
+  JobContext slaveJobContext=TaskUtil.getJobContext(_manager,namespacedJob2);
+  long job1Finish=masterJobContext.getFinishTime();
+  long job2Start=slaveJobContext.getStartTime();
+  Assert.assertTrue(job2Start >= job1Finish);
+  _driver.flushQueue(queueName);
+  HelixDataAccessor accessor=_manager.getHelixDataAccessor();
+  PropertyKey.Builder keyBuilder=accessor.keyBuilder();
+  Assert.assertNull(accessor.getProperty(keyBuilder.idealStates(namespacedJob1)));
+  Assert.assertNull(accessor.getProperty(keyBuilder.resourceConfig(namespacedJob1)));
+  Assert.assertNull(accessor.getProperty(keyBuilder.idealStates(namespacedJob2)));
+  Assert.assertNull(accessor.getProperty(keyBuilder.resourceConfig(namespacedJob2)));
+  WorkflowConfig workflowCfg=TaskUtil.getWorkflowCfg(_manager,queueName);
+  JobDag dag=workflowCfg.getJobDag();
+  Assert.assertFalse(dag.getAllNodes().contains(namespacedJob1));
+  Assert.assertFalse(dag.getAllNodes().contains(namespacedJob2));
+  Assert.assertFalse(dag.getChildrenToParents().containsKey(namespacedJob1));
+  Assert.assertFalse(dag.getChildrenToParents().containsKey(namespacedJob2));
+  Assert.assertFalse(dag.getParentsToChildren().containsKey(namespacedJob1));
+  Assert.assertFalse(dag.getParentsToChildren().containsKey(namespacedJob2));
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void zeroTaskCompletionTime() throws Exception {
+  basic(0);
+}
+
+</code></pre>
+
+<pre class="type-7 type-1 type-2 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void partitionSet() throws Exception {
+  final String jobResource="partitionSet";
+  ImmutableList<String> targetPartitions=ImmutableList.of("TestDB_1","TestDB_2","TestDB_3","TestDB_5","TestDB_8","TestDB_13");
+  Map<String,String> commandConfig=ImmutableMap.of(TIMEOUT_CONFIG,String.valueOf(100));
+  Workflow flow=WorkflowGenerator.generateDefaultSingleJobWorkflowBuilderWithExtraConfigs(jobResource,commandConfig,JobConfig.MAX_ATTEMPTS_PER_TASK,String.valueOf(1),JobConfig.TARGET_PARTITIONS,Joiner.on(",").join(targetPartitions)).build();
+  _driver.start(flow);
+  TestUtil.pollForWorkflowState(_manager,jobResource,TaskState.COMPLETED);
+  String namespacedName=TaskUtil.getNamespacedJobName(jobResource);
+  JobContext ctx=TaskUtil.getJobContext(_manager,namespacedName);
+  WorkflowContext workflowContext=TaskUtil.getWorkflowContext(_manager,jobResource);
+  Assert.assertNotNull(ctx);
+  Assert.assertNotNull(workflowContext);
+  Assert.assertEquals(workflowContext.getJobState(namespacedName),TaskState.COMPLETED);
+  for (  String pName : targetPartitions) {
+    int i=ctx.getPartitionsByTarget().get(pName).get(0);
+    Assert.assertEquals(ctx.getPartitionState(i),TaskPartitionState.COMPLETED);
+    Assert.assertEquals(ctx.getPartitionNumAttempts(i),1);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

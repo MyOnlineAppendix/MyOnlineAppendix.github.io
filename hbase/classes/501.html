@@ -1,0 +1,309 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestPerColumnFamilyFlush (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=180000) public void testSelectiveFlushWhenNotEnabled() throws IOException {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,200 * 1024);
+  conf.set(FlushPolicyFactory.HBASE_FLUSH_POLICY_KEY,FlushAllStoresPolicy.class.getName());
+  HRegion region=initHRegion("testSelectiveFlushWhenNotEnabled",conf);
+  for (int i=1; i <= 1200; i++) {
+    region.put(createPut(1,i));
+    if (i <= 100) {
+      region.put(createPut(2,i));
+      if (i <= 50) {
+        region.put(createPut(3,i));
+      }
+    }
+  }
+  long totalMemstoreSize=region.getMemstoreSize();
+  long cf1MemstoreSize=region.getStore(FAMILY1).getMemStoreSize();
+  long cf2MemstoreSize=region.getStore(FAMILY2).getMemStoreSize();
+  long cf3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  assertTrue(cf1MemstoreSize > 0);
+  assertTrue(cf2MemstoreSize > 0);
+  assertTrue(cf3MemstoreSize > 0);
+  assertEquals(totalMemstoreSize + 3 * DefaultMemStore.DEEP_OVERHEAD,cf1MemstoreSize + cf2MemstoreSize + cf3MemstoreSize);
+  region.flush(false);
+  cf1MemstoreSize=region.getStore(FAMILY1).getMemStoreSize();
+  cf2MemstoreSize=region.getStore(FAMILY2).getMemStoreSize();
+  cf3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  totalMemstoreSize=region.getMemstoreSize();
+  long smallestSeqInRegionCurrentMemstore=region.getWAL().getEarliestMemstoreSeqNum(region.getRegionInfo().getEncodedNameAsBytes());
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf1MemstoreSize);
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf2MemstoreSize);
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf3MemstoreSize);
+  assertEquals(0,totalMemstoreSize);
+  assertEquals(HConstants.NO_SEQNUM,smallestSeqInRegionCurrentMemstore);
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * When a log roll is about to happen, we do a flush of the regions who will be affected by the
+ * log roll. These flushes cannot be a selective flushes, otherwise we cannot roll the logs. This
+ * test ensures that we do a full-flush in that scenario.
+ * @throws IOException
+ */
+@Test(timeout=180000) public void testFlushingWhenLogRolling() throws Exception {
+  TableName tableName=TableName.valueOf("testFlushingWhenLogRolling");
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.setLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,128 * 1024 * 1024);
+  conf.set(FlushPolicyFactory.HBASE_FLUSH_POLICY_KEY,FlushLargeStoresPolicy.class.getName());
+  long cfFlushSizeLowerBound=2048;
+  conf.setLong(FlushLargeStoresPolicy.HREGION_COLUMNFAMILY_FLUSH_SIZE_LOWER_BOUND_MIN,cfFlushSizeLowerBound);
+  conf.setLong("hbase.regionserver.logroll.period",60L * 60 * 1000);
+  conf.setLong("hbase.regionserver.hlog.blocksize",128L * 1024 * 1024);
+  final int maxLogs=10;
+  conf.setInt("hbase.regionserver.maxlogs",maxLogs);
+  final int numRegionServers=1;
+  TEST_UTIL.startMiniCluster(numRegionServers);
+  try {
+    Table table=TEST_UTIL.createTable(tableName,FAMILIES);
+    try (Admin admin=TEST_UTIL.getConnection().getAdmin()){
+      admin.flush(TableName.NAMESPACE_TABLE_NAME);
+    }
+     Pair<Region,HRegionServer> desiredRegionAndServer=getRegionWithName(tableName);
+    final Region desiredRegion=desiredRegionAndServer.getFirst();
+    assertTrue("Could not find a region which hosts the new region.",desiredRegion != null);
+    LOG.info("Writing to region=" + desiredRegion);
+    for (int i=1; i <= 3; i++) {
+      table.put(createPut(i,0));
+    }
+    for (int i=0; i < maxLogs; i++) {
+      for (int j=0; j < 100; j++) {
+        table.put(createPut(1,i * 100 + j));
+      }
+      int currentNumRolledLogFiles=getNumRolledLogFiles(desiredRegion);
+      assertNull(getWAL(desiredRegion).rollWriter());
+      while (getNumRolledLogFiles(desiredRegion) <= currentNumRolledLogFiles) {
+        Thread.sleep(100);
+      }
+    }
+    table.close();
+    assertEquals(maxLogs,getNumRolledLogFiles(desiredRegion));
+    assertTrue(desiredRegion.getStore(FAMILY1).getMemStoreSize() > cfFlushSizeLowerBound);
+    assertTrue(desiredRegion.getStore(FAMILY2).getMemStoreSize() < cfFlushSizeLowerBound);
+    assertTrue(desiredRegion.getStore(FAMILY3).getMemStoreSize() < cfFlushSizeLowerBound);
+    table.put(createPut(1,12345678));
+    desiredRegionAndServer.getSecond().walRoller.requestRollAll();
+    TEST_UTIL.waitFor(30000,new Waiter.ExplainingPredicate<Exception>(){
+      @Override public boolean evaluate() throws Exception {
+        return desiredRegion.getMemstoreSize() == 0;
+      }
+      @Override public String explainFailure() throws Exception {
+        long memstoreSize=desiredRegion.getMemstoreSize();
+        if (memstoreSize > 0) {
+          return "Still have unflushed entries in memstore, memstore size is " + memstoreSize;
+        }
+        return "Unknown";
+      }
+    }
+);
+    LOG.info("Finished waiting on flush after too many WALs...");
+    assertEquals(DefaultMemStore.DEEP_OVERHEAD,desiredRegion.getStore(FAMILY1).getMemStoreSize());
+    assertEquals(DefaultMemStore.DEEP_OVERHEAD,desiredRegion.getStore(FAMILY2).getMemStoreSize());
+    assertEquals(DefaultMemStore.DEEP_OVERHEAD,desiredRegion.getStore(FAMILY3).getMemStoreSize());
+    assertNull(getWAL(desiredRegion).rollWriter(true));
+    assertTrue(getNumRolledLogFiles(desiredRegion) < maxLogs);
+  }
+  finally {
+    TEST_UTIL.shutdownMiniCluster();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 type-18 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+- Is not executed with the test suite
+"></span><br>
+@Ignore("DLR is broken by HBASE-12751") @Test(timeout=180000) public void testLogReplayWithDistributedReplay() throws Exception {
+  TEST_UTIL.getConfiguration().setBoolean(HConstants.DISTRIBUTED_LOG_REPLAY_KEY,true);
+  doTestLogReplay();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=180000) public void testSelectiveFlushWhenEnabled() throws IOException {
+  Configuration conf=HBaseConfiguration.create();
+  conf.setLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,200 * 1024);
+  conf.set(FlushPolicyFactory.HBASE_FLUSH_POLICY_KEY,FlushLargeStoresPolicy.class.getName());
+  conf.setLong(FlushLargeStoresPolicy.HREGION_COLUMNFAMILY_FLUSH_SIZE_LOWER_BOUND_MIN,100 * 1024);
+  Region region=initHRegion("testSelectiveFlushWhenEnabled",conf);
+  for (int i=1; i <= 1200; i++) {
+    region.put(createPut(1,i));
+    if (i <= 100) {
+      region.put(createPut(2,i));
+      if (i <= 50) {
+        region.put(createPut(3,i));
+      }
+    }
+  }
+  long totalMemstoreSize=region.getMemstoreSize();
+  long smallestSeqCF1=region.getOldestSeqIdOfStore(FAMILY1);
+  long smallestSeqCF2=region.getOldestSeqIdOfStore(FAMILY2);
+  long smallestSeqCF3=region.getOldestSeqIdOfStore(FAMILY3);
+  long cf1MemstoreSize=region.getStore(FAMILY1).getMemStoreSize();
+  long cf2MemstoreSize=region.getStore(FAMILY2).getMemStoreSize();
+  long cf3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  long smallestSeqInRegionCurrentMemstore=getWAL(region).getEarliestMemstoreSeqNum(region.getRegionInfo().getEncodedNameAsBytes());
+  assertEquals(smallestSeqCF1,smallestSeqInRegionCurrentMemstore);
+  assertTrue(smallestSeqCF1 < smallestSeqCF2);
+  assertTrue(smallestSeqCF2 < smallestSeqCF3);
+  assertTrue(cf1MemstoreSize > 0);
+  assertTrue(cf2MemstoreSize > 0);
+  assertTrue(cf3MemstoreSize > 0);
+  assertEquals(totalMemstoreSize + 3 * DefaultMemStore.DEEP_OVERHEAD,cf1MemstoreSize + cf2MemstoreSize + cf3MemstoreSize);
+  region.flush(false);
+  long oldCF2MemstoreSize=cf2MemstoreSize;
+  long oldCF3MemstoreSize=cf3MemstoreSize;
+  cf1MemstoreSize=region.getStore(FAMILY1).getMemStoreSize();
+  cf2MemstoreSize=region.getStore(FAMILY2).getMemStoreSize();
+  cf3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  totalMemstoreSize=region.getMemstoreSize();
+  smallestSeqInRegionCurrentMemstore=getWAL(region).getEarliestMemstoreSeqNum(region.getRegionInfo().getEncodedNameAsBytes());
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf1MemstoreSize);
+  assertEquals(cf2MemstoreSize,oldCF2MemstoreSize);
+  assertEquals(cf3MemstoreSize,oldCF3MemstoreSize);
+  assertEquals(smallestSeqInRegionCurrentMemstore,smallestSeqCF2);
+  assertEquals(totalMemstoreSize + 2 * DefaultMemStore.DEEP_OVERHEAD,cf2MemstoreSize + cf3MemstoreSize);
+  for (int i=1200; i < 2400; i++) {
+    region.put(createPut(2,i));
+    if (i - 1200 < 100) {
+      region.put(createPut(3,i));
+    }
+  }
+  oldCF3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  region.flush(false);
+  cf1MemstoreSize=region.getStore(FAMILY1).getMemStoreSize();
+  cf2MemstoreSize=region.getStore(FAMILY2).getMemStoreSize();
+  cf3MemstoreSize=region.getStore(FAMILY3).getMemStoreSize();
+  totalMemstoreSize=region.getMemstoreSize();
+  smallestSeqInRegionCurrentMemstore=getWAL(region).getEarliestMemstoreSeqNum(region.getRegionInfo().getEncodedNameAsBytes());
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf1MemstoreSize);
+  assertEquals(DefaultMemStore.DEEP_OVERHEAD,cf2MemstoreSize);
+  assertEquals(cf3MemstoreSize,oldCF3MemstoreSize);
+  assertEquals(totalMemstoreSize + DefaultMemStore.DEEP_OVERHEAD,cf3MemstoreSize);
+  assertEquals(smallestSeqInRegionCurrentMemstore,smallestSeqCF3);
+  region.flush(true);
+  for (int i=1; i <= 300; i++) {
+    region.put(createPut(1,i));
+    region.put(createPut(2,i));
+    region.put(createPut(3,i));
+    region.put(createPut(4,i));
+    region.put(createPut(5,i));
+  }
+  region.flush(false);
+  assertEquals(0,region.getMemstoreSize());
+  HBaseTestingUtility.closeRegionAndWAL(region);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=180000) public void testCompareStoreFileCount() throws Exception {
+  long memstoreFlushSize=1024L * 1024;
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.setLong(HConstants.HREGION_MEMSTORE_FLUSH_SIZE,memstoreFlushSize);
+  conf.set(FlushPolicyFactory.HBASE_FLUSH_POLICY_KEY,FlushAllStoresPolicy.class.getName());
+  conf.setInt(HStore.BLOCKING_STOREFILES_KEY,10000);
+  conf.set(HConstants.HBASE_REGION_SPLIT_POLICY_KEY,ConstantSizeRegionSplitPolicy.class.getName());
+  HTableDescriptor htd=new HTableDescriptor(TABLENAME);
+  htd.setCompactionEnabled(false);
+  htd.addFamily(new HColumnDescriptor(FAMILY1));
+  htd.addFamily(new HColumnDescriptor(FAMILY2));
+  htd.addFamily(new HColumnDescriptor(FAMILY3));
+  LOG.info("==============Test with selective flush disabled===============");
+  int cf1StoreFileCount=-1;
+  int cf2StoreFileCount=-1;
+  int cf3StoreFileCount=-1;
+  int cf1StoreFileCount1=-1;
+  int cf2StoreFileCount1=-1;
+  int cf3StoreFileCount1=-1;
+  try {
+    TEST_UTIL.startMiniCluster(1);
+    TEST_UTIL.getHBaseAdmin().createNamespace(NamespaceDescriptor.create(TABLENAME.getNamespaceAsString()).build());
+    TEST_UTIL.getHBaseAdmin().createTable(htd);
+    TEST_UTIL.waitTableAvailable(TABLENAME);
+    Connection conn=ConnectionFactory.createConnection(conf);
+    Table table=conn.getTable(TABLENAME);
+    doPut(table,memstoreFlushSize);
+    table.close();
+    conn.close();
+    Region region=getRegionWithName(TABLENAME).getFirst();
+    cf1StoreFileCount=region.getStore(FAMILY1).getStorefilesCount();
+    cf2StoreFileCount=region.getStore(FAMILY2).getStorefilesCount();
+    cf3StoreFileCount=region.getStore(FAMILY3).getStorefilesCount();
+  }
+  finally {
+    TEST_UTIL.shutdownMiniCluster();
+  }
+  LOG.info("==============Test with selective flush enabled===============");
+  conf.set(FlushPolicyFactory.HBASE_FLUSH_POLICY_KEY,FlushLargeStoresPolicy.class.getName());
+  conf.setLong(FlushLargeStoresPolicy.HREGION_COLUMNFAMILY_FLUSH_SIZE_LOWER_BOUND_MIN,0);
+  try {
+    TEST_UTIL.startMiniCluster(1);
+    TEST_UTIL.getHBaseAdmin().createNamespace(NamespaceDescriptor.create(TABLENAME.getNamespaceAsString()).build());
+    TEST_UTIL.getHBaseAdmin().createTable(htd);
+    Connection conn=ConnectionFactory.createConnection(conf);
+    Table table=conn.getTable(TABLENAME);
+    doPut(table,memstoreFlushSize);
+    table.close();
+    conn.close();
+    Region region=getRegionWithName(TABLENAME).getFirst();
+    cf1StoreFileCount1=region.getStore(FAMILY1).getStorefilesCount();
+    cf2StoreFileCount1=region.getStore(FAMILY2).getStorefilesCount();
+    cf3StoreFileCount1=region.getStore(FAMILY3).getStorefilesCount();
+  }
+  finally {
+    TEST_UTIL.shutdownMiniCluster();
+  }
+  LOG.info("disable selective flush: " + Bytes.toString(FAMILY1) + "=>"+ cf1StoreFileCount+ ", "+ Bytes.toString(FAMILY2)+ "=>"+ cf2StoreFileCount+ ", "+ Bytes.toString(FAMILY3)+ "=>"+ cf3StoreFileCount);
+  LOG.info("enable selective flush: " + Bytes.toString(FAMILY1) + "=>"+ cf1StoreFileCount1+ ", "+ Bytes.toString(FAMILY2)+ "=>"+ cf2StoreFileCount1+ ", "+ Bytes.toString(FAMILY3)+ "=>"+ cf3StoreFileCount1);
+  assertTrue(cf1StoreFileCount1 < cf1StoreFileCount);
+  assertTrue(cf2StoreFileCount1 < cf2StoreFileCount);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=180000) public void testLogReplayWithDistributedLogSplit() throws Exception {
+  TEST_UTIL.getConfiguration().setBoolean(HConstants.DISTRIBUTED_LOG_REPLAY_KEY,false);
+  doTestLogReplay();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

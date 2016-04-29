@@ -1,0 +1,210 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspIterativeVerifier</h3><kbd>Verifies assertions in iterations</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.openejb.arquillian.session.SessionScopeTest </h4><pre class="type-14 type-13 type-3 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testShouldBeAbleToAccessServletAndEjb() throws Exception {
+  String[] sessionResult=new String[2];
+  for (int i=0; i < sessionResult.length; i++) {
+    HttpClient client=new HttpClient();
+    HttpMethod get=new GetMethod(TEST_SESSION_URL);
+    String[] contents=new String[2];
+    try {
+      for (int j=0; j < contents.length; j++) {
+        int out=client.executeMethod(get);
+        if (out != 200) {
+          throw new RuntimeException("get " + TEST_SESSION_URL + " returned "+ out);
+        }
+        contents[j]=get.getResponseBodyAsString();
+      }
+      assertEquals(contents[0],contents[1]);
+    }
+  finally {
+      get.releaseConnection();
+    }
+    sessionResult[i]=contents[0];
+  }
+  assertNotSame(sessionResult[0],sessionResult[1]);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.openejb.resource.jdbc.DynamicDataSourceTest </h4><pre class="type-2 type-14 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void route() throws Exception {
+  System.setProperty(javax.naming.Context.INITIAL_CONTEXT_FACTORY,LocalInitialContextFactory.class.getName());
+  ConfigurationFactory config=new ConfigurationFactory();
+  Assembler assembler=new Assembler();
+  assembler.createProxyFactory(config.configureService(ProxyFactoryInfo.class));
+  assembler.createTransactionManager(config.configureService(TransactionServiceInfo.class));
+  assembler.createSecurityService(config.configureService(SecurityServiceInfo.class));
+  for (int i=1; i <= 3; i++) {
+    String dbName="database" + i;
+    Resource resourceDs=new Resource(dbName,"DataSource");
+    Properties p=resourceDs.getProperties();
+    p.put("JdbcDriver","org.hsqldb.jdbcDriver");
+    p.put("JdbcUrl","jdbc:hsqldb:mem:db" + i);
+    p.put("UserName","sa");
+    p.put("Password","");
+    p.put("JtaManaged","true");
+    assembler.createResource(config.configureService(resourceDs,ResourceInfo.class));
+  }
+  Resource resourceRouter=new Resource("My Router","org.apache.openejb.router.test.DynamicDataSourceTest$DeterminedRouter","org.router:DeterminedRouter");
+  resourceRouter.getProperties().setProperty("DatasourceNames","database1 database2 database3");
+  resourceRouter.getProperties().setProperty("DefaultDataSourceName","database1");
+  assembler.createResource(config.configureService(resourceRouter,ResourceInfo.class));
+  Resource resourceRoutedDs=new Resource("Routed Datasource","org.apache.openejb.resource.jdbc.Router","RoutedDataSource");
+  resourceRoutedDs.getProperties().setProperty("Router","My Router");
+  assembler.createResource(config.configureService(resourceRoutedDs,ResourceInfo.class));
+  StatelessSessionContainerInfo statelessContainerInfo=config.configureService(StatelessSessionContainerInfo.class);
+  assembler.createContainer(statelessContainerInfo);
+  EjbJar ejbJar=new EjbJar();
+  ejbJar.addEnterpriseBean(new StatelessBean(RoutedEJBBean.class));
+  ejbJar.addEnterpriseBean(new StatelessBean(UtilityBean.class));
+  EjbModule ejbModule=new EjbModule(ejbJar);
+  AppModule appModule=new AppModule(ejbModule.getClassLoader(),"test-dynamic-data-source");
+  appModule.getEjbModules().add(ejbModule);
+  PersistenceUnit unit=new PersistenceUnit("router");
+  unit.addClass(Person.class);
+  unit.getProperties().put("openjpa.jdbc.SynchronizeMappings","buildSchema");
+  unit.setTransactionType(TransactionType.JTA);
+  unit.setJtaDataSource("Routed Datasource");
+  appModule.addPersistenceModule(new PersistenceModule("root",new Persistence(unit)));
+  for (int i=1; i <= 3; i++) {
+    PersistenceUnit u=new PersistenceUnit("db" + i);
+    u.addClass(Person.class);
+    u.getProperties().put("openjpa.jdbc.SynchronizeMappings","buildSchema");
+    u.setTransactionType(TransactionType.JTA);
+    u.setJtaDataSource("database" + i);
+    appModule.addPersistenceModule(new PersistenceModule("root",new Persistence(u)));
+  }
+  assembler.createApplication(config.configureApplication(appModule));
+  Context ctx=new InitialContext();
+  final List<String> databases=new ArrayList<String>();
+  databases.add("database1");
+  databases.add("database2");
+  databases.add("database3");
+  Utility utility=(Utility)ctx.lookup("UtilityBeanLocal");
+  utility.initDatabase();
+  RoutedEJB ejb=(RoutedEJB)ctx.lookup("RoutedEJBBeanLocal");
+  for (int i=0; i < 18; i++) {
+    String name="record " + i;
+    String db=databases.get(i % 3);
+    ejb.persist(i,name,db);
+  }
+  for (int i=1; i <= 3; i++) {
+    Connection connection=DriverManager.getConnection("jdbc:hsqldb:mem:db" + i,"sa","");
+    Statement st=connection.createStatement();
+    ResultSet rs=st.executeQuery("select count(*) from \"DynamicDataSourceTest$Person\"");
+    rs.next();
+    assertEquals(6,rs.getInt(1));
+    st.close();
+    connection.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.openejb.server.groovy.BeanManagerHelperTest </h4><pre class="type-14 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void getInstanceFromName(){
+  for (int i=1; i < 5; i++) {
+    final Pojo pojo=(Pojo)helper.beanFromName("BeanManagerHelperTest","pojo");
+    assertEquals(5 + i,pojo.id);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-14 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void getInstanceFromClass(){
+  for (int i=1; i < 5; i++) {
+    final Pojo pojo=(Pojo)helper.beanFromClass("BeanManagerHelperTest",Pojo.class.getName());
+    assertEquals(5 + i,pojo.id);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.openejb.util.HexConverterTest </h4><pre class="type-2 type-14 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testStringToBytes(){
+  final byte[] correctAnswer=new byte[]{(byte)166,(byte)253,0,18,(byte)184};
+  String hexString="A6FD0012B8";
+  byte[] bytes=HexConverter.hexToBytes(hexString);
+  assertEquals(bytes.length,correctAnswer.length);
+  for (int i=0; i < bytes.length; i++)   assertEquals(correctAnswer[i],bytes[i]);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.superbiz.dynamicdatasourcerouting.DynamicDataSourceTest </h4><pre class="type-2 type-14 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void route() throws Exception {
+  String[] databases=new String[]{"database1","database2","database3"};
+  Properties properties=new Properties();
+  properties.setProperty(Context.INITIAL_CONTEXT_FACTORY,LocalInitialContextFactory.class.getName());
+  for (int i=1; i <= databases.length; i++) {
+    String dbName=databases[i - 1];
+    properties.setProperty(dbName,"new://Resource?type=DataSource");
+    dbName+=".";
+    properties.setProperty(dbName + "JdbcDriver","org.hsqldb.jdbcDriver");
+    properties.setProperty(dbName + "JdbcUrl","jdbc:hsqldb:mem:db" + i);
+    properties.setProperty(dbName + "UserName","sa");
+    properties.setProperty(dbName + "Password","");
+    properties.setProperty(dbName + "JtaManaged","true");
+  }
+  properties.setProperty("My Router","new://Resource?provider=org.router:DeterminedRouter&type=" + DeterminedRouter.class.getName());
+  properties.setProperty("My Router.DatasourceNames","database1 database2 database3");
+  properties.setProperty("My Router.DefaultDataSourceName","database1");
+  properties.setProperty("Routed Datasource","new://Resource?provider=RoutedDataSource&type=" + DataSource.class.getName());
+  properties.setProperty("Routed Datasource.Router","My Router");
+  Context ctx=EJBContainer.createEJBContainer(properties).getContext();
+  RoutedPersister ejb=(RoutedPersister)ctx.lookup("java:global/dynamic-datasource-routing/RoutedPersister");
+  for (int i=0; i < 18; i++) {
+    String name="record " + i;
+    String db=databases[i % 3];
+    ejb.persist(i,name,db);
+  }
+  for (int i=1; i <= databases.length; i++) {
+    Connection connection=DriverManager.getConnection("jdbc:hsqldb:mem:db" + i,"sa","");
+    Statement st=connection.createStatement();
+    ResultSet rs=st.executeQuery("select count(*) from PERSON");
+    rs.next();
+    assertEquals(6,rs.getInt(1));
+    st.close();
+    connection.close();
+  }
+  ctx.close();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

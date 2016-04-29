@@ -1,0 +1,144 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.blockmanagement.TestRBWBlockInvalidation (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Sets implicit assumptions "><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >AssumptionSetter&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-15 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test when a block's replica is removed from RBW folder in one of the
+ * datanode, namenode should ask to invalidate that corrupted block and
+ * schedule replication for one more replica for that under replicated block.
+ */
+@Test(timeout=600000) public void testBlockInvalidationWhenRBWReplicaMissedInDN() throws IOException, InterruptedException {
+  assumeTrue(!Path.WINDOWS);
+  Configuration conf=new HdfsConfiguration();
+  conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY,2);
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,300);
+  conf.setLong(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+  conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,1);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  FSDataOutputStream out=null;
+  try {
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    FileSystem fs=cluster.getFileSystem();
+    Path testPath=new Path("/tmp/TestRBWBlockInvalidation","foo1");
+    out=fs.create(testPath,(short)2);
+    out.writeBytes("HDFS-3157: " + testPath);
+    out.hsync();
+    cluster.startDataNodes(conf,1,true,null,null,null);
+    String bpid=namesystem.getBlockPoolId();
+    ExtendedBlock blk=DFSTestUtil.getFirstBlock(fs,testPath);
+    Block block=blk.getLocalBlock();
+    DataNode dn=cluster.getDataNodes().get(0);
+    File blockFile=DataNodeTestUtils.getBlockFile(dn,bpid,block);
+    File metaFile=DataNodeTestUtils.getMetaFile(dn,bpid,block);
+    assertTrue("Could not delete the block file from the RBW folder",blockFile.delete());
+    assertTrue("Could not delete the block meta file from the RBW folder",metaFile.delete());
+    out.close();
+    int liveReplicas=0;
+    while (true) {
+      if ((liveReplicas=countReplicas(namesystem,blk).liveReplicas()) < 2) {
+        LOG.info("Live Replicas after corruption: " + liveReplicas);
+        break;
+      }
+      Thread.sleep(100);
+    }
+    assertEquals("There should be less than 2 replicas in the " + "liveReplicasMap",1,liveReplicas);
+    while (true) {
+      if ((liveReplicas=countReplicas(namesystem,blk).liveReplicas()) > 1) {
+        LOG.info("Live Replicas after Rereplication: " + liveReplicas);
+        break;
+      }
+      Thread.sleep(100);
+    }
+    assertEquals("There should be two live replicas",2,liveReplicas);
+    while (true) {
+      Thread.sleep(100);
+      if (countReplicas(namesystem,blk).corruptReplicas() == 0) {
+        LOG.info("Corrupt Replicas becomes 0");
+        break;
+      }
+    }
+  }
+  finally {
+    if (out != null) {
+      out.close();
+    }
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Regression test for HDFS-4799, a case where, upon restart, if there
+ * were RWR replicas with out-of-date genstamps, the NN could accidentally
+ * delete good replicas instead of the bad replicas.
+ */
+@Test(timeout=60000) public void testRWRInvalidation() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setClass(DFSConfigKeys.DFS_BLOCK_REPLICATOR_CLASSNAME_KEY,RandomDeleterPolicy.class,BlockPlacementPolicy.class);
+  conf.setInt(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,1);
+  List<Path> testPaths=Lists.newArrayList();
+  for (int i=0; i < 10; i++) {
+    testPaths.add(new Path("/test" + i));
+  }
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(2).build();
+  try {
+    List<FSDataOutputStream> streams=Lists.newArrayList();
+    try {
+      for (      Path path : testPaths) {
+        FSDataOutputStream out=cluster.getFileSystem().create(path,(short)2);
+        streams.add(out);
+        out.writeBytes("old gs data\n");
+        out.hflush();
+      }
+      DataNodeProperties oldGenstampNode=cluster.stopDataNode(0);
+      for (int i=0; i < streams.size(); i++) {
+        Path path=testPaths.get(i);
+        FSDataOutputStream out=streams.get(i);
+        out.writeBytes("new gs data\n");
+        out.hflush();
+        cluster.getFileSystem().setReplication(path,(short)1);
+        out.close();
+      }
+      LOG.info("=========================== restarting cluster");
+      DataNodeProperties otherNode=cluster.stopDataNode(0);
+      cluster.restartNameNode();
+      cluster.restartDataNode(oldGenstampNode);
+      cluster.waitActive();
+      cluster.restartDataNode(otherNode);
+      cluster.waitActive();
+      cluster.getNameNode().getNamesystem().getBlockManager().computeInvalidateWork(2);
+      cluster.triggerHeartbeats();
+      HATestUtil.waitForDNDeletions(cluster);
+      cluster.triggerDeletionReports();
+      for (      Path path : testPaths) {
+        String ret=DFSTestUtil.readFile(cluster.getFileSystem(),path);
+        assertEquals("old gs data\n" + "new gs data\n",ret);
+      }
+    }
+  finally {
+      IOUtils.cleanup(LOG,streams.toArray(new Closeable[0]));
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

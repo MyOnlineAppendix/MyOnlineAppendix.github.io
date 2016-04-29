@@ -1,0 +1,139 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.security.visibility.TestVisibilityLabelsReplication (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  conf=HBaseConfiguration.create();
+  conf.setBoolean(HConstants.DISTRIBUTED_LOG_REPLAY_KEY,false);
+  conf.setBoolean("hbase.online.schema.update.enable",true);
+  conf.setInt("hfile.format.version",3);
+  conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT,"/1");
+  conf.setInt("replication.source.size.capacity",10240);
+  conf.setLong("replication.source.sleepforretries",100);
+  conf.setInt("hbase.regionserver.maxlogs",10);
+  conf.setLong("hbase.master.logcleaner.ttl",10);
+  conf.setInt("zookeeper.recovery.retry",1);
+  conf.setInt("zookeeper.recovery.retry.intervalmill",10);
+  conf.setBoolean("dfs.support.append",true);
+  conf.setLong(HConstants.THREAD_WAKE_FREQUENCY,100);
+  conf.setInt("replication.stats.thread.period.seconds",5);
+  conf.setBoolean("hbase.tests.use.shortcircuit.reads",false);
+  setVisibilityLabelServiceImpl(conf);
+  conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY,HConstants.REPLICATION_ENABLE_DEFAULT);
+  conf.setStrings(HConstants.REPLICATION_CODEC_CONF_KEY,KeyValueCodecWithTags.class.getName());
+  VisibilityTestUtil.enableVisiblityLabels(conf);
+  conf.set(CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY,VisibilityReplication.class.getName());
+  conf.setStrings(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY,SimpleCP.class.getName());
+  conf.setClass(VisibilityUtils.VISIBILITY_LABEL_GENERATOR_CLASS,SimpleScanLabelGenerator.class,ScanLabelGenerator.class);
+  conf.set("hbase.superuser",User.getCurrent().getShortName());
+  SUPERUSER=User.createUserForTesting(conf,User.getCurrent().getShortName(),new String[]{"supergroup"});
+  USER1=User.createUserForTesting(conf,"user1",new String[]{});
+  TEST_UTIL=new HBaseTestingUtility(conf);
+  TEST_UTIL.startMiniZKCluster();
+  MiniZooKeeperCluster miniZK=TEST_UTIL.getZkCluster();
+  zkw1=new ZooKeeperWatcher(conf,"cluster1",null,true);
+  replicationAdmin=new ReplicationAdmin(conf);
+  conf1=HBaseConfiguration.create(conf);
+  conf1.setInt("hfile.format.version",3);
+  conf1.set(HConstants.ZOOKEEPER_ZNODE_PARENT,"/2");
+  conf1.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,6);
+  conf1.setBoolean("dfs.support.append",true);
+  conf1.setBoolean("hbase.tests.use.shortcircuit.reads",false);
+  conf.setBoolean(HConstants.REPLICATION_ENABLE_KEY,HConstants.REPLICATION_ENABLE_DEFAULT);
+  conf1.setStrings(HConstants.REPLICATION_CODEC_CONF_KEY,KeyValueCodecWithTags.class.getName());
+  conf1.setStrings(CoprocessorHost.USER_REGION_COPROCESSOR_CONF_KEY,TestCoprocessorForTagsAtSink.class.getName());
+  USER1=User.createUserForTesting(conf1,"user1",new String[]{});
+  TEST_UTIL1=new HBaseTestingUtility(conf1);
+  TEST_UTIL1.setZkCluster(miniZK);
+  zkw2=new ZooKeeperWatcher(conf1,"cluster2",null,true);
+  replicationAdmin.addPeer("2",TEST_UTIL1.getClusterKey());
+  TEST_UTIL.startMiniCluster(1);
+  TEST_UTIL.waitTableEnabled(LABELS_TABLE_NAME.getName(),50000);
+  TEST_UTIL1.startMiniCluster(1);
+  Admin hBaseAdmin=TEST_UTIL.getHBaseAdmin();
+  HTableDescriptor table=new HTableDescriptor(TABLE_NAME);
+  HColumnDescriptor desc=new HColumnDescriptor(fam);
+  desc.setScope(HConstants.REPLICATION_SCOPE_GLOBAL);
+  table.addFamily(desc);
+  try {
+    hBaseAdmin.createTable(table);
+  }
+  finally {
+    if (hBaseAdmin != null) {
+      hBaseAdmin.close();
+    }
+  }
+  Admin hBaseAdmin1=TEST_UTIL1.getHBaseAdmin();
+  try {
+    hBaseAdmin1.createTable(table);
+  }
+  finally {
+    if (hBaseAdmin1 != null) {
+      hBaseAdmin1.close();
+    }
+  }
+  addLabels();
+  setAuths(conf);
+  setAuths(conf1);
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testVisibilityReplication() throws Exception {
+  int retry=0;
+  try (Table table=writeData(TABLE_NAME,"(" + SECRET + "&"+ PUBLIC+ ")"+ "|("+ CONFIDENTIAL+ ")&("+ TOPSECRET+ ")","(" + PRIVATE + "|"+ CONFIDENTIAL+ ")&("+ PUBLIC+ "|"+ TOPSECRET+ ")","(" + SECRET + "|"+ CONFIDENTIAL+ ")"+ "&"+ "!"+ TOPSECRET,CellVisibility.quote(UNICODE_VIS_TAG) + "&" + SECRET)){
+    Scan s=new Scan();
+    s.setAuthorizations(new Authorizations(SECRET,CONFIDENTIAL,PRIVATE,TOPSECRET,UNICODE_VIS_TAG));
+    ResultScanner scanner=table.getScanner(s);
+    Result[] next=scanner.next(4);
+    assertTrue(next.length == 4);
+    CellScanner cellScanner=next[0].cellScanner();
+    cellScanner.advance();
+    Cell current=cellScanner.current();
+    assertTrue(Bytes.equals(current.getRowArray(),current.getRowOffset(),current.getRowLength(),row1,0,row1.length));
+    cellScanner=next[1].cellScanner();
+    cellScanner.advance();
+    current=cellScanner.current();
+    assertTrue(Bytes.equals(current.getRowArray(),current.getRowOffset(),current.getRowLength(),row2,0,row2.length));
+    cellScanner=next[2].cellScanner();
+    cellScanner.advance();
+    current=cellScanner.current();
+    assertTrue(Bytes.equals(current.getRowArray(),current.getRowOffset(),current.getRowLength(),row3,0,row3.length));
+    cellScanner=next[3].cellScanner();
+    cellScanner.advance();
+    current=cellScanner.current();
+    assertTrue(Bytes.equals(current.getRowArray(),current.getRowOffset(),current.getRowLength(),row4,0,row4.length));
+    try (Table table2=TEST_UTIL1.getConnection().getTable(TABLE_NAME)){
+      s=new Scan();
+      scanner=table2.getScanner(s);
+      next=scanner.next(4);
+      while (next.length == 0 && retry <= 10) {
+        scanner=table2.getScanner(s);
+        next=scanner.next(4);
+        Thread.sleep(2000);
+        retry++;
+      }
+      assertTrue(next.length == 4);
+      verifyGet(row1,expectedVisString[0],expected[0],false,TOPSECRET,CONFIDENTIAL);
+      TestCoprocessorForTagsAtSink.tags.clear();
+      verifyGet(row2,expectedVisString[1],expected[1],false,CONFIDENTIAL,PUBLIC);
+      TestCoprocessorForTagsAtSink.tags.clear();
+      verifyGet(row3,expectedVisString[2],expected[2],false,PRIVATE,SECRET);
+      verifyGet(row3,"",expected[3],true,TOPSECRET,SECRET);
+      verifyGet(row4,expectedVisString[3],expected[4],false,UNICODE_VIS_TAG,SECRET);
+    }
+   }
+ }
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

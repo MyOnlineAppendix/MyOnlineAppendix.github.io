@@ -1,0 +1,67 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.wal.TestWALActionsListener (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Add a bunch of dummy data and roll the logs every two insert. We
+ * should end up with 10 rolled files (plus the roll called in
+ * the constructor). Also test adding a listener while it's running.
+ */
+@Test public void testActionListener() throws Exception {
+  DummyWALActionsListener observer=new DummyWALActionsListener();
+  List<WALActionsListener> list=new ArrayList<WALActionsListener>();
+  list.add(observer);
+  final WALFactory wals=new WALFactory(conf,list,"testActionListener");
+  DummyWALActionsListener laterobserver=new DummyWALActionsListener();
+  HRegionInfo hri=new HRegionInfo(TableName.valueOf(SOME_BYTES),SOME_BYTES,SOME_BYTES,false);
+  final WAL wal=wals.getWAL(hri.getEncodedNameAsBytes(),hri.getTable().getNamespace());
+  for (int i=0; i < 20; i++) {
+    byte[] b=Bytes.toBytes(i + "");
+    KeyValue kv=new KeyValue(b,b,b);
+    WALEdit edit=new WALEdit();
+    edit.add(kv);
+    HTableDescriptor htd=new HTableDescriptor(TableName.valueOf(SOME_BYTES));
+    htd.addFamily(new HColumnDescriptor(b));
+    final long txid=wal.append(htd,hri,new WALKey(hri.getEncodedNameAsBytes(),TableName.valueOf(b),0),edit,true);
+    wal.sync(txid);
+    if (i == 10) {
+      wal.registerWALActionsListener(laterobserver);
+    }
+    if (i % 2 == 0) {
+      wal.rollWriter();
+    }
+  }
+  wal.close();
+  assertEquals(11,observer.preLogRollCounter);
+  assertEquals(11,observer.postLogRollCounter);
+  assertEquals(5,laterobserver.preLogRollCounter);
+  assertEquals(5,laterobserver.postLogRollCounter);
+  assertEquals(1,observer.closedCount);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  setUp();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  fs.delete(new Path(TEST_UTIL.getDataTestDir(),HConstants.HREGION_LOGDIR_NAME),true);
+  fs.delete(new Path(TEST_UTIL.getDataTestDir(),HConstants.HREGION_OLDLOGDIR_NAME),true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

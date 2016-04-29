@@ -1,0 +1,1687 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAssumptionSetter</h3><kbd>Sets implicit assumptions </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hive.hcatalog.mapreduce.HCatMapReduceTest </h4><pre class="type-10 type-21 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void createTable() throws Exception {
+  Assume.assumeTrue(!DISABLED_SERDES.contains(serdeClass));
+  String databaseName=(dbName == null) ? MetaStoreUtils.DEFAULT_DATABASE_NAME : dbName;
+  try {
+    client.dropTable(databaseName,tableName);
+  }
+ catch (  Exception e) {
+  }
+  Table tbl=new Table();
+  tbl.setDbName(databaseName);
+  tbl.setTableName(tableName);
+  if (isTableExternal()) {
+    tbl.setTableType(TableType.EXTERNAL_TABLE.toString());
+  }
+ else {
+    tbl.setTableType(TableType.MANAGED_TABLE.toString());
+  }
+  StorageDescriptor sd=new StorageDescriptor();
+  sd.setCols(getTableColumns());
+  tbl.setPartitionKeys(getPartitionKeys());
+  tbl.setSd(sd);
+  sd.setBucketCols(new ArrayList<String>(2));
+  sd.setSerdeInfo(new SerDeInfo());
+  sd.getSerdeInfo().setName(tbl.getTableName());
+  sd.getSerdeInfo().setParameters(new HashMap<String,String>());
+  sd.getSerdeInfo().getParameters().put(serdeConstants.SERIALIZATION_FORMAT,"1");
+  if (isTableExternal()) {
+    sd.getSerdeInfo().getParameters().put("EXTERNAL","TRUE");
+  }
+  sd.getSerdeInfo().setSerializationLib(serdeClass);
+  sd.setInputFormat(inputFormatClass);
+  sd.setOutputFormat(outputFormatClass);
+  Map<String,String> tableParams=new HashMap<String,String>();
+  if (isTableExternal()) {
+    tableParams.put("EXTERNAL","TRUE");
+  }
+  if (isTableImmutable()) {
+    tableParams.put(hive_metastoreConstants.IS_IMMUTABLE,"true");
+  }
+  tbl.setParameters(tableParams);
+  client.createTable(tbl);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.hcatalog.pig.TestHCatLoader </h4><pre class="type-11 type-6 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProjectionsBasic() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("Y1 = load '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  server.registerQuery("Y2 = foreach Y1 generate a;");
+  server.registerQuery("Y3 = foreach Y1 generate b,a;");
+  Schema dumpedY2Schema=server.dumpSchema("Y2");
+  Schema dumpedY3Schema=server.dumpSchema("Y3");
+  List<FieldSchema> Y2fields=dumpedY2Schema.getFields();
+  List<FieldSchema> Y3fields=dumpedY3Schema.getFields();
+  assertEquals(1,Y2fields.size());
+  assertEquals("a",Y2fields.get(0).alias.toLowerCase());
+  assertEquals(DataType.INTEGER,Y2fields.get(0).type);
+  assertEquals(2,Y3fields.size());
+  assertEquals("b",Y3fields.get(0).alias.toLowerCase());
+  assertEquals(DataType.CHARARRAY,Y3fields.get(0).type);
+  assertEquals("a",Y3fields.get(1).alias.toLowerCase());
+  assertEquals(DataType.INTEGER,Y3fields.get(1).type);
+  int numTuplesRead=0;
+  Iterator<Tuple> Y2Iter=server.openIterator("Y2");
+  while (Y2Iter.hasNext()) {
+    Tuple t=Y2Iter.next();
+    assertEquals(t.size(),1);
+    assertNotNull(t.get(0));
+    assertTrue(t.get(0).getClass() == Integer.class);
+    assertEquals(t.get(0),basicInputData.get(numTuplesRead).first);
+    numTuplesRead++;
+  }
+  numTuplesRead=0;
+  Iterator<Tuple> Y3Iter=server.openIterator("Y3");
+  while (Y3Iter.hasNext()) {
+    Tuple t=Y3Iter.next();
+    assertEquals(t.size(),2);
+    assertNotNull(t.get(0));
+    assertTrue(t.get(0).getClass() == String.class);
+    assertEquals(t.get(0),basicInputData.get(numTuplesRead).second);
+    assertNotNull(t.get(1));
+    assertTrue(t.get(1).getClass() == Integer.class);
+    assertEquals(t.get(1),basicInputData.get(numTuplesRead).first);
+    numTuplesRead++;
+  }
+  assertEquals(basicInputData.size(),numTuplesRead);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that value from Hive table are read properly in Pig
+ */
+@Test public void testReadDataPrimitiveTypes() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  AllTypesTable.testReadDataPrimitiveTypes();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetInputBytes() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  File file=new File(TEST_WAREHOUSE_DIR + "/" + SPECIFIC_SIZE_TABLE+ "/part-m-00000");
+  file.deleteOnExit();
+  RandomAccessFile randomAccessFile=new RandomAccessFile(file,"rw");
+  randomAccessFile.setLength(2L * 1024 * 1024* 1024);
+  randomAccessFile.close();
+  Job job=new Job();
+  HCatLoader hCatLoader=new HCatLoader();
+  hCatLoader.setUDFContextSignature("testGetInputBytes");
+  hCatLoader.setLocation(SPECIFIC_SIZE_TABLE,job);
+  ResourceStatistics statistics=hCatLoader.getStatistics(file.getAbsolutePath(),job);
+  assertEquals(2048,(long)statistics.getmBytes());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSchemaLoadComplex() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("K = load '" + COMPLEX_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Schema dumpedKSchema=server.dumpSchema("K");
+  List<FieldSchema> Kfields=dumpedKSchema.getFields();
+  assertEquals(6,Kfields.size());
+  assertEquals(DataType.CHARARRAY,Kfields.get(0).type);
+  assertEquals("name",Kfields.get(0).alias.toLowerCase());
+  assertEquals(DataType.INTEGER,Kfields.get(1).type);
+  assertEquals("studentid",Kfields.get(1).alias.toLowerCase());
+  assertEquals(DataType.TUPLE,Kfields.get(2).type);
+  assertEquals("contact",Kfields.get(2).alias.toLowerCase());
+{
+    assertNotNull(Kfields.get(2).schema);
+    assertTrue(Kfields.get(2).schema.getFields().size() == 2);
+    assertTrue(Kfields.get(2).schema.getFields().get(0).type == DataType.CHARARRAY);
+    assertTrue(Kfields.get(2).schema.getFields().get(0).alias.equalsIgnoreCase("phno"));
+    assertTrue(Kfields.get(2).schema.getFields().get(1).type == DataType.CHARARRAY);
+    assertTrue(Kfields.get(2).schema.getFields().get(1).alias.equalsIgnoreCase("email"));
+  }
+  assertEquals(DataType.BAG,Kfields.get(3).type);
+  assertEquals("currently_registered_courses",Kfields.get(3).alias.toLowerCase());
+{
+    assertNotNull(Kfields.get(3).schema);
+    assertEquals(1,Kfields.get(3).schema.getFields().size());
+    assertEquals(DataType.TUPLE,Kfields.get(3).schema.getFields().get(0).type);
+    assertNotNull(Kfields.get(3).schema.getFields().get(0).schema);
+    assertEquals(1,Kfields.get(3).schema.getFields().get(0).schema.getFields().size());
+    assertEquals(DataType.CHARARRAY,Kfields.get(3).schema.getFields().get(0).schema.getFields().get(0).type);
+  }
+  assertEquals(DataType.MAP,Kfields.get(4).type);
+  assertEquals("current_grades",Kfields.get(4).alias.toLowerCase());
+  assertEquals(DataType.BAG,Kfields.get(5).type);
+  assertEquals("phnos",Kfields.get(5).alias.toLowerCase());
+{
+    assertNotNull(Kfields.get(5).schema);
+    assertEquals(1,Kfields.get(5).schema.getFields().size());
+    assertEquals(DataType.TUPLE,Kfields.get(5).schema.getFields().get(0).type);
+    assertNotNull(Kfields.get(5).schema.getFields().get(0).schema);
+    assertTrue(Kfields.get(5).schema.getFields().get(0).schema.getFields().size() == 2);
+    assertEquals(DataType.CHARARRAY,Kfields.get(5).schema.getFields().get(0).schema.getFields().get(0).type);
+    assertEquals("phno",Kfields.get(5).schema.getFields().get(0).schema.getFields().get(0).alias.toLowerCase());
+    assertEquals(DataType.CHARARRAY,Kfields.get(5).schema.getFields().get(0).schema.getFields().get(1).type);
+    assertEquals("type",Kfields.get(5).schema.getFields().get(0).schema.getFields().get(1).alias.toLowerCase());
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSchemaLoadBasic() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("X = load '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Schema dumpedXSchema=server.dumpSchema("X");
+  List<FieldSchema> Xfields=dumpedXSchema.getFields();
+  assertEquals(2,Xfields.size());
+  assertTrue(Xfields.get(0).alias.equalsIgnoreCase("a"));
+  assertTrue(Xfields.get(0).type == DataType.INTEGER);
+  assertTrue(Xfields.get(1).alias.equalsIgnoreCase("b"));
+  assertTrue(Xfields.get(1).type == DataType.CHARARRAY);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the failure case caused by HIVE-10752
+ * @throws Exception
+ */
+@Test public void testColumnarStorePushdown2() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("A = load '" + COMPLEX_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  server.registerQuery("B = load '" + COMPLEX_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  server.registerQuery("C = join A by name, B by name;");
+  server.registerQuery("D = foreach C generate B::studentid;");
+  server.registerQuery("E = ORDER D by studentid asc;");
+  Iterator<Tuple> iter=server.openIterator("E");
+  Tuple t=iter.next();
+  assertEquals(42,t.get(0));
+  t=iter.next();
+  assertEquals(1337,t.get(0));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that we properly translate data types in Hive/HCat table schema into Pig schema
+ */
+@Test public void testSchemaLoadPrimitiveTypes() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  AllTypesTable.testSchemaLoadPrimitiveTypes();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-12 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadPartitionedBasic() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  driver.run("select * from " + PARTITIONED_TABLE);
+  ArrayList<String> valuesReadFromHiveDriver=new ArrayList<String>();
+  driver.getResults(valuesReadFromHiveDriver);
+  assertEquals(basicInputData.size(),valuesReadFromHiveDriver.size());
+  server.registerQuery("W = load '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Schema dumpedWSchema=server.dumpSchema("W");
+  List<FieldSchema> Wfields=dumpedWSchema.getFields();
+  assertEquals(3,Wfields.size());
+  assertTrue(Wfields.get(0).alias.equalsIgnoreCase("a"));
+  assertTrue(Wfields.get(0).type == DataType.INTEGER);
+  assertTrue(Wfields.get(1).alias.equalsIgnoreCase("b"));
+  assertTrue(Wfields.get(1).type == DataType.CHARARRAY);
+  assertTrue(Wfields.get(2).alias.equalsIgnoreCase("bkt"));
+  assertTrue(Wfields.get(2).type == DataType.CHARARRAY);
+  Iterator<Tuple> WIter=server.openIterator("W");
+  Collection<Pair<Integer,String>> valuesRead=new ArrayList<Pair<Integer,String>>();
+  while (WIter.hasNext()) {
+    Tuple t=WIter.next();
+    assertTrue(t.size() == 3);
+    assertNotNull(t.get(0));
+    assertNotNull(t.get(1));
+    assertNotNull(t.get(2));
+    assertTrue(t.get(0).getClass() == Integer.class);
+    assertTrue(t.get(1).getClass() == String.class);
+    assertTrue(t.get(2).getClass() == String.class);
+    valuesRead.add(new Pair<Integer,String>((Integer)t.get(0),(String)t.get(1)));
+    if ((Integer)t.get(0) < 2) {
+      assertEquals("0",t.get(2));
+    }
+ else {
+      assertEquals("1",t.get(2));
+    }
+  }
+  assertEquals(valuesReadFromHiveDriver.size(),valuesRead.size());
+  server.registerQuery("P1 = load '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  server.registerQuery("P1filter = filter P1 by bkt == '0';");
+  Iterator<Tuple> P1Iter=server.openIterator("P1filter");
+  int count1=0;
+  while (P1Iter.hasNext()) {
+    Tuple t=P1Iter.next();
+    assertEquals("0",t.get(2));
+    assertEquals(1,t.get(0));
+    count1++;
+  }
+  assertEquals(3,count1);
+  server.registerQuery("P2 = load '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  server.registerQuery("P2filter = filter P2 by bkt == '1';");
+  Iterator<Tuple> P2Iter=server.openIterator("P2filter");
+  int count2=0;
+  while (P2Iter.hasNext()) {
+    Tuple t=P2Iter.next();
+    assertEquals("1",t.get(2));
+    assertTrue(((Integer)t.get(0)) > 1);
+    count2++;
+  }
+  assertEquals(6,count2);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-12 type-4 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConvertBooleanToInt() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  String tbl="test_convert_boolean_to_int";
+  String inputFileName=TEST_DATA_DIR + "/testConvertBooleanToInt/data.txt";
+  File inputDataDir=new File(inputFileName).getParentFile();
+  inputDataDir.mkdir();
+  String[] lines=new String[]{"llama\ttrue","alpaca\tfalse"};
+  HcatTestUtils.createTestDataFile(inputFileName,lines);
+  assertEquals(0,driver.run("drop table if exists " + tbl).getResponseCode());
+  assertEquals(0,driver.run("create external table " + tbl + " (a string, b boolean) row format delimited fields terminated by '\t'"+ " stored as textfile location 'file:///"+ inputDataDir.getPath().replaceAll("\\\\","/")+ "'").getResponseCode());
+  Properties properties=new Properties();
+  properties.setProperty(HCatConstants.HCAT_DATA_CONVERT_BOOLEAN_TO_INTEGER,"true");
+  PigServer server=new PigServer(ExecType.LOCAL,properties);
+  server.registerQuery("data = load 'test_convert_boolean_to_int' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Schema schema=server.dumpSchema("data");
+  assertEquals(2,schema.getFields().size());
+  assertEquals("a",schema.getField(0).alias);
+  assertEquals(DataType.CHARARRAY,schema.getField(0).type);
+  assertEquals("b",schema.getField(1).alias);
+  if (PigHCatUtil.pigHasBooleanSupport()) {
+    assertEquals(DataType.BOOLEAN,schema.getField(1).type);
+  }
+ else {
+    assertEquals(DataType.INTEGER,schema.getField(1).type);
+  }
+  Iterator<Tuple> iterator=server.openIterator("data");
+  Tuple t=iterator.next();
+  assertEquals("llama",t.get(0));
+  assertEquals(1,t.get(1));
+  t=iterator.next();
+  assertEquals("alpaca",t.get(0));
+  assertEquals(0,t.get(1));
+  assertFalse(iterator.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadDataBasic() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("X = load '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Iterator<Tuple> XIter=server.openIterator("X");
+  int numTuplesRead=0;
+  while (XIter.hasNext()) {
+    Tuple t=XIter.next();
+    assertEquals(2,t.size());
+    assertNotNull(t.get(0));
+    assertNotNull(t.get(1));
+    assertTrue(t.get(0).getClass() == Integer.class);
+    assertTrue(t.get(1).getClass() == String.class);
+    assertEquals(t.get(0),basicInputData.get(numTuplesRead).first);
+    assertEquals(t.get(1),basicInputData.get(numTuplesRead).second);
+    numTuplesRead++;
+  }
+  assertEquals(basicInputData.size(),numTuplesRead);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.hcatalog.pig.TestHCatLoaderComplexSchema </h4><pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testMapWithComplexData() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  String pigSchema="a: long, b: map[]";
+  String tableSchema="a bigint, b map<string, struct<aa:bigint, ab:string>>";
+  List<Tuple> data=new ArrayList<Tuple>();
+  for (int i=0; i < 10; i++) {
+    Tuple t=t((long)i,new HashMap<String,Object>(){
+{
+        put("b test 1",t(1l,"test 1"));
+        put("b test 2",t(2l,"test 2"));
+      }
+    }
+);
+    data.add(t);
+  }
+  verifyWriteRead("testMapWithComplexData",pigSchema,tableSchema,data,true);
+  verifyWriteRead("testMapWithComplexData2",pigSchema,tableSchema,data,false);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * artificially complex nested schema to test nested schema conversion
+ * @throws Exception
+ */
+@Test public void testSyntheticComplexSchema() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  String pigSchema="a: " + "(" + "aa: chararray, "+ "ab: long, "+ "ac: map[], "+ "ad: { t: (ada: long) }, "+ "ae: { t: (aea:long, aeb: ( aeba: chararray, aebb: long)) },"+ "af: (afa: chararray, afb: long) "+ "),"+ "b: chararray, "+ "c: long, "+ "d:  { t: (da:long, db: ( dba: chararray, dbb: long), dc: { t: (dca: long) } ) } ";
+  String tableSchema="a struct<" + "aa: string, " + "ab: bigint, "+ "ac: map<string, string>, "+ "ad: array<struct<ada:bigint>>, "+ "ae: array<struct<aea:bigint, aeb: struct<aeba: string, aebb: bigint>>>,"+ "af: struct<afa: string, afb: bigint> "+ ">, "+ "b string, "+ "c bigint, "+ "d array<struct<da: bigint, db: struct<dba:string, dbb:bigint>, dc: array<struct<dca: bigint>>>>";
+  String tableSchema2="a struct<" + "aa: string, " + "ab: bigint, "+ "ac: map<string, string>, "+ "ad: array<bigint>, "+ "ae: array<struct<aea:bigint, aeb: struct<aeba: string, aebb: bigint>>>,"+ "af: struct<afa: string, afb: bigint> "+ ">, "+ "b string, "+ "c bigint, "+ "d array<struct<da: bigint, db: struct<dba:string, dbb:bigint>, dc: array<bigint>>>";
+  List<Tuple> data=new ArrayList<Tuple>();
+  for (int i=0; i < 10; i++) {
+    Tuple t=t(t("aa test",2l,new HashMap<String,String>(){
+{
+        put("ac test1","test 1");
+        put("ac test2","test 2");
+      }
+    }
+,b(t(3l),t(4l)),b(t(5l,t("aeba test",6l))),t("afa test",7l)),"b test",(long)i,b(t(8l,t("dba test",9l),b(t(10l)))));
+    data.add(t);
+  }
+  verifyWriteRead("testSyntheticComplexSchema",pigSchema,tableSchema,data,true);
+  verifyWriteRead("testSyntheticComplexSchema",pigSchema,tableSchema,data,false);
+  verifyWriteRead("testSyntheticComplexSchema2",pigSchema,tableSchema2,data,true);
+  verifyWriteRead("testSyntheticComplexSchema2",pigSchema,tableSchema2,data,false);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * tests that unnecessary tuples are drop while converting schema
+ * (Pig requires Tuples in Bags)
+ * @throws Exception
+ */
+@Test public void testTupleInBagInTupleInBag() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  String pigSchema="a: { b : ( c: { d: (i : long) } ) }";
+  String tableSchema="a array< array< bigint > >";
+  List<Tuple> data=new ArrayList<Tuple>();
+  data.add(t(b(t(b(t(100l),t(101l))),t(b(t(110l))))));
+  data.add(t(b(t(b(t(200l))),t(b(t(210l))),t(b(t(220l))))));
+  data.add(t(b(t(b(t(300l),t(301l))))));
+  data.add(t(b(t(b(t(400l))),t(b(t(410l),t(411l),t(412l))))));
+  verifyWriteRead("TupleInBagInTupleInBag1",pigSchema,tableSchema,data,true);
+  verifyWriteRead("TupleInBagInTupleInBag2",pigSchema,tableSchema,data,false);
+  String tableSchema2="a array< struct< c: array< struct< i: bigint > > > >";
+  verifyWriteRead("TupleInBagInTupleInBag3",pigSchema,tableSchema2,data,true);
+  verifyWriteRead("TupleInBagInTupleInBag4",pigSchema,tableSchema2,data,false);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * artificially complex nested schema to test nested schema conversion
+ * @throws Exception
+ */
+@Test public void testMapNullKey() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  String pigSchema="m:map[]";
+  String tableSchema="m map<string, string>";
+  List<Tuple> data=new ArrayList<Tuple>();
+  Tuple t=t(new HashMap<String,String>(){
+{
+      put("ac test1","test 1");
+      put("ac test2","test 2");
+      put(null,"test 3");
+    }
+  }
+);
+  data.add(t);
+  List<Tuple> result=new ArrayList<Tuple>();
+  t=t(new HashMap<String,String>(){
+{
+      put("ac test1","test 1");
+      put("ac test2","test 2");
+    }
+  }
+);
+  result.add(t);
+  verifyWriteRead("testSyntheticComplexSchema",pigSchema,tableSchema,data,result,true);
+  verifyWriteRead("testSyntheticComplexSchema",pigSchema,tableSchema,data,result,false);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.hcatalog.pig.TestHCatLoaderEncryption </h4><pre class="type-11 type-6 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadDataFromEncryptedHiveTableByPig() throws IOException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("X = load '" + ENCRYPTED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatLoader();");
+  Iterator<Tuple> XIter=server.openIterator("X");
+  int numTuplesRead=0;
+  while (XIter.hasNext()) {
+    Tuple t=XIter.next();
+    assertEquals(2,t.size());
+    assertNotNull(t.get(0));
+    assertNotNull(t.get(1));
+    assertTrue(t.get(0).getClass() == Integer.class);
+    assertTrue(t.get(1).getClass() == String.class);
+    assertEquals(t.get(0),basicInputData.get(numTuplesRead).first);
+    assertEquals(t.get(1),basicInputData.get(numTuplesRead).second);
+    numTuplesRead++;
+  }
+  assertEquals("failed with storage format: " + this.storageFormat,basicInputData.size(),numTuplesRead);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReadDataFromEncryptedHiveTableByHCatMR() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  readRecords.clear();
+  Configuration conf=new Configuration();
+  Job job=new Job(conf,"hcat mapreduce read encryption test");
+  job.setJarByClass(this.getClass());
+  job.setMapperClass(TestHCatLoaderEncryption.MapRead.class);
+  job.setInputFormatClass(HCatInputFormat.class);
+  job.setOutputFormatClass(TextOutputFormat.class);
+  HCatInputFormat.setInput(job,MetaStoreUtils.DEFAULT_DATABASE_NAME,ENCRYPTED_TABLE,null);
+  job.setMapOutputKeyClass(BytesWritable.class);
+  job.setMapOutputValueClass(Text.class);
+  job.setNumReduceTasks(0);
+  FileSystem fs=new LocalFileSystem();
+  String pathLoc=TEST_DATA_DIR + "/testHCatMREncryptionOutput";
+  Path path=new Path(pathLoc);
+  if (fs.exists(path)) {
+    fs.delete(path,true);
+  }
+  TextOutputFormat.setOutputPath(job,new Path(WindowsPathUtil.getHdfsUriString(pathLoc)));
+  job.waitForCompletion(true);
+  int numTuplesRead=0;
+  for (  HCatRecord hCatRecord : readRecords) {
+    assertEquals(2,hCatRecord.size());
+    assertNotNull(hCatRecord.get(0));
+    assertNotNull(hCatRecord.get(1));
+    assertTrue(hCatRecord.get(0).getClass() == Integer.class);
+    assertTrue(hCatRecord.get(1).getClass() == String.class);
+    assertEquals(hCatRecord.get(0),basicInputData.get(numTuplesRead).first);
+    assertEquals(hCatRecord.get(1),basicInputData.get(numTuplesRead).second);
+    numTuplesRead++;
+  }
+  assertEquals("failed HCat MR read with storage format: " + this.storageFormat,basicInputData.size(),numTuplesRead);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.hcatalog.pig.TestHCatStorer </h4><pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDate2() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  DateTime d=new DateTime(1991,11,12,0,0,DateTimeZone.forID("US/Eastern"));
+  pigValueRangeTest("junitTypeTest1","date","datetime",null,d.toString(),d.toString(FORMAT_4_DATE),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest2","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.plusHours(2).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest2","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.plusMillis(20).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest2","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.plusMillis(12).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest3","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.plusMinutes(1).toString(),FORMAT_4_DATE);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDecimal() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","decimal","bigdecimal",null,BigDecimal.valueOf(1234567890).toString(),BigDecimal.valueOf(1234567890).toString());
+  pigValueRangeTestOverflow("junitTypeTest2","decimal","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,BigDecimal.valueOf(12345678900L).toString());
+  pigValueRangeTestOverflow("junitTypeTest3","decimal","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,BigDecimal.valueOf(12345678900L).toString());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPartColsInData() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int) partitioned by (b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=11;
+  String[] input=new String[LOOP_SIZE];
+  for (int i=0; i < LOOP_SIZE; i++) {
+    input[i]=i + "\t1";
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('b=1');");
+  server.registerQuery("B = load 'default.junit_unparted' using " + HCatLoader.class.getName() + "();");
+  Iterator<Tuple> itr=server.openIterator("B");
+  int i=0;
+  while (itr.hasNext()) {
+    Tuple t=itr.next();
+    assertEquals(2,t.size());
+    assertEquals(t.get(0),i);
+    assertEquals(t.get(1),"1");
+    i++;
+  }
+  assertFalse(itr.hasNext());
+  assertEquals(LOOP_SIZE,i);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBagNStruct() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(b string,a struct<a1:int>,  arr_of_struct array<string>, " + "arr_of_struct2 array<struct<s1:string,s2:string>>,  arr_of_struct3 array<struct<s3:string>>) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  String[] inputData=new String[]{"zookeeper\t(2)\t{(pig)}\t{(pnuts,hdfs)}\t{(hadoop),(hcat)}","chubby\t(2)\t{(sawzall)}\t{(bigtable,gfs)}\t{(mapreduce),(hcat)}"};
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (b:chararray, a:tuple(a1:int), arr_of_struct:bag{mytup:tuple(s1:chararray)}, arr_of_struct2:bag{mytup:tuple(s1:chararray,s2:chararray)}, arr_of_struct3:bag{t3:tuple(s3:chararray)});");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('','b:chararray, a:tuple(a1:int),"+ " arr_of_struct:bag{mytup:tuple(s1:chararray)}, arr_of_struct2:bag{mytup:tuple(s1:chararray,s2:chararray)}, arr_of_struct3:bag{t3:tuple(s3:chararray)}');");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("drop table junit_unparted");
+  Iterator<String> itr=res.iterator();
+  assertEquals("zookeeper\t{\"a1\":2}\t[\"pig\"]\t[{\"s1\":\"pnuts\",\"s2\":\"hdfs\"}]\t[{\"s3\":\"hadoop\"},{\"s3\":\"hcat\"}]",itr.next());
+  assertEquals("chubby\t{\"a1\":2}\t[\"sawzall\"]\t[{\"s1\":\"bigtable\",\"s2\":\"gfs\"}]\t[{\"s3\":\"mapreduce\"},{\"s3\":\"hcat\"}]",itr.next());
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-6 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Create a data file with datatypes added in 0.13.  Read it with Pig and use
+ * Pig + HCatStorer to write to a Hive table.  Then read it using Pig and Hive
+ * and make sure results match.
+ */
+@Test public void testDateCharTypes() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  final String tblName="junit_date_char";
+  TestHCatLoader.dropTable(tblName,driver);
+  TestHCatLoader.createTable(tblName,"id int, char5 char(5), varchar10 varchar(10), dec52 decimal(5,2)",null,driver,storageFormat);
+  int NUM_ROWS=5;
+  String[] rows=new String[NUM_ROWS];
+  for (int i=0; i < NUM_ROWS; i++) {
+    rows[i]=i + "\txxxxx\tyyy\t" + 5.2;
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,rows);
+  LOG.debug("File=" + INPUT_FILE_NAME);
+  PigServer server=createPigServer(true);
+  int queryNumber=1;
+  logAndRegister(server,"A = load '" + INPUT_FILE_NAME + "' as (id:int, char5:chararray, varchar10:chararray, dec52:bigdecimal);",queryNumber++);
+  logAndRegister(server,"store A into '" + tblName + "' using "+ HCatStorer.class.getName()+ "();",queryNumber++);
+  logAndRegister(server,"B = load '" + tblName + "' using "+ HCatLoader.class.getName()+ "();",queryNumber);
+  CommandProcessorResponse cpr=driver.run("select * from " + tblName);
+  LOG.debug("cpr.respCode=" + cpr.getResponseCode() + " cpr.errMsg="+ cpr.getErrorMessage());
+  List l=new ArrayList();
+  driver.getResults(l);
+  LOG.debug("Dumping rows via SQL from " + tblName);
+  for (  Object t : l) {
+    LOG.debug(t == null ? null : t.toString());
+  }
+  Iterator<Tuple> itr=server.openIterator("B");
+  int numRowsRead=0;
+  while (itr.hasNext()) {
+    Tuple t=itr.next();
+    StringBuilder rowFromPig=new StringBuilder();
+    for (int i=0; i < t.size(); i++) {
+      rowFromPig.append(t.get(i)).append("\t");
+    }
+    rowFromPig.setLength(rowFromPig.length() - 1);
+    assertEquals("Comparing Pig to Raw data",rows[numRowsRead],rowFromPig.toString());
+    numRowsRead++;
+  }
+  assertEquals("Expected " + NUM_ROWS + " rows; got "+ numRowsRead+ " file="+ INPUT_FILE_NAME,NUM_ROWS,numRowsRead);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-4 type-21 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEmptyStore() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=3;
+  String[] input=new String[LOOP_SIZE * LOOP_SIZE];
+  int k=0;
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      input[k++]=si + "\t" + j;
+    }
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("B = filter A by a > 100;");
+  server.registerQuery("store B into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('','a:int,b:chararray');");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("drop table junit_unparted");
+  Iterator<String> itr=res.iterator();
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreMultiTables() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  driver.run("drop table junit_unparted2");
+  createTable="create table junit_unparted2(a int, b string) stored as RCFILE";
+  retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=3;
+  String[] input=new String[LOOP_SIZE * LOOP_SIZE];
+  int k=0;
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      input[k++]=si + "\t" + j;
+    }
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("B = filter A by a < 2;");
+  server.registerQuery("store B into 'junit_unparted' using " + HCatStorer.class.getName() + "();");
+  server.registerQuery("C = filter A by a >= 2;");
+  server.registerQuery("store C into 'junit_unparted2' using " + HCatStorer.class.getName() + "();");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("select * from junit_unparted2");
+  ArrayList<String> res2=new ArrayList<String>();
+  driver.getResults(res2);
+  res.addAll(res2);
+  driver.run("drop table junit_unparted");
+  driver.run("drop table junit_unparted2");
+  Iterator<String> itr=res.iterator();
+  for (int i=0; i < LOOP_SIZE * LOOP_SIZE; i++) {
+    assertEquals(input[i],itr.next());
+  }
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreFuncSimple() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=3;
+  String[] inputData=new String[LOOP_SIZE * LOOP_SIZE];
+  int k=0;
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      inputData[k++]=si + "\t" + j;
+    }
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('','a:int,b:chararray');");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("drop table junit_unparted");
+  Iterator<String> itr=res.iterator();
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      assertEquals(si + "\t" + j,itr.next());
+    }
+  }
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteTinyint() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","tinyint","int",null,Integer.toString(1),Integer.toString(1));
+  pigValueRangeTestOverflow("junitTypeTest1","tinyint","int",null,Integer.toString(300));
+  pigValueRangeTestOverflow("junitTypeTest2","tinyint","int",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,Integer.toString(300));
+  pigValueRangeTestOverflow("junitTypeTest3","tinyint","int",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,Integer.toString(300));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreWithNoSchema() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=3;
+  String[] input=new String[LOOP_SIZE * LOOP_SIZE];
+  int k=0;
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      input[k++]=si + "\t" + j;
+    }
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('');");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("drop table junit_unparted");
+  Iterator<String> itr=res.iterator();
+  for (int i=0; i < LOOP_SIZE * LOOP_SIZE; i++) {
+    assertEquals(input[i],itr.next());
+  }
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteSmallint() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","smallint","int",null,Integer.toString(Short.MIN_VALUE),Integer.toString(Short.MIN_VALUE));
+  pigValueRangeTestOverflow("junitTypeTest2","smallint","int",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,Integer.toString(Short.MAX_VALUE + 1));
+  pigValueRangeTestOverflow("junitTypeTest3","smallint","int",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,Integer.toString(Short.MAX_VALUE + 1));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDate3() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  DateTime d=new DateTime(1991,10,11,23,10,DateTimeZone.forOffsetHours(-11));
+  FrontendException fe=null;
+  pigValueRangeTestOverflow("junitTypeTest4","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest5","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.plusHours(2).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest6","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.plusMinutes(1).toString(),FORMAT_4_DATE);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDynamicPartitioningMultiPartColsInDataNoSpec() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table if exists employee");
+  String createTable="CREATE TABLE employee (emp_id INT, emp_name STRING, emp_start_date STRING , emp_gender STRING ) " + " PARTITIONED BY (emp_country STRING , emp_state STRING ) STORED AS " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  String[] inputData={"111237\tKrishna\t01/01/1990\tM\tIN\tTN","111238\tKalpana\t01/01/2000\tF\tIN\tKA","111239\tSatya\t01/01/2001\tM\tIN\tKL","111240\tKavya\t01/01/2002\tF\tIN\tAP"};
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer pig=new PigServer(ExecType.LOCAL);
+  pig.setBatchOn();
+  pig.registerQuery("A = LOAD '" + INPUT_FILE_NAME + "' USING PigStorage() AS (emp_id:int,emp_name:chararray,emp_start_date:chararray,"+ "emp_gender:chararray,emp_country:chararray,emp_state:chararray);");
+  pig.registerQuery("IN = FILTER A BY emp_country == 'IN';");
+  pig.registerQuery("STORE IN INTO 'employee' USING " + HCatStorer.class.getName() + "();");
+  pig.executeBatch();
+  driver.run("select * from employee");
+  ArrayList<String> results=new ArrayList<String>();
+  driver.getResults(results);
+  assertEquals(4,results.size());
+  Collections.sort(results);
+  assertEquals(inputData[0],results.get(0));
+  assertEquals(inputData[1],results.get(1));
+  assertEquals(inputData[2],results.get(2));
+  assertEquals(inputData[3],results.get(3));
+  driver.run("drop table employee");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-4 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNoAlias() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_parted");
+  String createTable="create table junit_parted(a int, b string) partitioned by (ds string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  PigServer server=new PigServer(ExecType.LOCAL);
+  boolean errCaught=false;
+  try {
+    server.setBatchOn();
+    server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+    server.registerQuery("B = foreach A generate a+10, b;");
+    server.registerQuery("store B into 'junit_parted' using " + HCatStorer.class.getName() + "('ds=20100101');");
+    server.executeBatch();
+  }
+ catch (  PigException fe) {
+    PigException pe=LogUtils.getPigException(fe);
+    assertTrue(pe instanceof FrontendException);
+    assertEquals(PigHCatUtil.PIG_EXCEPTION_CODE,pe.getErrorCode());
+    assertTrue(pe.getMessage().contains("Column name for a field is not specified. Please provide the full schema as an argument to HCatStorer."));
+    errCaught=true;
+  }
+  assertTrue(errCaught);
+  errCaught=false;
+  try {
+    server.setBatchOn();
+    server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, B:chararray);");
+    server.registerQuery("B = foreach A generate a, B;");
+    server.registerQuery("store B into 'junit_parted' using " + HCatStorer.class.getName() + "('ds=20100101');");
+    server.executeBatch();
+  }
+ catch (  PigException fe) {
+    PigException pe=LogUtils.getPigException(fe);
+    assertTrue(pe instanceof FrontendException);
+    assertEquals(PigHCatUtil.PIG_EXCEPTION_CODE,pe.getErrorCode());
+    assertTrue(pe.getMessage().contains("Column names should all be in lowercase. Invalid name found: B"));
+    errCaught=true;
+  }
+  driver.run("drop table junit_parted");
+  assertTrue(errCaught);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Note that the value that comes back from Hive will have local TZ on it.  Using local is
+ * arbitrary but DateTime needs TZ (or will assume default) and Hive does not have TZ.
+ * So if you start with Pig value in TZ=x and write to Hive, when you read it back the TZ may
+ * be different.  The millis value should match, of course.
+ * @throws Exception
+ */
+@Test public void testWriteTimestamp() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  DateTime d=new DateTime(1991,10,11,14,23,30,10);
+  pigValueRangeTest("junitTypeTest1","timestamp","datetime",null,d.toString(),d.toDateTime(DateTimeZone.getDefault()).toString());
+  d=d.plusHours(2);
+  pigValueRangeTest("junitTypeTest2","timestamp","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.toString(),d.toDateTime(DateTimeZone.getDefault()).toString());
+  d=d.toDateTime(DateTimeZone.UTC);
+  pigValueRangeTest("junitTypeTest3","timestamp","datetime",null,d.toString(),d.toDateTime(DateTimeZone.getDefault()).toString());
+  d=new DateTime(1991,10,11,23,24,25,26);
+  pigValueRangeTest("junitTypeTest1","timestamp","datetime",null,d.toString(),d.toDateTime(DateTimeZone.getDefault()).toString());
+  d=d.toDateTime(DateTimeZone.UTC);
+  pigValueRangeTest("junitTypeTest3","timestamp","datetime",null,d.toString(),d.toDateTime(DateTimeZone.getDefault()).toString());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDynamicPartitioningMultiPartColsInDataPartialSpec() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table if exists employee");
+  String createTable="CREATE TABLE employee (emp_id INT, emp_name STRING, emp_start_date STRING , emp_gender STRING ) " + " PARTITIONED BY (emp_country STRING , emp_state STRING ) STORED AS " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  String[] inputData={"111237\tKrishna\t01/01/1990\tM\tIN\tTN","111238\tKalpana\t01/01/2000\tF\tIN\tKA","111239\tSatya\t01/01/2001\tM\tIN\tKL","111240\tKavya\t01/01/2002\tF\tIN\tAP"};
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer pig=new PigServer(ExecType.LOCAL);
+  pig.setBatchOn();
+  pig.registerQuery("A = LOAD '" + INPUT_FILE_NAME + "' USING PigStorage() AS (emp_id:int,emp_name:chararray,emp_start_date:chararray,"+ "emp_gender:chararray,emp_country:chararray,emp_state:chararray);");
+  pig.registerQuery("IN = FILTER A BY emp_country == 'IN';");
+  pig.registerQuery("STORE IN INTO 'employee' USING " + HCatStorer.class.getName() + "('emp_country=IN');");
+  pig.executeBatch();
+  driver.run("select * from employee");
+  ArrayList<String> results=new ArrayList<String>();
+  driver.getResults(results);
+  assertEquals(4,results.size());
+  Collections.sort(results);
+  assertEquals(inputData[0],results.get(0));
+  assertEquals(inputData[1],results.get(1));
+  assertEquals(inputData[2],results.get(2));
+  assertEquals(inputData[3],results.get(3));
+  driver.run("drop table employee");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDecimalXY() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","decimal(5,2)","bigdecimal",null,BigDecimal.valueOf(1.2).toString(),BigDecimal.valueOf(1.2).toString());
+  pigValueRangeTestOverflow("junitTypeTest1","decimal(5,2)","bigdecimal",null,BigDecimal.valueOf(12345.12).toString());
+  pigValueRangeTestOverflow("junitTypeTest2","decimal(5,2)","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,BigDecimal.valueOf(500.123).toString());
+  pigValueRangeTestOverflow("junitTypeTest3","decimal(5,2)","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,BigDecimal.valueOf(500.123).toString());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDecimalX() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","decimal(2)","bigdecimal",null,BigDecimal.valueOf(12).toString(),BigDecimal.valueOf(12).toString());
+  pigValueRangeTestOverflow("junitTypeTest2","decimal(2)","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,BigDecimal.valueOf(50.123).toString());
+  pigValueRangeTestOverflow("junitTypeTest3","decimal(2)","bigdecimal",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,BigDecimal.valueOf(50.123).toString());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-12 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreFuncAllSimpleTypes() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b float, c double, d bigint, e string, h boolean, f binary, g binary) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int i=0;
+  String[] input=new String[3];
+  input[i++]="0\t\t\t\t\t\t\t";
+  input[i++]="\t" + i * 2.1f + "\t" + i * 1.1d + "\t" + i * 2L + "\t" + "lets hcat" + "\t" + "true" + "\tbinary-data";
+  input[i++]=i + "\t" + i * 2.1f + "\t" + i * 1.1d + "\t" + i * 2L + "\t" + "lets hcat" + "\t" + "false" + "\tbinary-data";
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:float, c:double, d:long, e:chararray, h:boolean, f:bytearray);");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('','a:int, b:float, c:double, d:long, e:chararray, h:boolean, f:bytearray');");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  Iterator<String> itr=res.iterator();
+  String next=itr.next();
+  assertEquals("0\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL\tNULL",next);
+  assertEquals("NULL\t4.2\t2.2\t4\tlets hcat\ttrue\tbinary-data\tNULL",itr.next());
+  assertEquals("3\t6.2999997\t3.3000000000000003\t6\tlets hcat\tfalse\tbinary-data\tNULL",itr.next());
+  assertFalse(itr.hasNext());
+  server.registerQuery("B = load 'junit_unparted' using " + HCatLoader.class.getName() + ";");
+  Iterator<Tuple> iter=server.openIterator("B");
+  int count=0;
+  int num5nulls=0;
+  while (iter.hasNext()) {
+    Tuple t=iter.next();
+    if (t.get(6) == null) {
+      num5nulls++;
+    }
+ else {
+      assertTrue(t.get(6) instanceof DataByteArray);
+    }
+    assertNull(t.get(7));
+    count++;
+  }
+  assertEquals(3,count);
+  assertEquals(1,num5nulls);
+  driver.run("drop table junit_unparted");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultiPartColsInData() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table employee");
+  String createTable="CREATE TABLE employee (emp_id INT, emp_name STRING, emp_start_date STRING , emp_gender STRING ) " + " PARTITIONED BY (emp_country STRING , emp_state STRING ) STORED AS " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  String[] inputData={"111237\tKrishna\t01/01/1990\tM\tIN\tTN","111238\tKalpana\t01/01/2000\tF\tIN\tKA","111239\tSatya\t01/01/2001\tM\tIN\tKL","111240\tKavya\t01/01/2002\tF\tIN\tAP"};
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer pig=new PigServer(ExecType.LOCAL);
+  pig.setBatchOn();
+  pig.registerQuery("A = LOAD '" + INPUT_FILE_NAME + "' USING PigStorage() AS (emp_id:int,emp_name:chararray,emp_start_date:chararray,"+ "emp_gender:chararray,emp_country:chararray,emp_state:chararray);");
+  pig.registerQuery("TN = FILTER A BY emp_state == 'TN';");
+  pig.registerQuery("KA = FILTER A BY emp_state == 'KA';");
+  pig.registerQuery("KL = FILTER A BY emp_state == 'KL';");
+  pig.registerQuery("AP = FILTER A BY emp_state == 'AP';");
+  pig.registerQuery("STORE TN INTO 'employee' USING " + HCatStorer.class.getName() + "('emp_country=IN,emp_state=TN');");
+  pig.registerQuery("STORE KA INTO 'employee' USING " + HCatStorer.class.getName() + "('emp_country=IN,emp_state=KA');");
+  pig.registerQuery("STORE KL INTO 'employee' USING " + HCatStorer.class.getName() + "('emp_country=IN,emp_state=KL');");
+  pig.registerQuery("STORE AP INTO 'employee' USING " + HCatStorer.class.getName() + "('emp_country=IN,emp_state=AP');");
+  pig.executeBatch();
+  driver.run("select * from employee");
+  ArrayList<String> results=new ArrayList<String>();
+  driver.getResults(results);
+  assertEquals(4,results.size());
+  Collections.sort(results);
+  assertEquals(inputData[0],results.get(0));
+  assertEquals(inputData[1],results.get(1));
+  assertEquals(inputData[2],results.get(2));
+  assertEquals(inputData[3],results.get(3));
+  driver.run("drop table employee");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-5 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreInPartiitonedTbl() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int) partitioned by (b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=11;
+  String[] input=new String[LOOP_SIZE];
+  for (int i=0; i < LOOP_SIZE; i++) {
+    input[i]=i + "";
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int);");
+  server.registerQuery("store A into 'default.junit_unparted' using " + HCatStorer.class.getName() + "('b=1');");
+  server.registerQuery("B = load 'default.junit_unparted' using " + HCatLoader.class.getName() + "();");
+  Iterator<Tuple> itr=server.openIterator("B");
+  int i=0;
+  while (itr.hasNext()) {
+    Tuple t=itr.next();
+    assertEquals(2,t.size());
+    assertEquals(t.get(0),i);
+    assertEquals(t.get(1),"1");
+    i++;
+  }
+  assertFalse(itr.hasNext());
+  assertEquals(11,i);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDynamicPartitioningMultiPartColsNoDataInDataNoSpec() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table if exists employee");
+  String createTable="CREATE TABLE employee (emp_id INT, emp_name STRING, emp_start_date STRING , emp_gender STRING ) " + " PARTITIONED BY (emp_country STRING , emp_state STRING ) STORED AS " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  String[] inputData={};
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,inputData);
+  PigServer pig=new PigServer(ExecType.LOCAL);
+  pig.setBatchOn();
+  pig.registerQuery("A = LOAD '" + INPUT_FILE_NAME + "' USING PigStorage() AS (emp_id:int,emp_name:chararray,emp_start_date:chararray,"+ "emp_gender:chararray,emp_country:chararray,emp_state:chararray);");
+  pig.registerQuery("IN = FILTER A BY emp_country == 'IN';");
+  pig.registerQuery("STORE IN INTO 'employee' USING " + HCatStorer.class.getName() + "();");
+  pig.executeBatch();
+  driver.run("select * from employee");
+  ArrayList<String> results=new ArrayList<String>();
+  driver.getResults(results);
+  assertEquals(0,results.size());
+  driver.run("drop table employee");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteChar() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","char(5)","chararray",null,"xxx","xxx  ");
+  pigValueRangeTestOverflow("junitTypeTest1","char(5)","chararray",null,"too_long");
+  pigValueRangeTestOverflow("junitTypeTest2","char(5)","chararray",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,"too_long");
+  pigValueRangeTestOverflow("junitTypeTest3","char(5)","chararray",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,"too_long2");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-6 type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreWithNoCtorArgs() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table junit_unparted");
+  String createTable="create table junit_unparted(a int, b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=3;
+  String[] input=new String[LOOP_SIZE * LOOP_SIZE];
+  int k=0;
+  for (int i=1; i <= LOOP_SIZE; i++) {
+    String si=i + "";
+    for (int j=1; j <= LOOP_SIZE; j++) {
+      input[k++]=si + "\t" + j;
+    }
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into 'junit_unparted' using " + HCatStorer.class.getName() + "();");
+  server.executeBatch();
+  driver.run("select * from junit_unparted");
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  driver.run("drop table junit_unparted");
+  Iterator<String> itr=res.iterator();
+  for (int i=0; i < LOOP_SIZE * LOOP_SIZE; i++) {
+    assertEquals(input[i],itr.next());
+  }
+  assertFalse(itr.hasNext());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteDate() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  DateTime d=new DateTime(1991,10,11,0,0);
+  pigValueRangeTest("junitTypeTest1","date","datetime",null,d.toString(),d.toString(FORMAT_4_DATE),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest2","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.plusHours(2).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest3","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.plusMinutes(1).toString(),FORMAT_4_DATE);
+  d=new DateTime(1991,10,11,0,0,DateTimeZone.forOffsetHours(-11));
+  pigValueRangeTest("junitTypeTest4","date","datetime",null,d.toString(),d.toString(FORMAT_4_DATE),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest5","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,d.plusHours(2).toString(),FORMAT_4_DATE);
+  pigValueRangeTestOverflow("junitTypeTest6","date","datetime",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,d.plusMinutes(1).toString(),FORMAT_4_DATE);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPartitionPublish() throws IOException, CommandNeedRetryException {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  driver.run("drop table ptn_fail");
+  String createTable="create table ptn_fail(a int, c string) partitioned by (b string) stored as " + storageFormat;
+  int retCode=driver.run(createTable).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Failed to create table.");
+  }
+  int LOOP_SIZE=11;
+  String[] input=new String[LOOP_SIZE];
+  for (int i=0; i < LOOP_SIZE; i++) {
+    input[i]=i + "\tmath";
+  }
+  HcatTestUtils.createTestDataFile(INPUT_FILE_NAME,input);
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, c:chararray);");
+  server.registerQuery("B = filter A by " + FailEvalFunc.class.getName() + "($0);");
+  server.registerQuery("store B into 'ptn_fail' using " + HCatStorer.class.getName() + "('b=math');");
+  server.executeBatch();
+  String query="show partitions ptn_fail";
+  retCode=driver.run(query).getResponseCode();
+  if (retCode != 0) {
+    throw new IOException("Error " + retCode + " running query "+ query);
+  }
+  ArrayList<String> res=new ArrayList<String>();
+  driver.getResults(res);
+  assertEquals(0,res.size());
+  assertTrue((new File(TEST_WAREHOUSE_DIR + "/ptn_fail")).exists());
+  assertFalse((new File(TEST_WAREHOUSE_DIR + "/ptn_fail/b=math")).exists());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testWriteVarchar() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  pigValueRangeTest("junitTypeTest1","varchar(5)","chararray",null,"xxx","xxx");
+  pigValueRangeTestOverflow("junitTypeTest1","varchar(5)","chararray",null,"too_long");
+  pigValueRangeTestOverflow("junitTypeTest2","varchar(5)","chararray",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Null,"too_long");
+  pigValueRangeTestOverflow("junitTypeTest3","varchar(5)","chararray",HCatBaseStorer.OOR_VALUE_OPT_VALUES.Throw,"too_long2");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.hcatalog.pig.TestHCatStorerMulti </h4><pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStorePartitionedTable() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  createTable(PARTITIONED_TABLE,"a int, b string","bkt string");
+  populateBasicFile();
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("B2 = filter A by a < 2;");
+  server.registerQuery("store B2 into '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer('bkt=0');");
+  server.registerQuery("C2 = filter A by a >= 2;");
+  server.registerQuery("store C2 into '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer('bkt=1');");
+  server.executeBatch();
+  driver.run("select * from " + PARTITIONED_TABLE);
+  ArrayList<String> partitionedTableValuesReadFromHiveDriver=new ArrayList<String>();
+  driver.getResults(partitionedTableValuesReadFromHiveDriver);
+  assertEquals(basicInputData.size(),partitionedTableValuesReadFromHiveDriver.size());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreBasicTable() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  createTable(BASIC_TABLE,"a int, b string");
+  populateBasicFile();
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer();");
+  server.executeBatch();
+  driver.run("select * from " + BASIC_TABLE);
+  ArrayList<String> unpartitionedTableValuesReadFromHiveDriver=new ArrayList<String>();
+  driver.getResults(unpartitionedTableValuesReadFromHiveDriver);
+  assertEquals(basicInputData.size(),unpartitionedTableValuesReadFromHiveDriver.size());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-21 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setUp() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  if (driver == null) {
+    HiveConf hiveConf=new HiveConf(this.getClass());
+    hiveConf.set(HiveConf.ConfVars.PREEXECHOOKS.varname,"");
+    hiveConf.set(HiveConf.ConfVars.POSTEXECHOOKS.varname,"");
+    hiveConf.set(HiveConf.ConfVars.HIVE_SUPPORT_CONCURRENCY.varname,"false");
+    hiveConf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,TEST_WAREHOUSE_DIR);
+    hiveConf.setVar(HiveConf.ConfVars.HIVEMAPREDMODE,"nonstrict");
+    driver=new Driver(hiveConf);
+    SessionState.start(new CliSessionState(hiveConf));
+  }
+  cleanup();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-21 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testStoreTableMulti() throws Exception {
+  assumeTrue(!TestUtil.shouldSkip(storageFormat,DISABLED_STORAGE_FORMATS));
+  createTable(BASIC_TABLE,"a int, b string");
+  createTable(PARTITIONED_TABLE,"a int, b string","bkt string");
+  populateBasicFile();
+  PigServer server=new PigServer(ExecType.LOCAL);
+  server.setBatchOn();
+  server.registerQuery("A = load '" + INPUT_FILE_NAME + "' as (a:int, b:chararray);");
+  server.registerQuery("store A into '" + BASIC_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer();");
+  server.registerQuery("B2 = filter A by a < 2;");
+  server.registerQuery("store B2 into '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer('bkt=0');");
+  server.registerQuery("C2 = filter A by a >= 2;");
+  server.registerQuery("store C2 into '" + PARTITIONED_TABLE + "' using org.apache.hive.hcatalog.pig.HCatStorer('bkt=1');");
+  server.executeBatch();
+  driver.run("select * from " + BASIC_TABLE);
+  ArrayList<String> unpartitionedTableValuesReadFromHiveDriver=new ArrayList<String>();
+  driver.getResults(unpartitionedTableValuesReadFromHiveDriver);
+  driver.run("select * from " + PARTITIONED_TABLE);
+  ArrayList<String> partitionedTableValuesReadFromHiveDriver=new ArrayList<String>();
+  driver.getResults(partitionedTableValuesReadFromHiveDriver);
+  assertEquals(basicInputData.size(),unpartitionedTableValuesReadFromHiveDriver.size());
+  assertEquals(basicInputData.size(),partitionedTableValuesReadFromHiveDriver.size());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hive.jdbc.TestSSL </h4><pre class="type-11 type-3 type-4 type-5 type-21 type-7 type-8 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Sets implicit assumptions 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests to ensure SSLv2 and SSLv3 are disabled
+ */
+@Test public void testSSLVersion() throws Exception {
+  Assume.assumeTrue(execCommand("which openssl") == 0);
+  Assume.assumeTrue(System.getProperty("os.name").toLowerCase().contains("linux"));
+  setSslConfOverlay(confOverlay);
+  setBinaryConfOverlay(confOverlay);
+  miniHS2.start(confOverlay);
+  hs2Conn=DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true;sslTrustStore=" + dataFileDir+ File.separator+ TRUST_STORE_NAME+ ";trustStorePassword="+ KEY_STORE_PASSWORD,System.getProperty("user.name"),"bar");
+  hs2Conn.close();
+  Assert.assertEquals("Expected exit code of 1",1,execCommand("openssl s_client -connect " + miniHS2.getHost() + ":"+ miniHS2.getBinaryPort()+ " -ssl2 < /dev/null"));
+  Assert.assertEquals("Expected exit code of 1",1,execCommand("openssl s_client -connect " + miniHS2.getHost() + ":"+ miniHS2.getBinaryPort()+ " -ssl3 < /dev/null"));
+  miniHS2.stop();
+  setHttpConfOverlay(confOverlay);
+  miniHS2.start(confOverlay);
+  try {
+    hs2Conn=DriverManager.getConnection(miniHS2.getJdbcURL() + ";ssl=true;sslTrustStore=" + dataFileDir+ File.separator+ TRUST_STORE_NAME+ ";trustStorePassword="+ KEY_STORE_PASSWORD,System.getProperty("user.name"),"bar");
+    Assert.fail("Expected SQLException during connect");
+  }
+ catch (  SQLException e) {
+    LOG.info("Expected exception: " + e,e);
+    Assert.assertEquals("08S01",e.getSQLState().trim());
+    Throwable cause=e.getCause();
+    Assert.assertNotNull(cause);
+    while (cause.getCause() != null) {
+      cause=cause.getCause();
+    }
+    Assert.assertEquals("org.apache.http.NoHttpResponseException",cause.getClass().getName());
+    Assert.assertTrue(cause.getMessage().contains("failed to respond"));
+  }
+  miniHS2.stop();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

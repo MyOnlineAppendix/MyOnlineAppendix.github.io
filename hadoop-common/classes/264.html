@@ -1,0 +1,203 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestDataTransferProtocol (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testPacketHeader() throws IOException {
+  PacketHeader hdr=new PacketHeader(4,1024,100,false,4096,false);
+  ByteArrayOutputStream baos=new ByteArrayOutputStream();
+  hdr.write(new DataOutputStream(baos));
+  PacketHeader readBack=new PacketHeader();
+  ByteArrayInputStream bais=new ByteArrayInputStream(baos.toByteArray());
+  readBack.readFields(new DataInputStream(bais));
+  assertEquals(hdr,readBack);
+  readBack=new PacketHeader();
+  readBack.readFields(ByteBuffer.wrap(baos.toByteArray()));
+  assertEquals(hdr,readBack);
+  assertTrue(hdr.sanityCheck(99));
+  assertFalse(hdr.sanityCheck(100));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testOpWrite() throws IOException {
+  int numDataNodes=1;
+  final long BLOCK_ID_FUDGE=128;
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+  try {
+    cluster.waitActive();
+    String poolId=cluster.getNamesystem().getBlockPoolId();
+    datanode=DataNodeTestUtils.getDNRegistrationForBP(cluster.getDataNodes().get(0),poolId);
+    dnAddr=NetUtils.createSocketAddr(datanode.getXferAddr());
+    FileSystem fileSys=cluster.getFileSystem();
+    Path file=new Path("dataprotocol.dat");
+    DFSTestUtil.createFile(fileSys,file,1L,(short)numDataNodes,0L);
+    ExtendedBlock firstBlock=DFSTestUtil.getFirstBlock(fileSys,file);
+    testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_CREATE,0L,"Cannot create an existing block",true);
+    testWrite(firstBlock,BlockConstructionStage.DATA_STREAMING,0L,"Unexpected stage",true);
+    long newGS=firstBlock.getGenerationStamp() + 1;
+    testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_STREAMING_RECOVERY,newGS,"Cannot recover data streaming to a finalized replica",true);
+    newGS=firstBlock.getGenerationStamp() + 1;
+    testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND,newGS,"Append to a finalized replica",false);
+    firstBlock.setGenerationStamp(newGS);
+    file=new Path("dataprotocol1.dat");
+    DFSTestUtil.createFile(fileSys,file,1L,(short)numDataNodes,0L);
+    firstBlock=DFSTestUtil.getFirstBlock(fileSys,file);
+    newGS=firstBlock.getGenerationStamp() + 1;
+    testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND_RECOVERY,newGS,"Recover appending to a finalized replica",false);
+    file=new Path("dataprotocol2.dat");
+    DFSTestUtil.createFile(fileSys,file,1L,(short)numDataNodes,0L);
+    firstBlock=DFSTestUtil.getFirstBlock(fileSys,file);
+    newGS=firstBlock.getGenerationStamp() + 1;
+    testWrite(firstBlock,BlockConstructionStage.PIPELINE_CLOSE_RECOVERY,newGS,"Recover failed close to a finalized replica",false);
+    firstBlock.setGenerationStamp(newGS);
+    long newBlockId=firstBlock.getBlockId() + BLOCK_ID_FUDGE;
+    ExtendedBlock newBlock=new ExtendedBlock(firstBlock.getBlockPoolId(),newBlockId,0,firstBlock.getGenerationStamp());
+    testWrite(newBlock,BlockConstructionStage.PIPELINE_SETUP_CREATE,0L,"Create a new block",false);
+    newGS=newBlock.getGenerationStamp() + 1;
+    newBlock.setBlockId(newBlock.getBlockId() + 1);
+    testWrite(newBlock,BlockConstructionStage.PIPELINE_SETUP_STREAMING_RECOVERY,newGS,"Recover a new block",true);
+    newGS=newBlock.getGenerationStamp() + 1;
+    testWrite(newBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND,newGS,"Cannot append to a new block",true);
+    newBlock.setBlockId(newBlock.getBlockId() + 1);
+    newGS=newBlock.getGenerationStamp() + 1;
+    testWrite(newBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND_RECOVERY,newGS,"Cannot append to a new block",true);
+    Path file1=new Path("dataprotocol1.dat");
+    DFSTestUtil.createFile(fileSys,file1,1L,(short)numDataNodes,0L);
+    DFSOutputStream out=(DFSOutputStream)(fileSys.append(file1).getWrappedStream());
+    out.write(1);
+    out.hflush();
+    FSDataInputStream in=fileSys.open(file1);
+    firstBlock=DFSTestUtil.getAllBlocks(in).get(0).getBlock();
+    firstBlock.setNumBytes(2L);
+    try {
+      testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_CREATE,0L,"Cannot create a RBW block",true);
+      newGS=firstBlock.getGenerationStamp() + 1;
+      testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND,newGS,"Cannot append to a RBW replica",true);
+      testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_APPEND_RECOVERY,newGS,"Recover append to a RBW replica",false);
+      firstBlock.setGenerationStamp(newGS);
+      file=new Path("dataprotocol2.dat");
+      DFSTestUtil.createFile(fileSys,file,1L,(short)numDataNodes,0L);
+      out=(DFSOutputStream)(fileSys.append(file).getWrappedStream());
+      out.write(1);
+      out.hflush();
+      in=fileSys.open(file);
+      firstBlock=DFSTestUtil.getAllBlocks(in).get(0).getBlock();
+      firstBlock.setNumBytes(2L);
+      newGS=firstBlock.getGenerationStamp() + 1;
+      testWrite(firstBlock,BlockConstructionStage.PIPELINE_SETUP_STREAMING_RECOVERY,newGS,"Recover a RBW replica",false);
+    }
+  finally {
+      IOUtils.closeStream(in);
+      IOUtils.closeStream(out);
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testDataTransferProtocol() throws IOException {
+  Random random=new Random();
+  int oneMil=1024 * 1024;
+  Path file=new Path("dataprotocol.dat");
+  int numDataNodes=1;
+  Configuration conf=new HdfsConfiguration();
+  conf.setInt(DFSConfigKeys.DFS_REPLICATION_KEY,numDataNodes);
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+  try {
+    cluster.waitActive();
+    datanode=cluster.getFileSystem().getDataNodeStats(DatanodeReportType.LIVE)[0];
+    dnAddr=NetUtils.createSocketAddr(datanode.getXferAddr());
+    FileSystem fileSys=cluster.getFileSystem();
+    int fileLen=Math.min(conf.getInt(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,4096),4096);
+    DFSTestUtil.createFile(fileSys,file,fileLen,fileLen,fileSys.getDefaultBlockSize(file),fileSys.getDefaultReplication(file),0L);
+    final ExtendedBlock firstBlock=DFSTestUtil.getFirstBlock(fileSys,file);
+    final String poolId=firstBlock.getBlockPoolId();
+    long newBlockId=firstBlock.getBlockId() + 1;
+    recvBuf.reset();
+    sendBuf.reset();
+    recvOut.writeShort((short)(DataTransferProtocol.DATA_TRANSFER_VERSION - 1));
+    sendOut.writeShort((short)(DataTransferProtocol.DATA_TRANSFER_VERSION - 1));
+    sendRecvData("Wrong Version",true);
+    sendBuf.reset();
+    sendOut.writeShort((short)DataTransferProtocol.DATA_TRANSFER_VERSION);
+    sendOut.writeByte(Op.WRITE_BLOCK.code - 1);
+    sendRecvData("Wrong Op Code",true);
+    sendBuf.reset();
+    DataChecksum badChecksum=Mockito.spy(DEFAULT_CHECKSUM);
+    Mockito.doReturn(-1).when(badChecksum).getBytesPerChecksum();
+    writeBlock(poolId,newBlockId,badChecksum);
+    recvBuf.reset();
+    sendResponse(Status.ERROR,null,null,recvOut);
+    sendRecvData("wrong bytesPerChecksum while writing",true);
+    sendBuf.reset();
+    recvBuf.reset();
+    writeBlock(poolId,++newBlockId,DEFAULT_CHECKSUM);
+    PacketHeader hdr=new PacketHeader(4,0,100,false,-1 - random.nextInt(oneMil),false);
+    hdr.write(sendOut);
+    sendResponse(Status.SUCCESS,"",null,recvOut);
+    new PipelineAck(100,new Status[]{Status.ERROR}).write(recvOut);
+    sendRecvData("negative DATA_CHUNK len while writing block " + newBlockId,true);
+    sendBuf.reset();
+    recvBuf.reset();
+    writeBlock(poolId,++newBlockId,DEFAULT_CHECKSUM);
+    hdr=new PacketHeader(8,0,100,true,0,false);
+    hdr.write(sendOut);
+    sendOut.writeInt(0);
+    sendOut.flush();
+    sendResponse(Status.SUCCESS,"",null,recvOut);
+    new PipelineAck(100,new Status[]{Status.SUCCESS}).write(recvOut);
+    sendRecvData("Writing a zero len block blockid " + newBlockId,false);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    ExtendedBlock blk=new ExtendedBlock(bpid,firstBlock.getLocalBlock());
+    long blkid=blk.getBlockId();
+    sendBuf.reset();
+    recvBuf.reset();
+    blk.setBlockId(blkid - 1);
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",0L,fileLen,true,CachingStrategy.newDefaultStrategy());
+    sendRecvData("Wrong block ID " + newBlockId + " for read",false);
+    sendBuf.reset();
+    blk.setBlockId(blkid);
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",-1L,fileLen,true,CachingStrategy.newDefaultStrategy());
+    sendRecvData("Negative start-offset for read for block " + firstBlock.getBlockId(),false);
+    sendBuf.reset();
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",fileLen,fileLen,true,CachingStrategy.newDefaultStrategy());
+    sendRecvData("Wrong start-offset for reading block " + firstBlock.getBlockId(),false);
+    recvBuf.reset();
+    BlockOpResponseProto.newBuilder().setStatus(Status.SUCCESS).setReadOpChecksumInfo(ReadOpChecksumInfoProto.newBuilder().setChecksum(DataTransferProtoUtil.toProto(DEFAULT_CHECKSUM)).setChunkOffset(0L)).build().writeDelimitedTo(recvOut);
+    sendBuf.reset();
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",0L,-1L - random.nextInt(oneMil),true,CachingStrategy.newDefaultStrategy());
+    sendRecvData("Negative length for reading block " + firstBlock.getBlockId(),false);
+    recvBuf.reset();
+    sendResponse(Status.ERROR,null,"opReadBlock " + firstBlock + " received exception java.io.IOException:  "+ "Offset 0 and length 4097 don't match block "+ firstBlock+ " ( blockLen 4096 )",recvOut);
+    sendBuf.reset();
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",0L,fileLen + 1,true,CachingStrategy.newDefaultStrategy());
+    sendRecvData("Wrong length for reading block " + firstBlock.getBlockId(),false);
+    sendBuf.reset();
+    sender.readBlock(blk,BlockTokenSecretManager.DUMMY_TOKEN,"cl",0L,fileLen,true,CachingStrategy.newDefaultStrategy());
+    readFile(fileSys,file,fileLen);
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

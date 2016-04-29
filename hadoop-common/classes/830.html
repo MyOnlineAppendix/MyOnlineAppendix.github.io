@@ -1,0 +1,328 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.jobhistory.TestJobHistoryEventHandler (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testUnflushedTimer() throws Exception {
+  TestParams t=new TestParams();
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,t.workDir);
+  conf.setLong(MRJobConfig.MR_AM_HISTORY_COMPLETE_EVENT_FLUSH_TIMEOUT_MS,2 * 1000l);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_JOB_COMPLETE_UNFLUSHED_MULTIPLIER,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_MAX_UNFLUSHED_COMPLETE_EVENTS,100);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_USE_BATCHED_FLUSH_QUEUE_SIZE_THRESHOLD,5);
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter).write(any(HistoryEvent.class));
+    for (int i=0; i < 100; i++) {
+      queueEvent(jheh,new JobHistoryEvent(t.jobId,new TaskFinishedEvent(t.taskID,null,0,TaskType.MAP,"",null)));
+    }
+    handleNextNEvents(jheh,9);
+    verify(mockWriter,times(0)).flush();
+    Thread.sleep(2 * 4 * 1000l);
+    verify(mockWriter).flush();
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testSigTermedFunctionality() throws IOException {
+  AppContext mockedContext=Mockito.mock(AppContext.class);
+  JHEventHandlerForSigtermTest jheh=new JHEventHandlerForSigtermTest(mockedContext,0);
+  JobId jobId=Mockito.mock(JobId.class);
+  jheh.addToFileMap(jobId);
+  final int numEvents=4;
+  JobHistoryEvent events[]=new JobHistoryEvent[numEvents];
+  for (int i=0; i < numEvents; ++i) {
+    events[i]=getEventToEnqueue(jobId);
+    jheh.handle(events[i]);
+  }
+  jheh.stop();
+  assertTrue("handleEvent should've been called only 4 times but was " + jheh.eventsHandled,jheh.eventsHandled == 4);
+  jheh=new JHEventHandlerForSigtermTest(mockedContext,0);
+  Job job=Mockito.mock(Job.class);
+  Mockito.when(mockedContext.getJob(jobId)).thenReturn(job);
+  ApplicationId mockAppId=Mockito.mock(ApplicationId.class);
+  Mockito.when(mockAppId.getClusterTimestamp()).thenReturn(1000l);
+  Mockito.when(jobId.getAppId()).thenReturn(mockAppId);
+  jheh.addToFileMap(jobId);
+  jheh.setForcejobCompletion(true);
+  for (int i=0; i < numEvents; ++i) {
+    events[i]=getEventToEnqueue(jobId);
+    jheh.handle(events[i]);
+  }
+  jheh.stop();
+  assertTrue("handleEvent should've been called only 5 times but was " + jheh.eventsHandled,jheh.eventsHandled == 5);
+  assertTrue("Last event handled wasn't JobUnsuccessfulCompletionEvent",jheh.lastEventHandled.getHistoryEvent() instanceof JobUnsuccessfulCompletionEvent);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=50000) public void testDefaultFsIsUsedForHistory() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,dfsCluster.getURI().toString());
+  FileOutputStream os=new FileOutputStream(coreSitePath);
+  conf.writeXml(os);
+  os.close();
+  conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,"file:///");
+  TestParams t=new TestParams();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,t.dfsWorkDir);
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0,false);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobFinishedEvent(TypeConverter.fromYarn(t.jobId),0,0,0,0,0,new Counters(),new Counters(),new Counters())));
+    FileSystem dfsFileSystem=dfsCluster.getFileSystem();
+    assertTrue("Minicluster contains some history files",dfsFileSystem.globStatus(new Path(t.dfsWorkDir + "/*")).length != 0);
+    FileSystem localFileSystem=LocalFileSystem.get(conf);
+    assertFalse("No history directory on non-default file system",localFileSystem.exists(new Path(t.dfsWorkDir)));
+  }
+  finally {
+    jheh.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void cleanUpClass() throws Exception {
+  dfsCluster.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testProcessDoneFilesNotLastAMRetry() throws Exception {
+  TestParams t=new TestParams(false);
+  Configuration conf=new Configuration();
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    verify(jheh,times(0)).processDoneFiles(t.jobId);
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.ERROR.toString())));
+    verify(jheh,times(0)).processDoneFiles(t.jobId);
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobFinishedEvent(TypeConverter.fromYarn(t.jobId),0,0,0,0,0,new Counters(),new Counters(),new Counters())));
+    verify(jheh,times(1)).processDoneFiles(t.jobId);
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.FAILED.toString())));
+    verify(jheh,times(2)).processDoneFiles(t.jobId);
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.KILLED.toString())));
+    verify(jheh,times(3)).processDoneFiles(t.jobId);
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter,times(5)).write(any(HistoryEvent.class));
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testProcessDoneFilesOnLastAMRetry() throws Exception {
+  TestParams t=new TestParams(true);
+  Configuration conf=new Configuration();
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    verify(jheh,times(0)).processDoneFiles(any(JobId.class));
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.ERROR.toString())));
+    verify(jheh,times(1)).processDoneFiles(any(JobId.class));
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobFinishedEvent(TypeConverter.fromYarn(t.jobId),0,0,0,0,0,new Counters(),new Counters(),new Counters())));
+    verify(jheh,times(2)).processDoneFiles(any(JobId.class));
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.FAILED.toString())));
+    verify(jheh,times(3)).processDoneFiles(any(JobId.class));
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new JobUnsuccessfulCompletionEvent(TypeConverter.fromYarn(t.jobId),0,0,0,JobStateInternal.KILLED.toString())));
+    verify(jheh,times(4)).processDoneFiles(any(JobId.class));
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter,times(5)).write(any(HistoryEvent.class));
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testBatchedFlushJobEndMultiplier() throws Exception {
+  TestParams t=new TestParams();
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,t.workDir);
+  conf.setLong(MRJobConfig.MR_AM_HISTORY_COMPLETE_EVENT_FLUSH_TIMEOUT_MS,60 * 1000l);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_JOB_COMPLETE_UNFLUSHED_MULTIPLIER,3);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_MAX_UNFLUSHED_COMPLETE_EVENTS,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_USE_BATCHED_FLUSH_QUEUE_SIZE_THRESHOLD,0);
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter).write(any(HistoryEvent.class));
+    for (int i=0; i < 100; i++) {
+      queueEvent(jheh,new JobHistoryEvent(t.jobId,new TaskFinishedEvent(t.taskID,null,0,TaskType.MAP,"",null)));
+    }
+    queueEvent(jheh,new JobHistoryEvent(t.jobId,new JobFinishedEvent(TypeConverter.fromYarn(t.jobId),0,10,10,0,0,null,null,new Counters())));
+    handleNextNEvents(jheh,29);
+    verify(mockWriter,times(0)).flush();
+    handleNextNEvents(jheh,72);
+    verify(mockWriter,times(4)).flush();
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testGetHistoryIntermediateDoneDirForUser() throws IOException {
+  Configuration conf=new Configuration();
+  conf.set(JHAdminConfig.MR_HISTORY_INTERMEDIATE_DONE_DIR,"/mapred/history/done_intermediate");
+  conf.set(MRJobConfig.USER_NAME,System.getProperty("user.name"));
+  String pathStr=JobHistoryUtils.getHistoryIntermediateDoneDirForUser(conf);
+  Assert.assertEquals("/mapred/history/done_intermediate/" + System.getProperty("user.name"),pathStr);
+  conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,dfsCluster.getURI().toString());
+  FileOutputStream os=new FileOutputStream(coreSitePath);
+  conf.writeXml(os);
+  os.close();
+  conf.set(CommonConfigurationKeysPublic.FS_DEFAULT_NAME_KEY,"file:///");
+  pathStr=JobHistoryUtils.getHistoryIntermediateDoneDirForUser(conf);
+  Assert.assertEquals(dfsCluster.getURI().toString() + "/mapred/history/done_intermediate/" + System.getProperty("user.name"),pathStr);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testFirstFlushOnCompletionEvent() throws Exception {
+  TestParams t=new TestParams();
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,t.workDir);
+  conf.setLong(MRJobConfig.MR_AM_HISTORY_COMPLETE_EVENT_FLUSH_TIMEOUT_MS,60 * 1000l);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_JOB_COMPLETE_UNFLUSHED_MULTIPLIER,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_MAX_UNFLUSHED_COMPLETE_EVENTS,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_USE_BATCHED_FLUSH_QUEUE_SIZE_THRESHOLD,200);
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter).write(any(HistoryEvent.class));
+    for (int i=0; i < 100; i++) {
+      queueEvent(jheh,new JobHistoryEvent(t.jobId,new TaskStartedEvent(t.taskID,0,TaskType.MAP,"")));
+    }
+    handleNextNEvents(jheh,100);
+    verify(mockWriter,times(0)).flush();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new TaskFinishedEvent(t.taskID,null,0,TaskType.MAP,"",null)));
+    verify(mockWriter).flush();
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void cleanTest() throws Exception {
+  new File(coreSitePath).delete();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=50000) public void testMaxUnflushedCompletionEvents() throws Exception {
+  TestParams t=new TestParams();
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,t.workDir);
+  conf.setLong(MRJobConfig.MR_AM_HISTORY_COMPLETE_EVENT_FLUSH_TIMEOUT_MS,60 * 1000l);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_JOB_COMPLETE_UNFLUSHED_MULTIPLIER,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_MAX_UNFLUSHED_COMPLETE_EVENTS,10);
+  conf.setInt(MRJobConfig.MR_AM_HISTORY_USE_BATCHED_FLUSH_QUEUE_SIZE_THRESHOLD,5);
+  JHEvenHandlerForTest realJheh=new JHEvenHandlerForTest(t.mockAppContext,0);
+  JHEvenHandlerForTest jheh=spy(realJheh);
+  jheh.init(conf);
+  EventWriter mockWriter=null;
+  try {
+    jheh.start();
+    handleEvent(jheh,new JobHistoryEvent(t.jobId,new AMStartedEvent(t.appAttemptId,200,t.containerId,"nmhost",3000,4000)));
+    mockWriter=jheh.getEventWriter();
+    verify(mockWriter).write(any(HistoryEvent.class));
+    for (int i=0; i < 100; i++) {
+      queueEvent(jheh,new JobHistoryEvent(t.jobId,new TaskFinishedEvent(t.taskID,null,0,TaskType.MAP,"",null)));
+    }
+    handleNextNEvents(jheh,9);
+    verify(mockWriter,times(0)).flush();
+    handleNextNEvents(jheh,1);
+    verify(mockWriter).flush();
+    handleNextNEvents(jheh,50);
+    verify(mockWriter,times(6)).flush();
+  }
+  finally {
+    jheh.stop();
+    verify(mockWriter).close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

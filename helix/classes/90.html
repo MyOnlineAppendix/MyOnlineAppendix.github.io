@@ -1,0 +1,63 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestPartitionLevelTransitionConstraint (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void test() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  int n=2;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  TestHelper.setupCluster(clusterName,_zkaddr,12918,"localhost","TestDB",1,1,n,2,"MasterSlave",false);
+  HelixDataAccessor accessor=new ZKHelixDataAccessor(clusterName,_baseAccessor);
+  StateModelDefinition stateModelDef=defineStateModel();
+  accessor.setProperty(accessor.keyBuilder().stateModelDef("Bootstrap"),stateModelDef);
+  IdealState idealState=accessor.getProperty(accessor.keyBuilder().idealStates("TestDB0"));
+  idealState.setStateModelDefRef("Bootstrap");
+  idealState.setReplicas("2");
+  idealState.getRecord().setListField("TestDB0_0",Arrays.asList("localhost_12919","localhost_12918"));
+  accessor.setProperty(accessor.keyBuilder().idealStates("TestDB0"),idealState);
+  ConstraintItemBuilder constraintItemBuilder=new ConstraintItemBuilder();
+  constraintItemBuilder.addConstraintAttribute(ConstraintAttribute.MESSAGE_TYPE.toString(),"STATE_TRANSITION").addConstraintAttribute(ConstraintAttribute.PARTITION.toString(),".*").addConstraintAttribute(ConstraintAttribute.CONSTRAINT_VALUE.toString(),"1");
+  HelixAdmin admin=new ZKHelixAdmin(_zkclient);
+  admin.setConstraint(clusterName,ConstraintType.MESSAGE_CONSTRAINT,"constraint1",constraintItemBuilder.build());
+  MockController controller=new MockController(_zkaddr,clusterName,"controller");
+  controller.syncStart();
+  MockParticipant[] participants=new MockParticipant[n];
+  String instanceName1="localhost_12918";
+  participants[0]=new MockParticipant(_zkaddr,clusterName,instanceName1);
+  participants[0].getStateMachineEngine().registerStateModelFactory(StateModelDefId.from("Bootstrap"),new BootstrapStateModelFactory());
+  participants[0].syncStart();
+  boolean result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  String instanceName2="localhost_12919";
+  participants[1]=new MockParticipant(_zkaddr,clusterName,instanceName2);
+  participants[1].getStateMachineEngine().registerStateModelFactory(StateModelDefId.from("Bootstrap"),new BootstrapStateModelFactory());
+  participants[1].syncStart();
+  result=ClusterStateVerifier.verifyByZkCallback(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,clusterName));
+  Assert.assertTrue(result);
+  Assert.assertEquals(_msgOrderList.size(),7);
+  Message[] _msgOrderArray=_msgOrderList.toArray(new Message[0]);
+  assertMessage(_msgOrderArray[0],"OFFLINE","BOOTSTRAP",instanceName1);
+  assertMessage(_msgOrderArray[1],"BOOTSTRAP","SLAVE",instanceName1);
+  assertMessage(_msgOrderArray[2],"SLAVE","MASTER",instanceName1);
+  assertMessage(_msgOrderArray[3],"OFFLINE","BOOTSTRAP",instanceName2);
+  assertMessage(_msgOrderArray[4],"BOOTSTRAP","SLAVE",instanceName2);
+  assertMessage(_msgOrderArray[5],"MASTER","SLAVE",instanceName1);
+  assertMessage(_msgOrderArray[6],"SLAVE","MASTER",instanceName2);
+  controller.syncStop();
+  for (int i=0; i < n; i++) {
+    participants[i].syncStop();
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

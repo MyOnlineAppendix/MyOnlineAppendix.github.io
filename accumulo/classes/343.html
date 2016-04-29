@@ -1,0 +1,115 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.functional.CompactionIT (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-13 type-5 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void test() throws Exception {
+  final Connector c=getConnector();
+  final String tableName=getUniqueNames(1)[0];
+  c.tableOperations().create(tableName);
+  c.tableOperations().setProperty(tableName,Property.TABLE_MAJC_RATIO.getKey(),"1.0");
+  FileSystem fs=getFileSystem();
+  Path root=new Path(cluster.getTemporaryPath(),getClass().getName());
+  Path testrf=new Path(root,"testrf");
+  FunctionalTestUtils.createRFiles(c,fs,testrf.toString(),500000,59,4);
+  FunctionalTestUtils.bulkImport(c,fs,tableName,testrf.toString());
+  int beforeCount=countFiles(c);
+  final AtomicBoolean fail=new AtomicBoolean(false);
+  final ClientConfiguration clientConf=cluster.getClientConfig();
+  final int THREADS=5;
+  for (int count=0; count < THREADS; count++) {
+    ExecutorService executor=Executors.newFixedThreadPool(THREADS);
+    final int span=500000 / 59;
+    for (int i=0; i < 500000; i+=500000 / 59) {
+      final int finalI=i;
+      Runnable r=new Runnable(){
+        @Override public void run(){
+          try {
+            VerifyIngest.Opts opts=new VerifyIngest.Opts();
+            opts.startRow=finalI;
+            opts.rows=span;
+            opts.random=56;
+            opts.dataSize=50;
+            opts.cols=1;
+            opts.setTableName(tableName);
+            if (clientConf.getBoolean(ClientProperty.INSTANCE_RPC_SASL_ENABLED.getKey(),false)) {
+              opts.updateKerberosCredentials(clientConf);
+            }
+ else {
+              opts.setPrincipal(getAdminPrincipal());
+              PasswordToken passwordToken=(PasswordToken)getAdminToken();
+              opts.setPassword(new Password(new String(passwordToken.getPassword(),UTF_8)));
+            }
+            VerifyIngest.verifyIngest(c,opts,new ScannerOpts());
+          }
+ catch (          Exception ex) {
+            log.warn("Got exception verifying data",ex);
+            fail.set(true);
+          }
+        }
+      }
+;
+      executor.execute(r);
+    }
+    executor.shutdown();
+    executor.awaitTermination(defaultTimeoutSeconds(),TimeUnit.SECONDS);
+    assertFalse("Failed to successfully run all threads, Check the test output for error",fail.get());
+  }
+  int finalCount=countFiles(c);
+  assertTrue(finalCount < beforeCount);
+  try {
+    getClusterControl().adminStopAll();
+  }
+  finally {
+    getCluster().stop();
+    if (ClusterType.STANDALONE == getClusterType()) {
+      getCluster().start();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void alterConfig() throws Exception {
+  if (ClusterType.STANDALONE == getClusterType()) {
+    InstanceOperations iops=getConnector().instanceOperations();
+    Map<String,String> config=iops.getSystemConfiguration();
+    majcThreadMaxOpen=config.get(Property.TSERV_MAJC_THREAD_MAXOPEN.getKey());
+    majcDelay=config.get(Property.TSERV_MAJC_DELAY.getKey());
+    majcMaxConcurrent=config.get(Property.TSERV_MAJC_MAXCONCURRENT.getKey());
+    iops.setProperty(Property.TSERV_MAJC_THREAD_MAXOPEN.getKey(),"4");
+    iops.setProperty(Property.TSERV_MAJC_DELAY.getKey(),"1");
+    iops.setProperty(Property.TSERV_MAJC_MAXCONCURRENT.getKey(),"1");
+    getClusterControl().stopAllServers(ServerType.TABLET_SERVER);
+    getClusterControl().startAllServers(ServerType.TABLET_SERVER);
+  }
+}
+
+</code></pre>
+
+<pre class="type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void resetConfig() throws Exception {
+  if (null != majcThreadMaxOpen) {
+    InstanceOperations iops=getConnector().instanceOperations();
+    iops.setProperty(Property.TSERV_MAJC_THREAD_MAXOPEN.getKey(),majcThreadMaxOpen);
+    iops.setProperty(Property.TSERV_MAJC_DELAY.getKey(),majcDelay);
+    iops.setProperty(Property.TSERV_MAJC_MAXCONCURRENT.getKey(),majcMaxConcurrent);
+    getClusterControl().stopAllServers(ServerType.TABLET_SERVER);
+    getClusterControl().startAllServers(ServerType.TABLET_SERVER);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

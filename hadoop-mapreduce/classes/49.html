@@ -1,0 +1,432 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestTaskKilling (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifying whether task temporary output directory is cleaned up or not
+ * after killing the task.
+ */
+@Test public void testDirCleanupAfterTaskKilled() throws IOException, InterruptedException {
+  TaskInfo taskInfo=null;
+  boolean isTempFolderExists=false;
+  String localTaskDir=null;
+  TTClient ttClient=null;
+  TaskID tID=null;
+  FileStatus filesStatus[]=null;
+  Path inputDir=new Path("input");
+  Path outputDir=new Path("output");
+  Configuration conf=new Configuration(cluster.getConf());
+  JobConf jconf=new JobConf(conf);
+  jconf.setJobName("Word Count");
+  jconf.setJarByClass(WordCount.class);
+  jconf.setMapperClass(WordCount.MapClass.class);
+  jconf.setCombinerClass(WordCount.Reduce.class);
+  jconf.setReducerClass(WordCount.Reduce.class);
+  jconf.setNumMapTasks(1);
+  jconf.setNumReduceTasks(1);
+  jconf.setMaxMapAttempts(20);
+  jconf.setMaxReduceAttempts(20);
+  jconf.setOutputKeyClass(Text.class);
+  jconf.setOutputValueClass(IntWritable.class);
+  cleanup(inputDir,conf);
+  cleanup(outputDir,conf);
+  createInput(inputDir,conf);
+  FileInputFormat.setInputPaths(jconf,inputDir);
+  FileOutputFormat.setOutputPath(jconf,outputDir);
+  RunningJob runJob=jobClient.submitJob(jconf);
+  JobID id=runJob.getID();
+  JobInfo jInfo=remoteJTClient.getJobInfo(id);
+  int counter=0;
+  while (counter < 60) {
+    if (jInfo.getStatus().getRunState() == JobStatus.RUNNING) {
+      break;
+    }
+ else {
+      UtilsForTests.waitFor(1000);
+      jInfo=remoteJTClient.getJobInfo(id);
+    }
+    counter++;
+  }
+  Assert.assertTrue("Job has not been started for 1 min.",counter != 60);
+  JobStatus[] jobStatus=jobClient.getAllJobs();
+  String userName=jobStatus[0].getUsername();
+  TaskInfo[] taskInfos=remoteJTClient.getTaskInfo(id);
+  for (  TaskInfo taskinfo : taskInfos) {
+    if (!taskinfo.isSetupOrCleanup()) {
+      taskInfo=taskinfo;
+      break;
+    }
+  }
+  counter=0;
+  while (counter < 30) {
+    if (taskInfo.getTaskStatus().length > 0) {
+      if (taskInfo.getTaskStatus()[0].getRunState() == TaskStatus.State.RUNNING) {
+        break;
+      }
+    }
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+    counter++;
+  }
+  Assert.assertTrue("Task has not been started for 30 sec.",counter != 30);
+  tID=TaskID.downgrade(taskInfo.getTaskID());
+  FinishTaskControlAction action=new FinishTaskControlAction(tID);
+  String[] taskTrackers=taskInfo.getTaskTrackers();
+  counter=0;
+  while (counter < 30) {
+    if (taskTrackers.length != 0) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+    taskTrackers=taskInfo.getTaskTrackers();
+    counter++;
+  }
+  String hostName=taskTrackers[0].split("_")[1];
+  hostName=hostName.split(":")[0];
+  ttClient=cluster.getTTClient(hostName);
+  ttClient.getProxy().sendAction(action);
+  String localDirs[]=ttClient.getMapredLocalDirs();
+  TaskAttemptID taskAttID=new TaskAttemptID(tID,0);
+  for (  String localDir : localDirs) {
+    localTaskDir=localDir + "/" + TaskTracker.getLocalTaskDir(userName,id.toString(),taskAttID.toString());
+    filesStatus=ttClient.listStatus(localTaskDir,true);
+    if (filesStatus.length > 0) {
+      isTempFolderExists=true;
+      NetworkedJob networkJob=new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster);
+      networkJob.killTask(taskAttID,false);
+      break;
+    }
+  }
+  Assert.assertTrue("Task Attempt directory " + taskAttID + " has not been found while task was running.",isTempFolderExists);
+  taskInfo=remoteJTClient.getTaskInfo(tID);
+  counter=0;
+  while (counter < 60) {
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(tID);
+    filesStatus=ttClient.listStatus(localTaskDir,true);
+    if (filesStatus.length == 0) {
+      break;
+    }
+    counter++;
+  }
+  Assert.assertTrue("Task attempt temporary folder has not been cleaned.",isTempFolderExists && filesStatus.length == 0);
+  counter=0;
+  while (counter < 30) {
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(tID);
+    counter++;
+  }
+  taskInfo=remoteJTClient.getTaskInfo(tID);
+  Assert.assertEquals("Task status has not been changed to KILLED.",TaskStatus.State.KILLED,taskInfo.getTaskStatus()[0].getRunState());
+}
+
+</code></pre>
+
+<pre class="type-11 type-13 type-14 type-4 type-7 type-6 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAllTaskAttemptKill() throws Exception {
+  Configuration conf=new Configuration(cluster.getConf());
+  JobStatus[] jobStatus=null;
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(3,1,40000,1000,100,100);
+  JobConf jconf=new JobConf(conf);
+  slpJob.submit();
+  RunningJob rJob=cluster.getJTClient().getClient().getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  int MAX_MAP_TASK_ATTEMPTS=Integer.parseInt(jconf.get(MRJobConfig.MAP_MAX_ATTEMPTS));
+  LOG.info("MAX_MAP_TASK_ATTEMPTS is : " + MAX_MAP_TASK_ATTEMPTS);
+  Assert.assertTrue(MAX_MAP_TASK_ATTEMPTS > 0);
+  TTClient tClient=null;
+  TTClient[] ttClients=null;
+  JobInfo jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  Assert.assertNotNull(jInfo.getStatus().getRunState());
+  while (jInfo.getStatus().getRunState() != JobStatus.RUNNING) {
+    try {
+      Thread.sleep(10000);
+    }
+ catch (    InterruptedException e) {
+    }
+    ;
+    jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  }
+  JobID jobidStore=rJob.getID();
+  jobidStore=JobID.downgrade(jobidStore);
+  LOG.info("job id is :" + jobidStore.toString());
+  TaskInfo[] taskInfos=null;
+  boolean runningCount=false;
+  int count=0;
+  do {
+    taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    runningCount=false;
+    for (    TaskInfo taskInfo : taskInfos) {
+      TaskStatus[] taskStatuses=taskInfo.getTaskStatus();
+      if (taskStatuses.length > 0) {
+        LOG.info("taskStatuses[0].getRunState() is :" + taskStatuses[0].getRunState());
+        if (taskStatuses[0].getRunState() == TaskStatus.State.RUNNING) {
+          runningCount=true;
+          break;
+        }
+ else {
+          LOG.info("Sleeping 5 seconds");
+          Thread.sleep(5000);
+        }
+      }
+    }
+    count++;
+    if (count > 10) {
+      Assert.fail("Since the sleep count has reached beyond a point" + "failing at this point");
+    }
+  }
+ while (!runningCount);
+  String taskIdKilled=null;
+  for (int i=0; i < MAX_MAP_TASK_ATTEMPTS; i++) {
+    taskInfos=cluster.getJTClient().getProxy().getTaskInfo(rJob.getID());
+    for (    TaskInfo taskInfo : taskInfos) {
+      TaskAttemptID taskAttemptID;
+      if (!taskInfo.isSetupOrCleanup()) {
+        TaskID taskid=TaskID.downgrade(taskInfo.getTaskID());
+        LOG.info("taskid is :" + taskid);
+        if (i == 0) {
+          taskIdKilled=taskid.toString();
+          taskAttemptID=new TaskAttemptID(taskid,i);
+          LOG.info("taskAttemptid going to be killed is : " + taskAttemptID);
+          (new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster)).killTask(taskAttemptID,true);
+          checkTaskCompletionEvent(taskAttemptID,jInfo);
+          break;
+        }
+ else {
+          if (taskIdKilled.equals(taskid.toString())) {
+            taskAttemptID=new TaskAttemptID(taskid,i);
+            LOG.info("taskAttemptid going to be killed is : " + taskAttemptID);
+            (new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster)).killTask(taskAttemptID,true);
+            checkTaskCompletionEvent(taskAttemptID,jInfo);
+            break;
+          }
+        }
+      }
+    }
+  }
+  while (jInfo != null && !jInfo.getStatus().isJobComplete()) {
+    Thread.sleep(10000);
+    jInfo=remoteJTClient.getJobInfo(rJob.getID());
+  }
+  jobStatus=jobClient.getAllJobs();
+  JobStatus jobStatusFound=null;
+  for (  JobStatus jobStatusTmp : jobStatus) {
+    if (JobID.downgrade(jobStatusTmp.getJobID()).equals(jobidStore)) {
+      jobStatusFound=jobStatusTmp;
+      LOG.info("jobStatus found is :" + jobStatusFound.getJobId().toString());
+    }
+  }
+  Assert.assertEquals("The job should have failed at this stage",JobStatus.FAILED,jobStatusFound.getRunState());
+}
+
+</code></pre>
+
+<pre class="type-10 type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifying whether task temporary output directory is cleaned up or not
+ * after failing the task.
+ */
+@Test public void testDirCleanupAfterTaskFailed() throws IOException, InterruptedException {
+  TTClient ttClient=null;
+  FileStatus filesStatus[]=null;
+  String localTaskDir=null;
+  TaskInfo taskInfo=null;
+  TaskID tID=null;
+  boolean isTempFolderExists=false;
+  Path inputDir=new Path("input");
+  Path outputDir=new Path("output");
+  Configuration conf=new Configuration(cluster.getConf());
+  JobConf jconf=new JobConf(conf);
+  jconf.setJobName("Task Failed job");
+  jconf.setJarByClass(UtilsForTests.class);
+  jconf.setMapperClass(FailedMapperClass.class);
+  jconf.setNumMapTasks(1);
+  jconf.setNumReduceTasks(0);
+  jconf.setMaxMapAttempts(1);
+  cleanup(inputDir,conf);
+  cleanup(outputDir,conf);
+  createInput(inputDir,conf);
+  FileInputFormat.setInputPaths(jconf,inputDir);
+  FileOutputFormat.setOutputPath(jconf,outputDir);
+  RunningJob runJob=jobClient.submitJob(jconf);
+  JobID id=runJob.getID();
+  JobInfo jInfo=remoteJTClient.getJobInfo(id);
+  int counter=0;
+  while (counter < 60) {
+    if (jInfo.getStatus().getRunState() == JobStatus.RUNNING) {
+      break;
+    }
+ else {
+      UtilsForTests.waitFor(1000);
+      jInfo=remoteJTClient.getJobInfo(id);
+    }
+    counter++;
+  }
+  Assert.assertTrue("Job has not been started for 1 min.",counter != 60);
+  JobStatus[] jobStatus=jobClient.getAllJobs();
+  String userName=jobStatus[0].getUsername();
+  TaskInfo[] taskInfos=remoteJTClient.getTaskInfo(id);
+  for (  TaskInfo taskinfo : taskInfos) {
+    if (!taskinfo.isSetupOrCleanup()) {
+      taskInfo=taskinfo;
+      break;
+    }
+  }
+  tID=TaskID.downgrade(taskInfo.getTaskID());
+  FinishTaskControlAction action=new FinishTaskControlAction(tID);
+  String[] taskTrackers=taskInfo.getTaskTrackers();
+  counter=0;
+  while (counter < 30) {
+    if (taskTrackers.length != 0) {
+      break;
+    }
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+    taskTrackers=taskInfo.getTaskTrackers();
+    counter++;
+  }
+  Assert.assertTrue("Task tracker not found.",taskTrackers.length != 0);
+  String hostName=taskTrackers[0].split("_")[1];
+  hostName=hostName.split(":")[0];
+  ttClient=cluster.getTTClient(hostName);
+  ttClient.getProxy().sendAction(action);
+  counter=0;
+  while (counter < 60) {
+    if (taskInfo.getTaskStatus().length > 0) {
+      if (taskInfo.getTaskStatus()[0].getRunState() == TaskStatus.State.RUNNING) {
+        break;
+      }
+    }
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+    counter++;
+  }
+  Assert.assertTrue("Task has not been started for 1 min.",counter != 60);
+  String localDirs[]=ttClient.getMapredLocalDirs();
+  TaskAttemptID taskAttID=new TaskAttemptID(tID,0);
+  for (  String localDir : localDirs) {
+    localTaskDir=localDir + "/" + TaskTracker.getLocalTaskDir(userName,id.toString(),taskAttID.toString());
+    filesStatus=ttClient.listStatus(localTaskDir,true);
+    if (filesStatus.length > 0) {
+      isTempFolderExists=true;
+      break;
+    }
+  }
+  taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+  Assert.assertTrue("Task Attempt directory " + taskAttID + " has not been found while task was running.",isTempFolderExists);
+  counter=0;
+  while (counter < 30) {
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(tID);
+    counter++;
+  }
+  Assert.assertEquals("Task status has not been changed to FAILED.",taskInfo.getTaskStatus()[0].getRunState(),TaskStatus.State.FAILED);
+  filesStatus=ttClient.listStatus(localTaskDir,true);
+  Assert.assertTrue("Temporary folder has not been cleanup.",filesStatus.length == 0);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void after() throws Exception {
+  cluster.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verifying the running job status whether it succeeds or not after failing
+ * some of its tasks.
+ * @throws ClassNotFoundException
+ */
+@Test public void testFailedTaskJobStatus() throws IOException, InterruptedException, ClassNotFoundException {
+  Configuration conf=new Configuration(cluster.getConf());
+  TaskInfo taskInfo=null;
+  SleepJob job=new SleepJob();
+  job.setConf(conf);
+  Job slpJob=job.createJob(3,1,4000,4000,100,100);
+  JobConf jobConf=new JobConf(conf);
+  jobConf.setMaxMapAttempts(20);
+  jobConf.setMaxReduceAttempts(20);
+  slpJob.submit();
+  RunningJob runJob=jobClient.getJob(org.apache.hadoop.mapred.JobID.downgrade(slpJob.getJobID()));
+  JobID id=runJob.getID();
+  JobInfo jInfo=remoteJTClient.getJobInfo(id);
+  int counter=0;
+  while (counter < 60) {
+    if (jInfo.getStatus().getRunState() == JobStatus.RUNNING) {
+      break;
+    }
+ else {
+      UtilsForTests.waitFor(1000);
+      jInfo=remoteJTClient.getJobInfo(id);
+    }
+    counter++;
+  }
+  Assert.assertTrue("Job has not been started for 1 min.",counter != 60);
+  TaskInfo[] taskInfos=remoteJTClient.getTaskInfo(id);
+  for (  TaskInfo taskinfo : taskInfos) {
+    if (!taskinfo.isSetupOrCleanup()) {
+      taskInfo=taskinfo;
+    }
+  }
+  counter=0;
+  taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+  while (counter < 60) {
+    if (taskInfo.getTaskStatus().length > 0) {
+      if (taskInfo.getTaskStatus()[0].getRunState() == TaskStatus.State.RUNNING) {
+        break;
+      }
+    }
+    UtilsForTests.waitFor(1000);
+    taskInfo=remoteJTClient.getTaskInfo(taskInfo.getTaskID());
+    counter++;
+  }
+  Assert.assertTrue("Task has not been started for 1 min.",counter != 60);
+  NetworkedJob networkJob=new JobClient.NetworkedJob(jInfo.getStatus(),jobClient.cluster);
+  TaskID tID=TaskID.downgrade(taskInfo.getTaskID());
+  TaskAttemptID taskAttID=new TaskAttemptID(tID,0);
+  networkJob.killTask(taskAttID,false);
+  LOG.info("Waiting till the job is completed...");
+  while (!jInfo.getStatus().isJobComplete()) {
+    UtilsForTests.waitFor(100);
+    jInfo=remoteJTClient.getJobInfo(id);
+  }
+  Assert.assertEquals("JobStatus",jInfo.getStatus().getRunState(),JobStatus.SUCCEEDED);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

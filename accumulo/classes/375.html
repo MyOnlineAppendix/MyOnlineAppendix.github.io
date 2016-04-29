@@ -1,0 +1,60 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.functional.MetadataMaxFilesIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void test() throws Exception {
+  Connector c=getConnector();
+  SortedSet<Text> splits=new TreeSet<Text>();
+  for (int i=0; i < 1000; i++) {
+    splits.add(new Text(String.format("%03d",i)));
+  }
+  c.tableOperations().setProperty(MetadataTable.NAME,Property.TABLE_SPLIT_THRESHOLD.getKey(),"10000");
+  sleepUninterruptibly(5,TimeUnit.SECONDS);
+  for (int i=0; i < 5; i++) {
+    String tableName="table" + i;
+    log.info("Creating " + tableName);
+    c.tableOperations().create(tableName);
+    log.info("adding splits");
+    c.tableOperations().addSplits(tableName,splits);
+    log.info("flushing");
+    c.tableOperations().flush(MetadataTable.NAME,null,null,true);
+    c.tableOperations().flush(RootTable.NAME,null,null,true);
+  }
+  log.info("shutting down");
+  assertEquals(0,cluster.exec(Admin.class,"stopAll").waitFor());
+  cluster.stop();
+  log.info("starting up");
+  cluster.start();
+  Credentials creds=new Credentials("root",new PasswordToken(ROOT_PASSWORD));
+  while (true) {
+    MasterMonitorInfo stats=null;
+    Client client=null;
+    try {
+      ClientContext context=new ClientContext(c.getInstance(),creds,getClientConfig());
+      client=MasterClient.getConnectionWithRetry(context);
+      log.info("Fetching stats");
+      stats=client.getMasterStats(Tracer.traceInfo(),context.rpcCreds());
+    }
+  finally {
+      if (client != null)       MasterClient.close(client);
+    }
+    int tablets=0;
+    for (    TabletServerStatus tserver : stats.tServerInfo) {
+      for (      Entry<String,TableInfo> entry : tserver.tableMap.entrySet()) {
+        if (entry.getKey().startsWith("!") || entry.getKey().startsWith("+"))         continue;
+        tablets+=entry.getValue().onlineTablets;
+      }
+    }
+    log.info("Online tablets " + tablets);
+    if (tablets == 5005)     break;
+    sleepUninterruptibly(1,TimeUnit.SECONDS);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,85 @@
+<h3 style="margin:0px">Class: org.apache.openejb.resource.jdbc.DynamicDataSourceTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="14"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('14')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-14"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-14 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void route() throws Exception {
+  System.setProperty(javax.naming.Context.INITIAL_CONTEXT_FACTORY,LocalInitialContextFactory.class.getName());
+  ConfigurationFactory config=new ConfigurationFactory();
+  Assembler assembler=new Assembler();
+  assembler.createProxyFactory(config.configureService(ProxyFactoryInfo.class));
+  assembler.createTransactionManager(config.configureService(TransactionServiceInfo.class));
+  assembler.createSecurityService(config.configureService(SecurityServiceInfo.class));
+  for (int i=1; i <= 3; i++) {
+    String dbName="database" + i;
+    Resource resourceDs=new Resource(dbName,"DataSource");
+    Properties p=resourceDs.getProperties();
+    p.put("JdbcDriver","org.hsqldb.jdbcDriver");
+    p.put("JdbcUrl","jdbc:hsqldb:mem:db" + i);
+    p.put("UserName","sa");
+    p.put("Password","");
+    p.put("JtaManaged","true");
+    assembler.createResource(config.configureService(resourceDs,ResourceInfo.class));
+  }
+  Resource resourceRouter=new Resource("My Router","org.apache.openejb.router.test.DynamicDataSourceTest$DeterminedRouter","org.router:DeterminedRouter");
+  resourceRouter.getProperties().setProperty("DatasourceNames","database1 database2 database3");
+  resourceRouter.getProperties().setProperty("DefaultDataSourceName","database1");
+  assembler.createResource(config.configureService(resourceRouter,ResourceInfo.class));
+  Resource resourceRoutedDs=new Resource("Routed Datasource","org.apache.openejb.resource.jdbc.Router","RoutedDataSource");
+  resourceRoutedDs.getProperties().setProperty("Router","My Router");
+  assembler.createResource(config.configureService(resourceRoutedDs,ResourceInfo.class));
+  StatelessSessionContainerInfo statelessContainerInfo=config.configureService(StatelessSessionContainerInfo.class);
+  assembler.createContainer(statelessContainerInfo);
+  EjbJar ejbJar=new EjbJar();
+  ejbJar.addEnterpriseBean(new StatelessBean(RoutedEJBBean.class));
+  ejbJar.addEnterpriseBean(new StatelessBean(UtilityBean.class));
+  EjbModule ejbModule=new EjbModule(ejbJar);
+  AppModule appModule=new AppModule(ejbModule.getClassLoader(),"test-dynamic-data-source");
+  appModule.getEjbModules().add(ejbModule);
+  PersistenceUnit unit=new PersistenceUnit("router");
+  unit.addClass(Person.class);
+  unit.getProperties().put("openjpa.jdbc.SynchronizeMappings","buildSchema");
+  unit.setTransactionType(TransactionType.JTA);
+  unit.setJtaDataSource("Routed Datasource");
+  appModule.addPersistenceModule(new PersistenceModule("root",new Persistence(unit)));
+  for (int i=1; i <= 3; i++) {
+    PersistenceUnit u=new PersistenceUnit("db" + i);
+    u.addClass(Person.class);
+    u.getProperties().put("openjpa.jdbc.SynchronizeMappings","buildSchema");
+    u.setTransactionType(TransactionType.JTA);
+    u.setJtaDataSource("database" + i);
+    appModule.addPersistenceModule(new PersistenceModule("root",new Persistence(u)));
+  }
+  assembler.createApplication(config.configureApplication(appModule));
+  Context ctx=new InitialContext();
+  final List<String> databases=new ArrayList<String>();
+  databases.add("database1");
+  databases.add("database2");
+  databases.add("database3");
+  Utility utility=(Utility)ctx.lookup("UtilityBeanLocal");
+  utility.initDatabase();
+  RoutedEJB ejb=(RoutedEJB)ctx.lookup("RoutedEJBBeanLocal");
+  for (int i=0; i < 18; i++) {
+    String name="record " + i;
+    String db=databases.get(i % 3);
+    ejb.persist(i,name,db);
+  }
+  for (int i=1; i <= 3; i++) {
+    Connection connection=DriverManager.getConnection("jdbc:hsqldb:mem:db" + i,"sa","");
+    Statement st=connection.createStatement();
+    ResultSet rs=st.executeQuery("select count(*) from \"DynamicDataSourceTest$Person\"");
+    rs.next();
+    assertEquals(6,rs.getInt(1));
+    st.close();
+    connection.close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

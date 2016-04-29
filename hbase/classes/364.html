@@ -1,0 +1,152 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestRestartCluster (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests retaining assignments on a cluster restart
+ */
+@Test(timeout=300000) public void testRetainAssignmentOnRestart() throws Exception {
+  UTIL.startMiniCluster(2);
+  while (!UTIL.getMiniHBaseCluster().getMaster().isInitialized()) {
+    Threads.sleep(1);
+  }
+  UTIL.getMiniHBaseCluster().getMaster().getMasterRpcServices().synchronousBalanceSwitch(false);
+  LOG.info("\n\nCreating tables");
+  for (  TableName TABLE : TABLES) {
+    UTIL.createTable(TABLE,FAMILY);
+  }
+  for (  TableName TABLE : TABLES) {
+    UTIL.waitTableEnabled(TABLE);
+  }
+  HMaster master=UTIL.getMiniHBaseCluster().getMaster();
+  UTIL.waitUntilNoRegionsInTransition(120000);
+  SnapshotOfRegionAssignmentFromMeta snapshot=new SnapshotOfRegionAssignmentFromMeta(master.getConnection());
+  snapshot.initialize();
+  Map<HRegionInfo,ServerName> regionToRegionServerMap=snapshot.getRegionToRegionServerMap();
+  MiniHBaseCluster cluster=UTIL.getHBaseCluster();
+  List<JVMClusterUtil.RegionServerThread> threads=cluster.getLiveRegionServerThreads();
+  assertEquals(2,threads.size());
+  int[] rsPorts=new int[3];
+  for (int i=0; i < 2; i++) {
+    rsPorts[i]=threads.get(i).getRegionServer().getServerName().getPort();
+  }
+  rsPorts[2]=cluster.getMaster().getServerName().getPort();
+  for (  ServerName serverName : regionToRegionServerMap.values()) {
+    boolean found=false;
+    for (int k=0; k < 3 && !found; k++) {
+      found=serverName.getPort() == rsPorts[k];
+    }
+    assertTrue(found);
+  }
+  LOG.info("\n\nShutting down HBase cluster");
+  cluster.shutdown();
+  cluster.waitUntilShutDown();
+  LOG.info("\n\nSleeping a bit");
+  Thread.sleep(2000);
+  LOG.info("\n\nStarting cluster the second time with the same ports");
+  try {
+    cluster.getConf().setInt(ServerManager.WAIT_ON_REGIONSERVERS_MINTOSTART,4);
+    master=cluster.startMaster().getMaster();
+    for (int i=0; i < 3; i++) {
+      cluster.getConf().setInt(HConstants.REGIONSERVER_PORT,rsPorts[i]);
+      cluster.startRegionServer();
+    }
+  }
+  finally {
+    cluster.getConf().setInt(HConstants.REGIONSERVER_PORT,0);
+    cluster.getConf().setInt(ServerManager.WAIT_ON_REGIONSERVERS_MINTOSTART,2);
+  }
+  List<ServerName> localServers=master.getServerManager().getOnlineServersList();
+  assertEquals(4,localServers.size());
+  for (int i=0; i < 3; i++) {
+    boolean found=false;
+    for (    ServerName serverName : localServers) {
+      if (serverName.getPort() == rsPorts[i]) {
+        found=true;
+        break;
+      }
+    }
+    assertTrue(found);
+  }
+  RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+  int expectedRegions=regionToRegionServerMap.size() + 1;
+  while (!master.isInitialized() || regionStates.getRegionAssignments().size() != expectedRegions) {
+    Threads.sleep(100);
+  }
+  snapshot=new SnapshotOfRegionAssignmentFromMeta(master.getConnection());
+  snapshot.initialize();
+  Map<HRegionInfo,ServerName> newRegionToRegionServerMap=snapshot.getRegionToRegionServerMap();
+  assertEquals(regionToRegionServerMap.size(),newRegionToRegionServerMap.size());
+  for (  Map.Entry<HRegionInfo,ServerName> entry : newRegionToRegionServerMap.entrySet()) {
+    if (TableName.NAMESPACE_TABLE_NAME.equals(entry.getKey().getTable()))     continue;
+    ServerName oldServer=regionToRegionServerMap.get(entry.getKey());
+    ServerName currentServer=entry.getValue();
+    assertEquals(oldServer.getHostAndPort(),currentServer.getHostAndPort());
+    assertNotEquals(oldServer.getStartcode(),currentServer.getStartcode());
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=300000) public void testClusterRestart() throws Exception {
+  UTIL.startMiniCluster(3);
+  while (!UTIL.getMiniHBaseCluster().getMaster().isInitialized()) {
+    Threads.sleep(1);
+  }
+  LOG.info("\n\nCreating tables");
+  for (  TableName TABLE : TABLES) {
+    UTIL.createTable(TABLE,FAMILY);
+  }
+  for (  TableName TABLE : TABLES) {
+    UTIL.waitTableEnabled(TABLE);
+  }
+  List<HRegionInfo> allRegions=MetaTableAccessor.getAllRegions(UTIL.getConnection(),false);
+  assertEquals(4,allRegions.size());
+  LOG.info("\n\nShutting down cluster");
+  UTIL.shutdownMiniHBaseCluster();
+  LOG.info("\n\nSleeping a bit");
+  Thread.sleep(2000);
+  LOG.info("\n\nStarting cluster the second time");
+  UTIL.restartHBaseCluster(3);
+  allRegions=MetaTableAccessor.getAllRegions(UTIL.getConnection(),false);
+  assertEquals(4,allRegions.size());
+  LOG.info("\n\nWaiting for tables to be available");
+  for (  TableName TABLE : TABLES) {
+    try {
+      UTIL.createTable(TABLE,FAMILY);
+      assertTrue("Able to create table that should already exist",false);
+    }
+ catch (    TableExistsException tee) {
+      LOG.info("Table already exists as expected");
+    }
+    UTIL.waitTableAvailable(TABLE);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

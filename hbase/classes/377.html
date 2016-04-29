@@ -1,0 +1,116 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.cleaner.TestHFileCleaner (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=60 * 1000) public void testHFileCleaning() throws Exception {
+  final EnvironmentEdge originalEdge=EnvironmentEdgeManager.getDelegate();
+  String prefix="someHFileThatWouldBeAUUID";
+  Configuration conf=UTIL.getConfiguration();
+  long ttl=2000;
+  conf.set(HFileCleaner.MASTER_HFILE_CLEANER_PLUGINS,"org.apache.hadoop.hbase.master.cleaner.TimeToLiveHFileCleaner");
+  conf.setLong(TimeToLiveHFileCleaner.TTL_CONF_KEY,ttl);
+  Server server=new DummyServer();
+  Path archivedHfileDir=new Path(UTIL.getDataTestDirOnTestFS(),HConstants.HFILE_ARCHIVE_DIRECTORY);
+  FileSystem fs=FileSystem.get(conf);
+  HFileCleaner cleaner=new HFileCleaner(1000,server,conf,fs,archivedHfileDir);
+  final long createTime=System.currentTimeMillis();
+  fs.delete(archivedHfileDir,true);
+  fs.mkdirs(archivedHfileDir);
+  fs.createNewFile(new Path(archivedHfileDir,"dfd-dfd"));
+  LOG.debug("Now is: " + createTime);
+  for (int i=1; i < 32; i++) {
+    Path fileName=new Path(archivedHfileDir,(prefix + "." + (createTime + i)));
+    fs.createNewFile(fileName);
+    fs.setTimes(fileName,createTime - ttl - 1,-1);
+    LOG.debug("Creating " + getFileStats(fileName,fs));
+  }
+  Path saved=new Path(archivedHfileDir,prefix + ".00000000000");
+  fs.createNewFile(saved);
+  fs.setTimes(saved,createTime - ttl / 2,-1);
+  LOG.debug("Creating " + getFileStats(saved,fs));
+  for (  FileStatus stat : fs.listStatus(archivedHfileDir)) {
+    LOG.debug(stat.getPath().toString());
+  }
+  assertEquals(33,fs.listStatus(archivedHfileDir).length);
+  EnvironmentEdge setTime=new EnvironmentEdge(){
+    @Override public long currentTime(){
+      return createTime;
+    }
+  }
+;
+  EnvironmentEdgeManager.injectEdge(setTime);
+  cleaner.chore();
+  assertEquals(1,fs.listStatus(archivedHfileDir).length);
+  for (  FileStatus file : fs.listStatus(archivedHfileDir)) {
+    LOG.debug("Kept hfiles: " + file.getPath().getName());
+  }
+  EnvironmentEdgeManager.injectEdge(originalEdge);
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void shutdownCluster() throws IOException {
+  UTIL.shutdownMiniDFSCluster();
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testTTLCleaner() throws IOException, InterruptedException {
+  FileSystem fs=UTIL.getDFSCluster().getFileSystem();
+  Path root=UTIL.getDataTestDirOnTestFS();
+  Path file=new Path(root,"file");
+  fs.createNewFile(file);
+  long createTime=System.currentTimeMillis();
+  assertTrue("Test file not created!",fs.exists(file));
+  TimeToLiveHFileCleaner cleaner=new TimeToLiveHFileCleaner();
+  fs.setTimes(file,createTime - 100,-1);
+  Configuration conf=UTIL.getConfiguration();
+  conf.setLong(TimeToLiveHFileCleaner.TTL_CONF_KEY,100);
+  cleaner.setConf(conf);
+  assertTrue("File not set deletable - check mod time:" + getFileStats(file,fs) + " with create time:"+ createTime,cleaner.isFileDeletable(fs.getFileStatus(file)));
+}
+
+</code></pre>
+
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testRemovesEmptyDirectories() throws Exception {
+  Configuration conf=UTIL.getConfiguration();
+  conf.setStrings(HFileCleaner.MASTER_HFILE_CLEANER_PLUGINS,"");
+  Server server=new DummyServer();
+  Path archivedHfileDir=new Path(UTIL.getDataTestDirOnTestFS(),HConstants.HFILE_ARCHIVE_DIRECTORY);
+  FileSystem fs=UTIL.getDFSCluster().getFileSystem();
+  HFileCleaner cleaner=new HFileCleaner(1000,server,conf,fs,archivedHfileDir);
+  Path table=new Path(archivedHfileDir,"table");
+  Path region=new Path(table,"regionsomthing");
+  Path family=new Path(region,"fam");
+  Path file=new Path(family,"file12345");
+  fs.mkdirs(family);
+  if (!fs.exists(family))   throw new RuntimeException("Couldn't create test family:" + family);
+  fs.create(file).close();
+  if (!fs.exists(file))   throw new RuntimeException("Test file didn't get created:" + file);
+  cleaner.chore();
+  assertFalse("family directory not removed for empty directory",fs.exists(family));
+  assertFalse("region directory not removed for empty directory",fs.exists(region));
+  assertFalse("table directory not removed for empty directory",fs.exists(table));
+  assertTrue("archive directory",fs.exists(archivedHfileDir));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

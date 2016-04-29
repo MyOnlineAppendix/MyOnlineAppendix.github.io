@@ -1,0 +1,163 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.blockmanagement.TestOverReplicatedBlocks (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-13 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test processOverReplicatedBlock can handle corrupt replicas fine.
+ * It make sure that it won't treat corrupt replicas as valid ones 
+ * thus prevents NN deleting valid replicas but keeping
+ * corrupt ones.
+ */
+@Test public void testProcesOverReplicateBlock() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000L);
+  conf.set(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,Integer.toString(2));
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  FileSystem fs=cluster.getFileSystem();
+  try {
+    final Path fileName=new Path("/foo1");
+    DFSTestUtil.createFile(fs,fileName,2,(short)3,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)3);
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,fileName);
+    assertTrue(TestDatanodeBlockScanner.corruptReplica(block,0));
+    DataNodeProperties dnProps=cluster.stopDataNode(0);
+    File scanLog=new File(MiniDFSCluster.getFinalizedDir(cluster.getInstanceStorageDir(0,0),cluster.getNamesystem().getBlockPoolId()).getParent().toString() + "/../dncp_block_verification.log.prev");
+    for (int i=0; !scanLog.delete(); i++) {
+      assertTrue("Could not delete log file in one minute",i < 60);
+      try {
+        Thread.sleep(1000);
+      }
+ catch (      InterruptedException ignored) {
+      }
+    }
+    cluster.restartDataNode(dnProps);
+    DFSTestUtil.waitReplication(fs,fileName,(short)2);
+    String blockPoolId=cluster.getNamesystem().getBlockPoolId();
+    final DatanodeID corruptDataNode=DataNodeTestUtils.getDNRegistrationForBP(cluster.getDataNodes().get(2),blockPoolId);
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    final BlockManager bm=namesystem.getBlockManager();
+    final HeartbeatManager hm=bm.getDatanodeManager().getHeartbeatManager();
+    try {
+      namesystem.writeLock();
+synchronized (hm) {
+        String corruptMachineName=corruptDataNode.getXferAddr();
+        for (        DatanodeDescriptor datanode : hm.getDatanodes()) {
+          if (!corruptMachineName.equals(datanode.getXferAddr())) {
+            datanode.getStorageInfos()[0].setUtilizationForTesting(100L,100L,0,100L);
+            datanode.updateHeartbeat(BlockManagerTestUtil.getStorageReportsForDatanode(datanode),0L,0L,0,0);
+          }
+        }
+        NameNodeAdapter.setReplication(namesystem,fileName.toString(),(short)1);
+        assertEquals(1,bm.countNodes(block.getLocalBlock()).liveReplicas());
+      }
+    }
+  finally {
+      namesystem.writeUnlock();
+    }
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test over replicated block should get invalidated when decreasing the
+ * replication for a partial block.
+ */
+@Test public void testInvalidateOverReplicatedBlock() throws Exception {
+  Configuration conf=new HdfsConfiguration();
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+  try {
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    final BlockManager bm=namesystem.getBlockManager();
+    FileSystem fs=cluster.getFileSystem();
+    Path p=new Path(MiniDFSCluster.getBaseDirectory(),"/foo1");
+    FSDataOutputStream out=fs.create(p,(short)2);
+    out.writeBytes("HDFS-3119: " + p);
+    out.hsync();
+    fs.setReplication(p,(short)1);
+    out.close();
+    ExtendedBlock block=DFSTestUtil.getFirstBlock(fs,p);
+    assertEquals("Expected only one live replica for the block",1,bm.countNodes(block.getLocalBlock()).liveReplicas());
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * The test verifies that replica for deletion is chosen on a node,
+ * with the oldest heartbeat, when this heartbeat is larger than the
+ * tolerable heartbeat interval.
+ * It creates a file with several blocks and replication 4.
+ * The last DN is configured to send heartbeats rarely.
+ * Test waits until the tolerable heartbeat interval expires, and reduces
+ * replication of the file. All replica deletions should be scheduled for the
+ * last node. No replicas will actually be deleted, since last DN doesn't
+ * send heartbeats. 
+ */
+@Test public void testChooseReplicaToDelete() throws Exception {
+  MiniDFSCluster cluster=null;
+  FileSystem fs=null;
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,SMALL_BLOCK_SIZE);
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(3).build();
+    fs=cluster.getFileSystem();
+    final FSNamesystem namesystem=cluster.getNamesystem();
+    conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,300);
+    cluster.startDataNodes(conf,1,true,null,null,null);
+    DataNode lastDN=cluster.getDataNodes().get(3);
+    DatanodeRegistration dnReg=DataNodeTestUtils.getDNRegistrationForBP(lastDN,namesystem.getBlockPoolId());
+    String lastDNid=dnReg.getDatanodeUuid();
+    final Path fileName=new Path("/foo2");
+    DFSTestUtil.createFile(fs,fileName,SMALL_FILE_LENGTH,(short)4,0L);
+    DFSTestUtil.waitReplication(fs,fileName,(short)4);
+    DatanodeDescriptor nodeInfo=null;
+    long lastHeartbeat=0;
+    long waitTime=DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_DEFAULT * 1000 * (DFSConfigKeys.DFS_NAMENODE_TOLERATE_HEARTBEAT_MULTIPLIER_DEFAULT + 1);
+    do {
+      nodeInfo=namesystem.getBlockManager().getDatanodeManager().getDatanode(dnReg);
+      lastHeartbeat=nodeInfo.getLastUpdate();
+    }
+ while (now() - lastHeartbeat < waitTime);
+    fs.setReplication(fileName,(short)3);
+    BlockLocation locs[]=fs.getFileBlockLocations(fs.getFileStatus(fileName),0,Long.MAX_VALUE);
+    namesystem.readLock();
+    Collection<Block> dnBlocks=namesystem.getBlockManager().excessReplicateMap.get(lastDNid);
+    assertEquals("Replicas on node " + lastDNid + " should have been deleted",SMALL_FILE_LENGTH / SMALL_BLOCK_SIZE,dnBlocks.size());
+    namesystem.readUnlock();
+    for (    BlockLocation location : locs)     assertEquals("Block should still have 4 replicas",4,location.getNames().length);
+  }
+  finally {
+    if (fs != null)     fs.close();
+    if (cluster != null)     cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

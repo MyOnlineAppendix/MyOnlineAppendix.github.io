@@ -1,0 +1,145 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.TestRMContainerImpl (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testReleaseWhileRunning(){
+  DrainDispatcher drainDispatcher=new DrainDispatcher();
+  EventHandler<RMAppAttemptEvent> appAttemptEventHandler=mock(EventHandler.class);
+  EventHandler generic=mock(EventHandler.class);
+  drainDispatcher.register(RMAppAttemptEventType.class,appAttemptEventHandler);
+  drainDispatcher.register(RMNodeEventType.class,generic);
+  drainDispatcher.init(new YarnConfiguration());
+  drainDispatcher.start();
+  NodeId nodeId=BuilderUtils.newNodeId("host",3425);
+  ApplicationId appId=BuilderUtils.newApplicationId(1,1);
+  ApplicationAttemptId appAttemptId=BuilderUtils.newApplicationAttemptId(appId,1);
+  ContainerId containerId=BuilderUtils.newContainerId(appAttemptId,1);
+  ContainerAllocationExpirer expirer=mock(ContainerAllocationExpirer.class);
+  Resource resource=BuilderUtils.newResource(512,1);
+  Priority priority=BuilderUtils.newPriority(5);
+  Container container=BuilderUtils.newContainer(containerId,nodeId,"host:3465",resource,priority,null);
+  RMApplicationHistoryWriter writer=mock(RMApplicationHistoryWriter.class);
+  RMContext rmContext=mock(RMContext.class);
+  when(rmContext.getDispatcher()).thenReturn(drainDispatcher);
+  when(rmContext.getContainerAllocationExpirer()).thenReturn(expirer);
+  when(rmContext.getRMApplicationHistoryWriter()).thenReturn(writer);
+  RMContainer rmContainer=new RMContainerImpl(container,appAttemptId,nodeId,"user",rmContext);
+  assertEquals(RMContainerState.NEW,rmContainer.getState());
+  assertEquals(resource,rmContainer.getAllocatedResource());
+  assertEquals(nodeId,rmContainer.getAllocatedNode());
+  assertEquals(priority,rmContainer.getAllocatedPriority());
+  verify(writer).containerStarted(any(RMContainer.class));
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.START));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.ALLOCATED,rmContainer.getState());
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.ACQUIRED));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.ACQUIRED,rmContainer.getState());
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.LAUNCHED));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.RUNNING,rmContainer.getState());
+  assertEquals("//host:3465/node/containerlogs/container_1_0001_01_000001/user",rmContainer.getLogURL());
+  reset(appAttemptEventHandler);
+  ContainerStatus containerStatus=SchedulerUtils.createAbnormalContainerStatus(containerId,SchedulerUtils.RELEASED_CONTAINER);
+  rmContainer.handle(new RMContainerFinishedEvent(containerId,containerStatus,RMContainerEventType.RELEASED));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.RELEASED,rmContainer.getState());
+  assertEquals(SchedulerUtils.RELEASED_CONTAINER,rmContainer.getDiagnosticsInfo());
+  assertEquals(ContainerExitStatus.ABORTED,rmContainer.getContainerExitStatus());
+  assertEquals(ContainerState.COMPLETE,rmContainer.getContainerState());
+  verify(writer).containerFinished(any(RMContainer.class));
+  ArgumentCaptor<RMAppAttemptContainerFinishedEvent> captor=ArgumentCaptor.forClass(RMAppAttemptContainerFinishedEvent.class);
+  verify(appAttemptEventHandler).handle(captor.capture());
+  RMAppAttemptContainerFinishedEvent cfEvent=captor.getValue();
+  assertEquals(appAttemptId,cfEvent.getApplicationAttemptId());
+  assertEquals(containerStatus,cfEvent.getContainerStatus());
+  assertEquals(RMAppAttemptEventType.CONTAINER_FINISHED,cfEvent.getType());
+  rmContainer.handle(new RMContainerFinishedEvent(containerId,SchedulerUtils.createAbnormalContainerStatus(containerId,"FinishedContainer"),RMContainerEventType.FINISHED));
+  assertEquals(RMContainerState.RELEASED,rmContainer.getState());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testExpireWhileRunning(){
+  DrainDispatcher drainDispatcher=new DrainDispatcher();
+  EventHandler<RMAppAttemptEvent> appAttemptEventHandler=mock(EventHandler.class);
+  EventHandler generic=mock(EventHandler.class);
+  drainDispatcher.register(RMAppAttemptEventType.class,appAttemptEventHandler);
+  drainDispatcher.register(RMNodeEventType.class,generic);
+  drainDispatcher.init(new YarnConfiguration());
+  drainDispatcher.start();
+  NodeId nodeId=BuilderUtils.newNodeId("host",3425);
+  ApplicationId appId=BuilderUtils.newApplicationId(1,1);
+  ApplicationAttemptId appAttemptId=BuilderUtils.newApplicationAttemptId(appId,1);
+  ContainerId containerId=BuilderUtils.newContainerId(appAttemptId,1);
+  ContainerAllocationExpirer expirer=mock(ContainerAllocationExpirer.class);
+  Resource resource=BuilderUtils.newResource(512,1);
+  Priority priority=BuilderUtils.newPriority(5);
+  Container container=BuilderUtils.newContainer(containerId,nodeId,"host:3465",resource,priority,null);
+  RMApplicationHistoryWriter writer=mock(RMApplicationHistoryWriter.class);
+  RMContext rmContext=mock(RMContext.class);
+  when(rmContext.getDispatcher()).thenReturn(drainDispatcher);
+  when(rmContext.getContainerAllocationExpirer()).thenReturn(expirer);
+  when(rmContext.getRMApplicationHistoryWriter()).thenReturn(writer);
+  RMContainer rmContainer=new RMContainerImpl(container,appAttemptId,nodeId,"user",rmContext);
+  assertEquals(RMContainerState.NEW,rmContainer.getState());
+  assertEquals(resource,rmContainer.getAllocatedResource());
+  assertEquals(nodeId,rmContainer.getAllocatedNode());
+  assertEquals(priority,rmContainer.getAllocatedPriority());
+  verify(writer).containerStarted(any(RMContainer.class));
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.START));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.ALLOCATED,rmContainer.getState());
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.ACQUIRED));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.ACQUIRED,rmContainer.getState());
+  rmContainer.handle(new RMContainerEvent(containerId,RMContainerEventType.LAUNCHED));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.RUNNING,rmContainer.getState());
+  assertEquals("//host:3465/node/containerlogs/container_1_0001_01_000001/user",rmContainer.getLogURL());
+  reset(appAttemptEventHandler);
+  ContainerStatus containerStatus=SchedulerUtils.createAbnormalContainerStatus(containerId,SchedulerUtils.EXPIRED_CONTAINER);
+  rmContainer.handle(new RMContainerFinishedEvent(containerId,containerStatus,RMContainerEventType.EXPIRE));
+  drainDispatcher.await();
+  assertEquals(RMContainerState.RUNNING,rmContainer.getState());
+  verify(writer,never()).containerFinished(any(RMContainer.class));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+"></span><br>
+@Test public void testExistenceOfResourceRequestInRMContainer() throws Exception {
+  Configuration conf=new Configuration();
+  MockRM rm1=new MockRM(conf);
+  rm1.start();
+  MockNM nm1=rm1.registerNode("unknownhost:1234",8000);
+  RMApp app1=rm1.submitApp(1024);
+  MockAM am1=MockRM.launchAndRegisterAM(app1,rm1,nm1);
+  ResourceScheduler scheduler=rm1.getResourceScheduler();
+  am1.allocate("127.0.0.1",1024,1,new ArrayList<ContainerId>());
+  ContainerId containerId2=ContainerId.newInstance(am1.getApplicationAttemptId(),2);
+  rm1.waitForState(nm1,containerId2,RMContainerState.ALLOCATED);
+  Assert.assertNotNull(scheduler.getRMContainer(containerId2).getResourceRequests());
+  am1.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+  rm1.waitForState(nm1,containerId2,RMContainerState.ACQUIRED);
+  Assert.assertNull(scheduler.getRMContainer(containerId2).getResourceRequests());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

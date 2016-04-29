@@ -1,0 +1,78 @@
+<h3 style="margin:0px">Class: org.apache.helix.integration.TestZkReconnect (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testZKReconnect() throws Exception {
+  final AtomicReference<ZkServer> zkServerRef=new AtomicReference<ZkServer>();
+  final int zkPort=ZkTestUtil.availableTcpPort();
+  final String zkAddr=String.format("localhost:%d",zkPort);
+  ZkServer zkServer=TestHelper.startZkServer(zkAddr);
+  zkServerRef.set(zkServer);
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  LOG.info("Setup clusters");
+  ClusterSetup clusterSetup=new ClusterSetup(zkAddr);
+  clusterSetup.addCluster(clusterName,true);
+  LOG.info("Starts controller");
+  HelixManager controller=HelixManagerFactory.getZKHelixManager(clusterName,null,InstanceType.CONTROLLER,zkAddr);
+  controller.connect();
+  LOG.info("Starts participant");
+  String hostname="localhost";
+  String instanceId=String.format("%s_%d",hostname,1);
+  clusterSetup.addInstanceToCluster(clusterName,instanceId);
+  HelixManager participant=HelixManagerFactory.getZKHelixManager(clusterName,instanceId,InstanceType.PARTICIPANT,zkAddr);
+  participant.connect();
+  LOG.info("Register state machine");
+  final CountDownLatch latch=new CountDownLatch(1);
+  participant.getStateMachineEngine().registerStateModelFactory(StateModelDefId.OnlineOffline,"test",new StateTransitionHandlerFactory<TransitionHandler>(){
+    @Override public TransitionHandler createStateTransitionHandler(    ResourceId resource,    PartitionId stateUnitKey){
+      return new SimpleStateModel(latch);
+    }
+  }
+);
+  String resourceName="test-resource";
+  LOG.info("Ideal state assignment");
+  HelixAdmin helixAdmin=participant.getClusterManagmentTool();
+  helixAdmin.addResource(clusterName,resourceName,1,"OnlineOffline",IdealState.RebalanceMode.CUSTOMIZED.toString());
+  IdealState idealState=helixAdmin.getResourceIdealState(clusterName,resourceName);
+  idealState.setReplicas("1");
+  idealState.setStateModelFactoryId(StateModelFactoryId.from("test"));
+  idealState.setPartitionState(PartitionId.from(ResourceId.from(resourceName),"0"),ParticipantId.from(instanceId),State.from("ONLINE"));
+  LOG.info("Shutdown ZK server");
+  TestHelper.stopZkServer(zkServerRef.get());
+  Executors.newSingleThreadScheduledExecutor().schedule(new Runnable(){
+    @Override public void run(){
+      try {
+        LOG.info("Restart ZK server");
+        zkServerRef.set(TestHelper.startZkServer(zkAddr,null,false));
+      }
+ catch (      Exception e) {
+        LOG.error(e.getMessage(),e);
+      }
+    }
+  }
+,2L,TimeUnit.SECONDS);
+  LOG.info("Before update ideal state");
+  helixAdmin.setResourceIdealState(clusterName,resourceName,idealState);
+  LOG.info("After update ideal state");
+  LOG.info("Wait for OFFLINE->ONLINE state transition");
+  try {
+    Assert.assertTrue(latch.await(10,TimeUnit.SECONDS));
+    boolean result=ClusterStateVerifier.verifyByZkCallback(new BestPossAndExtViewZkVerifier(zkAddr,clusterName));
+    Assert.assertTrue(result);
+  }
+  finally {
+    participant.disconnect();
+    zkServerRef.get().shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

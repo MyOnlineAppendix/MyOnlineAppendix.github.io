@@ -1,0 +1,155 @@
+<h3 style="margin:0px">Class: org.apache.shindig.gadgets.preload.PipelineExecutorTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-5 type-6 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void executeWithTwoBatches() throws Exception {
+  PipelinedData pipeline=getPipelinedData(TWO_BATCH_CONTENT);
+  context=new GadgetContext(){
+    @Override public String getParameter(    String property){
+      if ("view-params".equals(property)) {
+        return "{'file': 'test.json'}";
+      }
+      return null;
+    }
+  }
+;
+  Capture<PipelinedData.Batch> firstBatch=new Capture<PipelinedData.Batch>();
+  Callable<PreloadedData> firstTask=createPreloadTask("json","{result: {user: 'canonical'}}");
+  Capture<PipelinedData.Batch> secondBatch=new Capture<PipelinedData.Batch>();
+  Callable<PreloadedData> secondTask=createPreloadTask("me","{result: {'id':'canonical'}}");
+  expect(preloader.createPreloadTasks(same(context),and(eqBatch(0,1),capture(firstBatch)))).andReturn(ImmutableList.of(firstTask));
+  expect(preloader.createPreloadTasks(same(context),and(eqBatch(1,0),capture(secondBatch)))).andReturn(ImmutableList.of(secondTask));
+  control.replay();
+  PipelineExecutor.Results results=executor.execute(context,ImmutableList.of(pipeline));
+  JsonAssert.assertJsonEquals("[{id: 'json', result: {user: 'canonical'}}," + "{id: 'me', result: {id: 'canonical'}}]",JsonSerializer.serialize(results.results));
+  assertEquals(ImmutableSet.of("json","me"),results.keyedResults.keySet());
+  assertTrue(results.remainingPipelines.isEmpty());
+  control.verify();
+  RequestAuthenticationInfo request=(RequestAuthenticationInfo)firstBatch.getValue().getPreloads().get("json").getData();
+  assertEquals("http://example.org/test.json",request.getHref().toString());
+  JSONObject personRequest=(JSONObject)secondBatch.getValue().getPreloads().get("me").getData();
+  assertEquals("canonical",personRequest.getJSONObject("params").getJSONArray("userId").get(0));
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  control=EasyMock.createStrictControl();
+  preloader=control.createMock(PipelinedDataPreloader.class);
+  preloaderService=new ConcurrentPreloaderService(Executors.newSingleThreadExecutor(),null);
+  executor=new PipelineExecutor(preloader,preloaderService,Expressions.forTesting());
+  context=new GadgetContext(){
+  }
+;
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-6 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void executePreloadException() throws Exception {
+  PipelinedData pipeline=getPipelinedData(CONTENT);
+  final PreloadedData willThrow=control.createMock(PreloadedData.class);
+  Callable<PreloadedData> callable=new Callable<PreloadedData>(){
+    public PreloadedData call() throws Exception {
+      return willThrow;
+    }
+  }
+;
+  expect(preloader.createPreloadTasks(same(context),isA(PipelinedData.Batch.class))).andReturn(ImmutableList.of(callable));
+  expect(willThrow.toJson()).andThrow(new PreloadException("Failed"));
+  control.replay();
+  PipelineExecutor.Results results=executor.execute(context,ImmutableList.of(pipeline));
+  assertEquals(0,results.results.size());
+  assertTrue(results.keyedResults.isEmpty());
+  assertTrue(results.remainingPipelines.isEmpty());
+  control.verify();
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-6 type-12 type-1 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void executeWithBlockedBatch() throws Exception {
+  PipelinedData pipeline=getPipelinedData(BLOCKED_FIRST_BATCH_CONTENT);
+  expect(preloader.createPreloadTasks(same(context),eqBatch(0,0))).andReturn(ImmutableList.<Callable<PreloadedData>>of());
+  control.replay();
+  PipelineExecutor.Results results=executor.execute(context,ImmutableList.of(pipeline));
+  assertEquals(0,results.results.size());
+  assertTrue(results.keyedResults.isEmpty());
+  assertEquals(1,results.remainingPipelines.size());
+  assertSame(pipeline,results.remainingPipelines.iterator().next());
+  control.verify();
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void execute() throws Exception {
+  PipelinedData pipeline=getPipelinedData(CONTENT);
+  Capture<PipelinedData.Batch> batchCapture=new Capture<PipelinedData.Batch>();
+  JSONObject expectedData=new JSONObject("{result: {foo: 'bar'}}");
+  Callable<PreloadedData> callable=createPreloadTask("key",expectedData.toString());
+  expect(preloader.createPreloadTasks(same(context),and(eqBatch(1,1),capture(batchCapture)))).andReturn(ImmutableList.of(callable));
+  control.replay();
+  PipelineExecutor.Results results=executor.execute(context,ImmutableList.of(pipeline));
+  assertTrue(batchCapture.getValue().getPreloads().containsKey("me"));
+  assertTrue(batchCapture.getValue().getPreloads().containsKey("json"));
+  JsonAssert.assertJsonEquals("[{id: 'key', result: {foo: 'bar'}}]",JsonSerializer.serialize(results.results));
+  JsonAssert.assertJsonEquals("{foo: 'bar'}",JsonSerializer.serialize(results.keyedResults.get("key")));
+  assertTrue(results.remainingPipelines.isEmpty());
+  control.verify();
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void executeError() throws Exception {
+  PipelinedData pipeline=getPipelinedData(CONTENT);
+  Capture<PipelinedData.Batch> batchCapture=new Capture<PipelinedData.Batch>();
+  JSONObject expectedData=new JSONObject("{error: {message: 'NO!', code: 500}}");
+  Callable<PreloadedData> callable=createPreloadTask("key",expectedData.toString());
+  expect(preloader.createPreloadTasks(same(context),and(eqBatch(1,1),capture(batchCapture)))).andReturn(ImmutableList.of(callable));
+  control.replay();
+  PipelineExecutor.Results results=executor.execute(context,ImmutableList.of(pipeline));
+  assertTrue(batchCapture.getValue().getPreloads().containsKey("me"));
+  assertTrue(batchCapture.getValue().getPreloads().containsKey("json"));
+  JsonAssert.assertJsonEquals("[{id: 'key', error: {message: 'NO!', code: 500}}]",JsonSerializer.serialize(results.results));
+  JsonAssert.assertJsonEquals("{message: 'NO!', code: 500}",JsonSerializer.serialize(results.keyedResults.get("key")));
+  assertTrue(results.remainingPipelines.isEmpty());
+  control.verify();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

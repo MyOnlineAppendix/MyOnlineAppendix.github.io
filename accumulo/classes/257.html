@@ -1,0 +1,270 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.AuditMessageIT (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="17"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('17')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-17"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testFailedAudits() throws AccumuloSecurityException, AccumuloException, TableExistsException, TableNotFoundException, IOException, InterruptedException {
+  try {
+    conn.securityOperations().dropLocalUser(AUDIT_USER_2);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    conn.securityOperations().revokeSystemPermission(AUDIT_USER_2,SystemPermission.ALTER_TABLE);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    conn.securityOperations().createLocalUser("root",new PasswordToken("super secret"));
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  ArrayList<String> auditMessages=getAuditMessages("testFailedAudits");
+  assertEquals(2,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.DROP_USER_AUDIT_TEMPLATE,AUDIT_USER_2)).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.REVOKE_SYSTEM_PERMISSION_AUDIT_TEMPLATE,SystemPermission.ALTER_TABLE,AUDIT_USER_2)).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CREATE_USER_AUDIT_TEMPLATE,"root","")).size());
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testImportExportOperationsAudits() throws AccumuloSecurityException, AccumuloException, TableExistsException, TableNotFoundException, IOException, InterruptedException {
+  conn.securityOperations().createLocalUser(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.SYSTEM);
+  conn.securityOperations().changeUserAuthorizations(AUDIT_USER_1,auths);
+  grantEverySystemPriv(conn,AUDIT_USER_1);
+  auditConnector=getCluster().getConnector(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  auditConnector.tableOperations().create(OLD_TEST_TABLE_NAME);
+  BatchWriter bw=auditConnector.createBatchWriter(OLD_TEST_TABLE_NAME,new BatchWriterConfig());
+  Mutation m=new Mutation("myRow");
+  m.put("cf1","cq1","v1");
+  m.put("cf1","cq2","v3");
+  bw.addMutation(m);
+  bw.close();
+  File exportDir=new File(getCluster().getConfig().getDir().toString() + "/export");
+  auditConnector.tableOperations().offline(OLD_TEST_TABLE_NAME);
+  auditConnector.tableOperations().exportTable(OLD_TEST_TABLE_NAME,exportDir.toString());
+  File distCpTxt=new File(exportDir.toString() + "/distcp.txt");
+  File importFile=null;
+  LineIterator it=FileUtils.lineIterator(distCpTxt,UTF_8.name());
+  String filePrefix="file:";
+  try {
+    while (it.hasNext() && importFile == null) {
+      String line=it.nextLine();
+      if (line.matches(".*\\.rf")) {
+        importFile=new File(line.replaceFirst(filePrefix,""));
+      }
+    }
+  }
+  finally {
+    LineIterator.closeQuietly(it);
+  }
+  FileUtils.copyFileToDirectory(importFile,exportDir);
+  auditConnector.tableOperations().importTable(NEW_TEST_TABLE_NAME,exportDir.toString());
+  auditConnector.tableOperations().create(THIRD_TEST_TABLE_NAME);
+  File failDir=new File(exportDir + "/tmp");
+  assertTrue(failDir.mkdirs() || failDir.isDirectory());
+  auditConnector.tableOperations().importDirectory(THIRD_TEST_TABLE_NAME,exportDir.toString(),failDir.toString(),false);
+  auditConnector.tableOperations().online(OLD_TEST_TABLE_NAME);
+  ArrayList<String> auditMessages=getAuditMessages("testImportExportOperationsAudits");
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_CREATE_TABLE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_ONLINE_OFFLINE_TABLE_AUDIT_TEMPLATE,"offlineTable",OLD_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_EXPORT_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME,exportDir.toString())).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_IMPORT_AUDIT_TEMPLATE,NEW_TEST_TABLE_NAME,filePrefix + exportDir.toString())).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_CREATE_TABLE_AUDIT_TEMPLATE,THIRD_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_BULK_IMPORT_AUDIT_TEMPLATE,THIRD_TEST_TABLE_NAME,filePrefix + exportDir.toString(),filePrefix + failDir.toString())).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_ONLINE_OFFLINE_TABLE_AUDIT_TEMPLATE,"onlineTable",OLD_TEST_TABLE_NAME)).size());
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTableOperationsAudits() throws AccumuloException, AccumuloSecurityException, TableExistsException, TableNotFoundException, IOException, InterruptedException {
+  conn.securityOperations().createLocalUser(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.SYSTEM);
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.CREATE_TABLE);
+  auditConnector=getCluster().getConnector(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  auditConnector.tableOperations().create(OLD_TEST_TABLE_NAME);
+  auditConnector.tableOperations().rename(OLD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME);
+  Map<String,String> emptyMap=Collections.emptyMap();
+  Set<String> emptySet=Collections.emptySet();
+  auditConnector.tableOperations().clone(NEW_TEST_TABLE_NAME,OLD_TEST_TABLE_NAME,true,emptyMap,emptySet);
+  auditConnector.tableOperations().delete(OLD_TEST_TABLE_NAME);
+  auditConnector.tableOperations().offline(NEW_TEST_TABLE_NAME);
+  auditConnector.tableOperations().delete(NEW_TEST_TABLE_NAME);
+  ArrayList<String> auditMessages=getAuditMessages("testTableOperationsAudits");
+  assertEquals(1,findAuditMessage(auditMessages,"action: createTable; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: renameTable; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: cloneTable; targetTable: " + NEW_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: deleteTable; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: offlineTable; targetTable: " + NEW_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: deleteTable; targetTable: " + NEW_TEST_TABLE_NAME).size());
+}
+
+</code></pre>
+
+<pre class="type-17 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void removeUsersAndTables() throws Exception {
+  for (  String user : Arrays.asList(AUDIT_USER_1,AUDIT_USER_2)) {
+    if (conn.securityOperations().listLocalUsers().contains(user)) {
+      conn.securityOperations().dropLocalUser(user);
+    }
+  }
+  TableOperations tops=conn.tableOperations();
+  for (  String table : Arrays.asList(THIRD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME,OLD_TEST_TABLE_NAME)) {
+    if (tops.exists(table)) {
+      tops.delete(table);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testUserOperationsAudits() throws AccumuloSecurityException, AccumuloException, TableExistsException, InterruptedException, IOException {
+  conn.securityOperations().createLocalUser(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.SYSTEM);
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.CREATE_USER);
+  grantEverySystemPriv(conn,AUDIT_USER_1);
+  auditConnector=getCluster().getConnector(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  auditConnector.securityOperations().createLocalUser(AUDIT_USER_2,new PasswordToken(PASSWORD));
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_2,SystemPermission.ALTER_TABLE);
+  conn.securityOperations().revokeSystemPermission(AUDIT_USER_2,SystemPermission.ALTER_TABLE);
+  auditConnector.tableOperations().create(NEW_TEST_TABLE_NAME);
+  conn.securityOperations().grantTablePermission(AUDIT_USER_2,NEW_TEST_TABLE_NAME,TablePermission.READ);
+  conn.securityOperations().revokeTablePermission(AUDIT_USER_2,NEW_TEST_TABLE_NAME,TablePermission.READ);
+  auditConnector.securityOperations().changeLocalUserPassword(AUDIT_USER_2,new PasswordToken("anything"));
+  auditConnector.securityOperations().changeUserAuthorizations(AUDIT_USER_2,auths);
+  auditConnector.securityOperations().dropLocalUser(AUDIT_USER_2);
+  ArrayList<String> auditMessages=getAuditMessages("testUserOperationsAudits");
+  assertEquals(2,findAuditMessage(auditMessages,"action: createUser; targetUser: " + AUDIT_USER_2).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: grantSystemPermission; permission: " + SystemPermission.ALTER_TABLE.toString() + "; targetUser: "+ AUDIT_USER_2).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: revokeSystemPermission; permission: " + SystemPermission.ALTER_TABLE.toString() + "; targetUser: "+ AUDIT_USER_2).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: grantTablePermission; permission: " + TablePermission.READ.toString() + "; targetTable: "+ NEW_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: revokeTablePermission; permission: " + TablePermission.READ.toString() + "; targetTable: "+ NEW_TEST_TABLE_NAME).size());
+  assertEquals(2,findAuditMessage(auditMessages,"action: changePassword; targetUser: " + AUDIT_USER_2 + "").size());
+  assertEquals(1,findAuditMessage(auditMessages,"action: changeAuthorizations; targetUser: " + AUDIT_USER_2 + "; authorizations: "+ auths.toString()).size());
+  assertEquals(2,findAuditMessage(auditMessages,"action: dropUser; targetUser: " + AUDIT_USER_2).size());
+}
+
+</code></pre>
+
+<pre class="type-5 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDataOperationsAudits() throws AccumuloSecurityException, AccumuloException, TableExistsException, TableNotFoundException, IOException, InterruptedException {
+  conn.securityOperations().createLocalUser(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  conn.securityOperations().grantSystemPermission(AUDIT_USER_1,SystemPermission.SYSTEM);
+  conn.securityOperations().changeUserAuthorizations(AUDIT_USER_1,auths);
+  grantEverySystemPriv(conn,AUDIT_USER_1);
+  auditConnector=getCluster().getConnector(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  auditConnector.tableOperations().create(OLD_TEST_TABLE_NAME);
+  BatchWriter bw=auditConnector.createBatchWriter(OLD_TEST_TABLE_NAME,new BatchWriterConfig());
+  Mutation m=new Mutation("myRow");
+  m.put("cf1","cq1","v1");
+  m.put("cf1","cq2","v3");
+  bw.addMutation(m);
+  bw.close();
+  Scanner scanner=auditConnector.createScanner(OLD_TEST_TABLE_NAME,auths);
+  for (  Map.Entry<Key,Value> entry : scanner) {
+    System.out.println("Scanner row: " + entry.getKey() + " "+ entry.getValue());
+  }
+  scanner.close();
+  BatchScanner bs=auditConnector.createBatchScanner(OLD_TEST_TABLE_NAME,auths,1);
+  bs.fetchColumn(new Text("cf1"),new Text("cq1"));
+  bs.setRanges(Arrays.asList(new Range("myRow","myRow~")));
+  for (  Map.Entry<Key,Value> entry : bs) {
+    System.out.println("BatchScanner row: " + entry.getKey() + " "+ entry.getValue());
+  }
+  bs.close();
+  auditConnector.tableOperations().deleteRows(OLD_TEST_TABLE_NAME,new Text("myRow"),new Text("myRow~"));
+  ArrayList<String> auditMessages=getAuditMessages("testDataOperationsAudits");
+  assertTrue(1 <= findAuditMessage(auditMessages,"action: scan; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertTrue(1 <= findAuditMessage(auditMessages,"action: scan; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,String.format(AuditedSecurityOperation.CAN_DELETE_RANGE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME,"myRow","myRow~")).size());
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void resetInstance() throws Exception {
+  conn=getConnector();
+  removeUsersAndTables();
+  getAuditMessages("setup");
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testDeniedAudits() throws AccumuloSecurityException, AccumuloException, TableExistsException, TableNotFoundException, IOException, InterruptedException {
+  conn.securityOperations().createLocalUser(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  conn.tableOperations().create(OLD_TEST_TABLE_NAME);
+  auditConnector=getCluster().getConnector(AUDIT_USER_1,new PasswordToken(PASSWORD));
+  try {
+    auditConnector.tableOperations().create(NEW_TEST_TABLE_NAME);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    auditConnector.tableOperations().rename(OLD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    auditConnector.tableOperations().clone(OLD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME,true,Collections.<String,String>emptyMap(),Collections.<String>emptySet());
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    auditConnector.tableOperations().delete(OLD_TEST_TABLE_NAME);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    auditConnector.tableOperations().offline(OLD_TEST_TABLE_NAME);
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  try {
+    Scanner scanner=auditConnector.createScanner(OLD_TEST_TABLE_NAME,auths);
+    scanner.iterator().next().getKey();
+  }
+ catch (  RuntimeException ex) {
+  }
+  try {
+    auditConnector.tableOperations().deleteRows(OLD_TEST_TABLE_NAME,new Text("myRow"),new Text("myRow~"));
+  }
+ catch (  AccumuloSecurityException ex) {
+  }
+  ArrayList<String> auditMessages=getAuditMessages("testDeniedAudits");
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_CREATE_TABLE_AUDIT_TEMPLATE,NEW_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_RENAME_TABLE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_CLONE_TABLE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME,NEW_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_DELETE_TABLE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_ONLINE_OFFLINE_TABLE_AUDIT_TEMPLATE,"offlineTable",OLD_TEST_TABLE_NAME)).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + "action: scan; targetTable: " + OLD_TEST_TABLE_NAME).size());
+  assertEquals(1,findAuditMessage(auditMessages,"operation: denied;.*" + String.format(AuditedSecurityOperation.CAN_DELETE_RANGE_AUDIT_TEMPLATE,OLD_TEST_TABLE_NAME,"myRow","myRow~")).size());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

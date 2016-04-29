@@ -1,0 +1,153 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestFileAppend4 (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-8 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test case that stops a writer after finalizing a block but
+ * before calling completeFile, recovers a file from another writer,
+ * starts writing from that writer, and then has the old lease holder
+ * call completeFile
+ */
+@Test(timeout=60000) public void testCompleteOtherLeaseHoldersFile() throws Throwable {
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(5).build();
+  try {
+    cluster.waitActive();
+    NameNode preSpyNN=cluster.getNameNode();
+    NameNode spyNN=spy(preSpyNN);
+    DelayAnswer delayer=new DelayAnswer();
+    doAnswer(delayer).when(spyNN).complete(anyString(),anyString(),(ExtendedBlock)anyObject());
+    DFSClient client=new DFSClient(null,spyNN,conf,null);
+    file1=new Path("/testCompleteOtherLease");
+    final OutputStream stm=client.create("/testCompleteOtherLease",true);
+    AppendTestUtil.write(stm,0,4096);
+    final AtomicReference<Throwable> err=new AtomicReference<Throwable>();
+    Thread t=new Thread(){
+      public void run(){
+        try {
+          stm.close();
+        }
+ catch (        Throwable t) {
+          err.set(t);
+        }
+      }
+    }
+;
+    t.start();
+    LOG.info("Waiting for close to get to latch...");
+    delayer.waitForCall();
+    LOG.info("Killing lease checker");
+    client.leaserenewer.interruptAndJoin();
+    FileSystem fs1=cluster.getFileSystem();
+    FileSystem fs2=AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
+    LOG.info("Recovering file");
+    recoverFile(fs2);
+    LOG.info("Opening file for append from new fs");
+    FSDataOutputStream appenderStream=fs2.append(file1);
+    LOG.info("Writing some data from new appender");
+    AppendTestUtil.write(appenderStream,0,4096);
+    LOG.info("Telling old close to proceed.");
+    delayer.proceed();
+    LOG.info("Waiting for close to finish.");
+    t.join();
+    LOG.info("Close finished.");
+    Throwable thrownByClose=err.get();
+    assertNotNull(thrownByClose);
+    assertTrue(thrownByClose instanceof IOException);
+    if (!thrownByClose.getMessage().contains("Lease mismatch"))     throw thrownByClose;
+    appenderStream.close();
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  this.conf=new Configuration();
+  if (simulatedStorage) {
+    conf.setBoolean(SimulatedFSDataset.CONFIG_PROPERTY_SIMULATED,true);
+  }
+  conf.setBoolean(DFSConfigKeys.DFS_SUPPORT_APPEND_KEY,true);
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_HEARTBEAT_RECHECK_INTERVAL_KEY,1000);
+  conf.setInt(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,1);
+  conf.setInt(DFSConfigKeys.DFS_CLIENT_SOCKET_TIMEOUT_KEY,5000);
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_PENDING_TIMEOUT_SEC_KEY,5);
+  conf.setInt(DFSConfigKeys.DFS_NAMENODE_REPLICATION_INTERVAL_KEY,1);
+  conf.setInt("ipc.client.connect.max.retries",1);
+}
+
+</code></pre>
+
+<pre class="type-10 type-8 type-4 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test case that stops a writer after finalizing a block but
+ * before calling completeFile, and then tries to recover
+ * the lease from another thread.
+ */
+@Test(timeout=60000) public void testRecoverFinalizedBlock() throws Throwable {
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(5).build();
+  try {
+    cluster.waitActive();
+    NameNode preSpyNN=cluster.getNameNode();
+    NameNode spyNN=spy(preSpyNN);
+    DelayAnswer delayer=new DelayAnswer();
+    doAnswer(delayer).when(spyNN).complete(anyString(),anyString(),(ExtendedBlock)anyObject());
+    DFSClient client=new DFSClient(null,spyNN,conf,null);
+    file1=new Path("/testRecoverFinalized");
+    final OutputStream stm=client.create("/testRecoverFinalized",true);
+    AppendTestUtil.write(stm,0,4096);
+    final AtomicReference<Throwable> err=new AtomicReference<Throwable>();
+    Thread t=new Thread(){
+      public void run(){
+        try {
+          stm.close();
+        }
+ catch (        Throwable t) {
+          err.set(t);
+        }
+      }
+    }
+;
+    t.start();
+    LOG.info("Waiting for close to get to latch...");
+    delayer.waitForCall();
+    LOG.info("Killing lease checker");
+    client.leaserenewer.interruptAndJoin();
+    FileSystem fs1=cluster.getFileSystem();
+    FileSystem fs2=AppendTestUtil.createHdfsWithDifferentUsername(fs1.getConf());
+    LOG.info("Recovering file");
+    recoverFile(fs2);
+    LOG.info("Telling close to proceed.");
+    delayer.proceed();
+    LOG.info("Waiting for close to finish.");
+    t.join();
+    LOG.info("Close finished.");
+    Throwable thrownByClose=err.get();
+    assertNotNull(thrownByClose);
+    assertTrue(thrownByClose instanceof IOException);
+    if (!thrownByClose.getMessage().contains("No lease on /testRecoverFinalized"))     throw thrownByClose;
+  }
+  finally {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

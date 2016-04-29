@@ -1,0 +1,105 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.ha.TestZKFailoverControllerStress (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Have the services fail their health checks half the time,
+ * causing the master role to bounce back and forth in the
+ * cluster. Meanwhile, causes ZK to disconnect clients every
+ * 50ms, to trigger the retry code and failures to become active.
+ */
+@Test(timeout=(STRESS_RUNTIME_SECS + EXTRA_TIMEOUT_SECS) * 1000) public void testRandomHealthAndDisconnects() throws Exception {
+  long runFor=STRESS_RUNTIME_SECS * 1000;
+  Mockito.doAnswer(new RandomlyThrow(0)).when(cluster.getService(0).proxy).monitorHealth();
+  Mockito.doAnswer(new RandomlyThrow(1)).when(cluster.getService(1).proxy).monitorHealth();
+  conf.setInt(CommonConfigurationKeys.HA_FC_ELECTOR_ZK_OP_RETRIES_KEY,100);
+  cluster.start();
+  long st=Time.now();
+  while (Time.now() - st < runFor) {
+    cluster.getTestContext().checkException();
+    serverFactory.closeAll();
+    Thread.sleep(50);
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setupConfAndServices() throws Exception {
+  conf=new Configuration();
+  conf.set(ZKFailoverController.ZK_QUORUM_KEY,hostPort);
+  this.cluster=new MiniZKFCCluster(conf,getServer(serverFactory));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Randomly expire the ZK sessions of the two ZKFCs. This differs
+ * from the above test in that it is not a controlled failover -
+ * we just do random expirations and expect neither one to ever
+ * generate fatal exceptions.
+ */
+@Test(timeout=(STRESS_RUNTIME_SECS + EXTRA_TIMEOUT_SECS) * 1000) public void testRandomExpirations() throws Exception {
+  cluster.start();
+  long st=Time.now();
+  long runFor=STRESS_RUNTIME_SECS * 1000;
+  Random r=new Random();
+  while (Time.now() - st < runFor) {
+    cluster.getTestContext().checkException();
+    int targetIdx=r.nextInt(2);
+    ActiveStandbyElector target=cluster.getElector(targetIdx);
+    long sessId=target.getZKSessionIdForTests();
+    if (sessId != -1) {
+      LOG.info(String.format("Expiring session %x for svc %d",sessId,targetIdx));
+      getServer(serverFactory).closeSession(sessId);
+    }
+    Thread.sleep(r.nextInt(300));
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void stopCluster() throws Exception {
+  if (cluster != null) {
+    cluster.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Simply fail back and forth between two services for the
+ * configured amount of time, via expiring their ZK sessions.
+ */
+@Test(timeout=(STRESS_RUNTIME_SECS + EXTRA_TIMEOUT_SECS) * 1000) public void testExpireBackAndForth() throws Exception {
+  cluster.start();
+  long st=Time.now();
+  long runFor=STRESS_RUNTIME_SECS * 1000;
+  int i=0;
+  while (Time.now() - st < runFor) {
+    int from=i % 2;
+    int to=(i + 1) % 2;
+    LOG.info("Failing over via expiration from " + from + " to "+ to);
+    cluster.expireAndVerifyFailover(from,to);
+    i++;
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

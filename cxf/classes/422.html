@@ -1,0 +1,348 @@
+<h3 style="margin:0px">Class: org.apache.cxf.rs.security.jose.cookbook.JwsJoseCookBookTest (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(8)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMultipleSignatures() throws Exception {
+  try {
+    Cipher.getInstance(AlgorithmUtils.ES_SHA_512_JAVA);
+  }
+ catch (  Throwable t) {
+    Security.addProvider(new BouncyCastleProvider());
+  }
+  try {
+    JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+    assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+    assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+    JwsHeaders firstSignerProtectedHeader=new JwsHeaders();
+    firstSignerProtectedHeader.setSignatureAlgorithm(SignatureAlgorithm.RS256);
+    JwsHeaders firstSignerUnprotectedHeader=new JwsHeaders();
+    firstSignerUnprotectedHeader.setKeyId(RSA_KID_VALUE);
+    JsonWebKeys jwks=readKeySet("cookbookPrivateSet.txt");
+    List<JsonWebKey> keys=jwks.getKeys();
+    JsonWebKey rsaKey=keys.get(1);
+    jsonProducer.signWith(JwsUtils.getSignatureProvider(rsaKey,SignatureAlgorithm.RS256),firstSignerProtectedHeader,firstSignerUnprotectedHeader);
+    assertEquals(jsonProducer.getSignatureEntries().get(0).toJson(),FIRST_SIGNATURE_ENTRY_MULTIPLE_SIGNATURES);
+    JwsHeaders secondSignerUnprotectedHeader=new JwsHeaders();
+    secondSignerUnprotectedHeader.setSignatureAlgorithm(SignatureAlgorithm.ES512);
+    secondSignerUnprotectedHeader.setKeyId(ECDSA_KID_VALUE);
+    JsonWebKey ecKey=keys.get(0);
+    jsonProducer.signWith(JwsUtils.getSignatureProvider(ecKey,SignatureAlgorithm.ES512),null,secondSignerUnprotectedHeader);
+    assertEquals(new JsonMapObjectReaderWriter().toJson(jsonProducer.getSignatureEntries().get(1).getUnprotectedHeader()),SECOND_SIGNATURE_UNPROTECTED_HEADER_MULTIPLE_SIGNATURES);
+    assertEquals(jsonProducer.getSignatureEntries().get(1).toJson().length(),SECOND_SIGNATURE_ENTRY_MULTIPLE_SIGNATURES.length());
+    JwsHeaders thirdSignerProtectedHeader=new JwsHeaders();
+    thirdSignerProtectedHeader.setSignatureAlgorithm(SignatureAlgorithm.HS256);
+    thirdSignerProtectedHeader.setKeyId(HMAC_KID_VALUE);
+    JsonWebKeys secretJwks=readKeySet("cookbookSecretSet.txt");
+    List<JsonWebKey> secretKeys=secretJwks.getKeys();
+    JsonWebKey hmacKey=secretKeys.get(0);
+    jsonProducer.signWith(JwsUtils.getSignatureProvider(hmacKey,SignatureAlgorithm.HS256),thirdSignerProtectedHeader);
+    assertEquals(jsonProducer.getSignatureEntries().get(2).toJson(),THIRD_SIGNATURE_ENTRY_MULTIPLE_SIGNATURES);
+    assertEquals(jsonProducer.getJwsJsonSignedDocument().length(),MULTIPLE_SIGNATURES_JSON_GENERAL_SERIALIZATION.length());
+    JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+    JsonWebKeys publicJwks=readKeySet("cookbookPublicSet.txt");
+    List<JsonWebKey> publicKeys=publicJwks.getKeys();
+    JsonWebKey rsaPublicKey=publicKeys.get(1);
+    JsonWebKey ecPublicKey=publicKeys.get(0);
+    assertTrue(jsonConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.RS256));
+    assertTrue(jsonConsumer.verifySignatureWith(ecPublicKey,SignatureAlgorithm.ES512));
+    assertTrue(jsonConsumer.verifySignatureWith(hmacKey,SignatureAlgorithm.HS256));
+  }
+  finally {
+    Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRSAv15Signature() throws Exception {
+  JwsCompactProducer compactProducer=new JwsCompactProducer(PAYLOAD);
+  compactProducer.getJwsHeaders().setSignatureAlgorithm(SignatureAlgorithm.RS256);
+  compactProducer.getJwsHeaders().setKeyId(RSA_KID_VALUE);
+  JsonMapObjectReaderWriter reader=new JsonMapObjectReaderWriter();
+  assertEquals(reader.toJson(compactProducer.getJwsHeaders().asMap()),RSA_V1_5_SIGNATURE_PROTECTED_HEADER_JSON);
+  assertEquals(compactProducer.getUnsignedEncodedJws(),RSA_V1_5_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD);
+  JsonWebKeys jwks=readKeySet("cookbookPrivateSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey rsaKey=keys.get(1);
+  compactProducer.signWith(rsaKey);
+  assertEquals(compactProducer.getSignedEncodedJws(),RSA_V1_5_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD+ "."+ RSA_V1_5_SIGNATURE_VALUE);
+  JwsCompactConsumer compactConsumer=new JwsCompactConsumer(compactProducer.getSignedEncodedJws());
+  JsonWebKeys publicJwks=readKeySet("cookbookPublicSet.txt");
+  List<JsonWebKey> publicKeys=publicJwks.getKeys();
+  JsonWebKey rsaPublicKey=publicKeys.get(1);
+  assertTrue(compactConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.RS256));
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders protectedHeader=new JwsHeaders();
+  protectedHeader.setSignatureAlgorithm(SignatureAlgorithm.RS256);
+  protectedHeader.setKeyId(RSA_KID_VALUE);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(rsaKey,SignatureAlgorithm.RS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),RSA_V1_5_JSON_GENERAL_SERIALIZATION);
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.RS256));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(rsaKey,SignatureAlgorithm.RS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),RSA_V1_5_JSON_FLATTENED_SERIALIZATION);
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.RS256));
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHMACSignature() throws Exception {
+  JwsCompactProducer compactProducer=new JwsCompactProducer(PAYLOAD);
+  compactProducer.getJwsHeaders().setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  compactProducer.getJwsHeaders().setKeyId(HMAC_KID_VALUE);
+  JsonMapObjectReaderWriter reader=new JsonMapObjectReaderWriter();
+  assertEquals(reader.toJson(compactProducer.getJwsHeaders().asMap()),HMAC_SIGNATURE_PROTECTED_HEADER_JSON);
+  assertEquals(compactProducer.getUnsignedEncodedJws(),HMAC_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD);
+  JsonWebKeys jwks=readKeySet("cookbookSecretSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey key=keys.get(0);
+  compactProducer.signWith(key);
+  assertEquals(compactProducer.getSignedEncodedJws(),HMAC_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD+ "."+ HMAC_SIGNATURE_VALUE);
+  JwsCompactConsumer compactConsumer=new JwsCompactConsumer(compactProducer.getSignedEncodedJws());
+  assertTrue(compactConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders protectedHeader=new JwsHeaders();
+  protectedHeader.setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  protectedHeader.setKeyId(HMAC_KID_VALUE);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),HMAC_JSON_GENERAL_SERIALIZATION);
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),HMAC_JSON_FLATTENED_SERIALIZATION);
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testEncodedPayload() throws Exception {
+  assertEquals(Base64UrlUtility.encode(PAYLOAD),ENCODED_PAYLOAD);
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRSAPSSSignature() throws Exception {
+  try {
+    Cipher.getInstance(AlgorithmUtils.PS_SHA_384_JAVA);
+  }
+ catch (  Throwable t) {
+    Security.addProvider(new BouncyCastleProvider());
+  }
+  JwsCompactProducer compactProducer=new JwsCompactProducer(PAYLOAD);
+  compactProducer.getJwsHeaders().setSignatureAlgorithm(SignatureAlgorithm.PS384);
+  compactProducer.getJwsHeaders().setKeyId(RSA_KID_VALUE);
+  JsonMapObjectReaderWriter reader=new JsonMapObjectReaderWriter();
+  assertEquals(reader.toJson(compactProducer.getJwsHeaders().asMap()),RSA_PSS_SIGNATURE_PROTECTED_HEADER_JSON);
+  assertEquals(compactProducer.getUnsignedEncodedJws(),RSA_PSS_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD);
+  JsonWebKeys jwks=readKeySet("cookbookPrivateSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey rsaKey=keys.get(1);
+  compactProducer.signWith(rsaKey);
+  assertEquals(compactProducer.getSignedEncodedJws().length(),(RSA_PSS_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD+ "."+ RSA_PSS_SIGNATURE_VALUE).length());
+  JwsCompactConsumer compactConsumer=new JwsCompactConsumer(compactProducer.getSignedEncodedJws());
+  JsonWebKeys publicJwks=readKeySet("cookbookPublicSet.txt");
+  List<JsonWebKey> publicKeys=publicJwks.getKeys();
+  JsonWebKey rsaPublicKey=publicKeys.get(1);
+  assertTrue(compactConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.PS384));
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders protectedHeader=new JwsHeaders();
+  protectedHeader.setSignatureAlgorithm(SignatureAlgorithm.PS384);
+  protectedHeader.setKeyId(RSA_KID_VALUE);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(rsaKey,SignatureAlgorithm.PS384),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument().length(),RSA_PSS_JSON_GENERAL_SERIALIZATION.length());
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.PS384));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(rsaKey,SignatureAlgorithm.PS384),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument().length(),RSA_PSS_JSON_FLATTENED_SERIALIZATION.length());
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(rsaPublicKey,SignatureAlgorithm.PS384));
+  Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testDetachedHMACSignature() throws Exception {
+  JwsCompactProducer compactProducer=new JwsCompactProducer(PAYLOAD,true);
+  compactProducer.getJwsHeaders().setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  compactProducer.getJwsHeaders().setKeyId(HMAC_KID_VALUE);
+  JsonMapObjectReaderWriter reader=new JsonMapObjectReaderWriter();
+  assertEquals(reader.toJson(compactProducer.getJwsHeaders().asMap()),HMAC_SIGNATURE_PROTECTED_HEADER_JSON);
+  assertEquals(compactProducer.getUnsignedEncodedJws(),HMAC_SIGNATURE_PROTECTED_HEADER + ".");
+  JsonWebKeys jwks=readKeySet("cookbookSecretSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey key=keys.get(0);
+  compactProducer.signWith(key);
+  assertEquals(compactProducer.getSignedEncodedJws(),DETACHED_HMAC_JWS);
+  JwsCompactConsumer compactConsumer=new JwsCompactConsumer(compactProducer.getSignedEncodedJws(),ENCODED_PAYLOAD);
+  assertTrue(compactConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders protectedHeader=new JwsHeaders();
+  protectedHeader.setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  protectedHeader.setKeyId(HMAC_KID_VALUE);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(true),HMAC_DETACHED_JSON_GENERAL_SERIALIZATION);
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument(true),ENCODED_PAYLOAD);
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(true),HMAC_DETACHED_JSON_FLATTENED_SERIALIZATION);
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument(true),ENCODED_PAYLOAD);
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProtectingSpecificHeaderFieldsSignature() throws Exception {
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders protectedHeader=new JwsHeaders();
+  protectedHeader.setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  JwsHeaders unprotectedHeader=new JwsHeaders();
+  unprotectedHeader.setKeyId(HMAC_KID_VALUE);
+  JsonWebKeys jwks=readKeySet("cookbookSecretSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey key=keys.get(0);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader,unprotectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),PROTECTING_SPECIFIC_HEADER_FIELDS_JSON_GENERAL_SERIALIZATION);
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),protectedHeader,unprotectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),PROTECTING_SPECIFIC_HEADER_FIELDS_JSON_FLATTENED_SERIALIZATION);
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testECDSASignature() throws Exception {
+  try {
+    Cipher.getInstance(AlgorithmUtils.ES_SHA_512_JAVA);
+  }
+ catch (  Throwable t) {
+    Security.addProvider(new BouncyCastleProvider());
+  }
+  try {
+    JwsCompactProducer compactProducer=new JwsCompactProducer(PAYLOAD);
+    compactProducer.getJwsHeaders().setSignatureAlgorithm(SignatureAlgorithm.ES512);
+    compactProducer.getJwsHeaders().setKeyId(ECDSA_KID_VALUE);
+    JsonMapObjectReaderWriter reader=new JsonMapObjectReaderWriter();
+    assertEquals(reader.toJson(compactProducer.getJwsHeaders().asMap()),ECDSA_SIGNATURE_PROTECTED_HEADER_JSON);
+    assertEquals(compactProducer.getUnsignedEncodedJws(),ECSDA_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD);
+    JsonWebKeys jwks=readKeySet("cookbookPrivateSet.txt");
+    List<JsonWebKey> keys=jwks.getKeys();
+    JsonWebKey ecKey=keys.get(0);
+    compactProducer.signWith(new EcDsaJwsSignatureProvider(JwkUtils.toECPrivateKey(ecKey),SignatureAlgorithm.ES512));
+    assertEquals(compactProducer.getUnsignedEncodedJws(),ECSDA_SIGNATURE_PROTECTED_HEADER + "." + ENCODED_PAYLOAD);
+    assertEquals(132,Base64UrlUtility.decode(compactProducer.getEncodedSignature()).length);
+    JwsCompactConsumer compactConsumer=new JwsCompactConsumer(compactProducer.getSignedEncodedJws());
+    JsonWebKeys publicJwks=readKeySet("cookbookPublicSet.txt");
+    List<JsonWebKey> publicKeys=publicJwks.getKeys();
+    JsonWebKey ecPublicKey=publicKeys.get(0);
+    assertTrue(compactConsumer.verifySignatureWith(ecPublicKey,SignatureAlgorithm.ES512));
+  }
+  finally {
+    Security.removeProvider(BouncyCastleProvider.PROVIDER_NAME);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-5 type-2 type-1 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProtectingContentOnlySignature() throws Exception {
+  JwsJsonProducer jsonProducer=new JwsJsonProducer(PAYLOAD);
+  assertEquals(jsonProducer.getPlainPayload(),PAYLOAD);
+  assertEquals(jsonProducer.getUnsignedEncodedPayload(),ENCODED_PAYLOAD);
+  JwsHeaders unprotectedHeader=new JwsHeaders();
+  unprotectedHeader.setSignatureAlgorithm(SignatureAlgorithm.HS256);
+  unprotectedHeader.setKeyId(HMAC_KID_VALUE);
+  JsonWebKeys jwks=readKeySet("cookbookSecretSet.txt");
+  List<JsonWebKey> keys=jwks.getKeys();
+  JsonWebKey key=keys.get(0);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),null,unprotectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),PROTECTING_CONTENT_ONLY_JSON_GENERAL_SERIALIZATION);
+  JwsJsonConsumer jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+  jsonProducer=new JwsJsonProducer(PAYLOAD,true);
+  jsonProducer.signWith(JwsUtils.getSignatureProvider(key,SignatureAlgorithm.HS256),null,unprotectedHeader);
+  assertEquals(jsonProducer.getJwsJsonSignedDocument(),PROTECTING_CONTENT_ONLY_JSON_FLATTENED_SERIALIZATION);
+  jsonConsumer=new JwsJsonConsumer(jsonProducer.getJwsJsonSignedDocument());
+  assertTrue(jsonConsumer.verifySignatureWith(key,SignatureAlgorithm.HS256));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

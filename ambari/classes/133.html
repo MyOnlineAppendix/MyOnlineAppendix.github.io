@@ -1,0 +1,127 @@
+<h3 style="margin:0px">Class: org.apache.ambari.server.checks.ConfigurationMergeCheckTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws Exception {
+  Cluster cluster=EasyMock.createMock(Cluster.class);
+  expect(cluster.getCurrentStackVersion()).andReturn(stackId_1_0).anyTimes();
+  expect(clusters.getCluster((String)anyObject())).andReturn(cluster).anyTimes();
+  expect(cluster.getServices()).andReturn(new HashMap<String,Service>(){
+{
+      put("HDFS",EasyMock.createMock(Service.class));
+    }
+  }
+).anyTimes();
+  m_configMap.put(CONFIG_PROPERTY,"1024m");
+  Config config=EasyMock.createMock(Config.class);
+  expect(config.getProperties()).andReturn(m_configMap).anyTimes();
+  expect(cluster.getDesiredConfigByType(CONFIG_TYPE)).andReturn(config).anyTimes();
+  replay(clusters,cluster,config);
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPerform() throws Exception {
+  ConfigurationMergeCheck cmc=new ConfigurationMergeCheck();
+  final RepositoryVersionDAO repositoryVersionDAO=EasyMock.createMock(RepositoryVersionDAO.class);
+  expect(repositoryVersionDAO.findByStackNameAndVersion("HDP","1.0")).andReturn(createFor("1.0")).anyTimes();
+  expect(repositoryVersionDAO.findByStackNameAndVersion("HDP","1.1")).andReturn(createFor("1.1")).anyTimes();
+  replay(repositoryVersionDAO);
+  cmc.repositoryVersionDaoProvider=new Provider<RepositoryVersionDAO>(){
+    @Override public RepositoryVersionDAO get(){
+      return repositoryVersionDAO;
+    }
+  }
+;
+  cmc.clustersProvider=new Provider<Clusters>(){
+    @Override public Clusters get(){
+      return clusters;
+    }
+  }
+;
+  cmc.m_mergeHelper=new ConfigMergeHelper();
+  Field field=ConfigMergeHelper.class.getDeclaredField("m_clusters");
+  field.setAccessible(true);
+  field.set(cmc.m_mergeHelper,cmc.clustersProvider);
+  final AmbariMetaInfo ami=EasyMock.createMock(AmbariMetaInfo.class);
+  field=ConfigMergeHelper.class.getDeclaredField("m_ambariMetaInfo");
+  field.setAccessible(true);
+  field.set(cmc.m_mergeHelper,new Provider<AmbariMetaInfo>(){
+    @Override public AmbariMetaInfo get(){
+      return ami;
+    }
+  }
+);
+  PropertyInfo pi10=new PropertyInfo();
+  pi10.setFilename(CONFIG_FILE);
+  pi10.setName(CONFIG_PROPERTY);
+  pi10.setValue("1024");
+  PropertyInfo pi11=new PropertyInfo();
+  pi11.setFilename(CONFIG_FILE);
+  pi11.setName(CONFIG_PROPERTY);
+  pi11.setValue("1024");
+  expect(ami.getServiceProperties("HDP","1.0","HDFS")).andReturn(Collections.singleton(pi10)).anyTimes();
+  expect(ami.getServiceProperties("HDP","1.1","HDFS")).andReturn(Collections.singleton(pi11)).anyTimes();
+  expect(ami.getStackProperties(anyObject(String.class),anyObject(String.class))).andReturn(Collections.<PropertyInfo>emptySet()).anyTimes();
+  replay(ami);
+  PrereqCheckRequest request=new PrereqCheckRequest("cluster");
+  request.setTargetStackId(stackId_1_0);
+  request.setRepositoryVersion("1.1");
+  PrerequisiteCheck check=new PrerequisiteCheck(null,"cluster");
+  cmc.perform(check,request);
+  Assert.assertEquals("Expect no warnings",0,check.getFailedOn().size());
+  check=new PrerequisiteCheck(null,"cluster");
+  m_configMap.put(CONFIG_PROPERTY,"1025m");
+  pi11.setValue("1026");
+  cmc.perform(check,request);
+  Assert.assertEquals("Expect warning when user-set has changed from new default",1,check.getFailedOn().size());
+  Assert.assertEquals(1,check.getFailedDetail().size());
+  ConfigurationMergeCheck.MergeDetail detail=(ConfigurationMergeCheck.MergeDetail)check.getFailedDetail().get(0);
+  Assert.assertEquals("1025m",detail.current);
+  Assert.assertEquals("1026m",detail.new_stack_value);
+  Assert.assertEquals("1025m",detail.result_value);
+  Assert.assertEquals(CONFIG_TYPE,detail.type);
+  Assert.assertEquals(CONFIG_PROPERTY,detail.property);
+  check=new PrerequisiteCheck(null,"cluster");
+  pi11.setName(CONFIG_PROPERTY + ".foo");
+  cmc.perform(check,request);
+  Assert.assertEquals("Expect no warning when user new stack is empty",0,check.getFailedOn().size());
+  Assert.assertEquals(0,check.getFailedDetail().size());
+  check=new PrerequisiteCheck(null,"cluster");
+  pi11.setName(CONFIG_PROPERTY);
+  pi10.setName(CONFIG_PROPERTY + ".foo");
+  cmc.perform(check,request);
+  Assert.assertEquals("Expect warning when user old stack is empty, and value changed",1,check.getFailedOn().size());
+  Assert.assertEquals(1,check.getFailedDetail().size());
+  detail=(ConfigurationMergeCheck.MergeDetail)check.getFailedDetail().get(0);
+  Assert.assertEquals("1025m",detail.current);
+  Assert.assertEquals("1026m",detail.new_stack_value);
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testApplicable() throws Exception {
+  PrereqCheckRequest request=new PrereqCheckRequest("cluster");
+  request.setTargetStackId(stackId_1_0);
+  ConfigurationMergeCheck cmc=new ConfigurationMergeCheck();
+  Configuration config=EasyMock.createMock(Configuration.class);
+  replay(config);
+  cmc.config=config;
+  Assert.assertTrue(cmc.isApplicable(request));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

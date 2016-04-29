@@ -1,0 +1,80 @@
+<h3 style="margin:0px">Class: org.apache.cxf.ws.discovery.WSDiscoveryClientTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testMultiResponses() throws Exception {
+  if (System.getProperties().getProperty("os.name").equals("Linux") && System.getProperties().getProperty("os.version").indexOf("el") > 0) {
+    System.out.println("Skipping MultiResponse test for REL");
+    return;
+  }
+  Enumeration<NetworkInterface> interfaces=NetworkInterface.getNetworkInterfaces();
+  int count=0;
+  while (interfaces.hasMoreElements()) {
+    NetworkInterface networkInterface=interfaces.nextElement();
+    if (!networkInterface.isUp() || networkInterface.isLoopback()) {
+      continue;
+    }
+    count++;
+  }
+  if (count == 0) {
+    System.out.println("Skipping MultiResponse test");
+    return;
+  }
+  new Thread(new Runnable(){
+    public void run(){
+      try {
+        InetAddress address=InetAddress.getByName("239.255.255.250");
+        MulticastSocket s=new MulticastSocket(Integer.parseInt(PORT));
+        s.setBroadcast(true);
+        s.setNetworkInterface(findIpv4Interface());
+        s.joinGroup(address);
+        s.setReceiveBufferSize(64 * 1024);
+        s.setSoTimeout(5000);
+        byte[] bytes=new byte[64 * 1024];
+        DatagramPacket p=new DatagramPacket(bytes,bytes.length,address,Integer.parseInt(PORT));
+        s.receive(p);
+        SocketAddress sa=p.getSocketAddress();
+        String incoming=new String(p.getData(),0,p.getLength(),StandardCharsets.UTF_8);
+        int idx=incoming.indexOf("MessageID");
+        idx=incoming.indexOf('>',idx);
+        incoming=incoming.substring(idx + 1);
+        idx=incoming.indexOf("</");
+        incoming=incoming.substring(0,idx);
+        for (int x=1; x < 4; x++) {
+          InputStream ins=WSDiscoveryClientTest.class.getResourceAsStream("msg" + x + ".xml");
+          String msg=IOUtils.readStringFromStream(ins);
+          msg=msg.replace("urn:uuid:883d0d53-92aa-4066-9b6f-9eadb1832366",incoming);
+          byte out[]=msg.getBytes(StandardCharsets.UTF_8);
+          DatagramPacket outp=new DatagramPacket(out,0,out.length,sa);
+          s.send(outp);
+        }
+        s.close();
+      }
+ catch (      Throwable t) {
+        t.printStackTrace();
+      }
+    }
+  }
+).start();
+  Bus bus=BusFactory.newInstance().createBus();
+  new LoggingFeature().initialize(bus);
+  WSDiscoveryClient c=new WSDiscoveryClient(bus);
+  c.setVersion10();
+  c.setAddress("soap.udp://239.255.255.250:" + PORT);
+  ProbeType pt=new ProbeType();
+  ScopesType scopes=new ScopesType();
+  pt.setScopes(scopes);
+  ProbeMatchesType pmts=c.probe(pt,1000);
+  Assert.assertEquals(2,pmts.getProbeMatch().size());
+  c.close();
+  bus.shutdown(true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

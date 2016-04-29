@@ -1,0 +1,433 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.client.BookKeeperCloseTest (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that createledger using bookkeeper client which is closed should
+ * throw ClientClosedException
+ */
+@Test(timeout=60000) public void testCreateLedger() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Closing bookkeeper client");
+  bk.close();
+  try {
+    bk.createLedger(digestType,PASSWORD.getBytes());
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final AtomicInteger returnCode=new AtomicInteger(0);
+  final CountDownLatch openLatch=new CountDownLatch(1);
+  CreateCallback cb=new CreateCallback(){
+    @Override public void createComplete(    int rc,    LedgerHandle lh,    Object ctx){
+      returnCode.set(rc);
+      openLatch.countDown();
+    }
+  }
+;
+  bk.asyncCreateLedger(3,2,digestType,PASSWORD.getBytes(),cb,openLatch);
+  LOG.info("Waiting to finish the ledger creation");
+  assertTrue("create ledger call should have completed",openLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("Succesfully created ledger through closed bkclient!",BKException.Code.ClientClosedException,returnCode.get());
+}
+
+</code></pre>
+
+<pre class="type-8 type-3 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that BookKeeperAdmin operationg using a closed BK client will
+ * throw a ClientClosedException
+ */
+@Test(timeout=60000) public void testBookKeeperAdmin() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  BookKeeperAdmin bkadmin=new BookKeeperAdmin(bk);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh1=createLedgerWithEntries(bk,100);
+  LedgerHandle lh2=createLedgerWithEntries(bk,100);
+  LedgerHandle lh3=createLedgerWithEntries(bk,100);
+  lh3.close();
+  BookieSocketAddress bookieToKill=getBookie(0);
+  killBookie(bookieToKill);
+  startNewBookie();
+  BookieSocketAddress newBookie=getBookie(2);
+  CheckerCb checkercb=new CheckerCb();
+  LedgerChecker lc=new LedgerChecker(bk);
+  lc.checkLedger(lh3,checkercb);
+  assertEquals("Should have completed",checkercb.getRc(30,TimeUnit.SECONDS),BKException.Code.OK);
+  assertEquals("Should have a missing fragment",1,checkercb.getResult(30,TimeUnit.SECONDS).size());
+  restartBookieSlow();
+  restartBookieSlow();
+  bk.close();
+  try {
+    bkadmin.openLedger(lh1.getId());
+    fail("Shouldn't be able to open with a closed client");
+  }
+ catch (  BKException.BKClientClosedException cce) {
+  }
+  try {
+    bkadmin.openLedgerNoRecovery(lh1.getId());
+    fail("Shouldn't be able to open with a closed client");
+  }
+ catch (  BKException.BKClientClosedException cce) {
+  }
+  try {
+    bkadmin.recoverBookieData(bookieToKill,newBookie);
+    fail("Shouldn't be able to recover with a closed client");
+  }
+ catch (  BKException.BKClientClosedException cce) {
+  }
+  try {
+    bkadmin.replicateLedgerFragment(lh3,checkercb.getResult(10,TimeUnit.SECONDS).iterator().next(),newBookie);
+    fail("Shouldn't be able to replicate with a closed client");
+  }
+ catch (  BKException.BKClientClosedException cce) {
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that adding entry to a ledger using bookkeeper client which is
+ * closed should throw ClientClosedException
+ */
+@Test(timeout=60000) public void testAddLedgerEntry() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,1);
+  LOG.info("Closing bookkeeper client");
+  restartBookieSlow();
+  bk.close();
+  try {
+    lh.addEntry("foobar".getBytes());
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final CountDownLatch completeLatch=new CountDownLatch(1);
+  final AtomicInteger rc=new AtomicInteger(BKException.Code.OK);
+  lh.asyncAddEntry("foobar".getBytes(),new AddCallback(){
+    public void addComplete(    int rccb,    LedgerHandle lh,    long entryId,    Object ctx){
+      rc.set(rccb);
+      completeLatch.countDown();
+    }
+  }
+,null);
+  LOG.info("Waiting to finish adding another entry asynchronously");
+  assertTrue("Add entry to ledger call should have completed",completeLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("Add entry to ledger should not have succeeded through closed bkclient!",BKException.Code.ClientClosedException,rc.get());
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that checking a ledger using a closed BK client will
+ * throw a ClientClosedException
+ */
+@Test(timeout=60000) public void testLedgerCheck() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,100);
+  LOG.info("Closing bookkeeper client");
+  LedgerChecker lc=new LedgerChecker(bk);
+  restartBookieSlow();
+  bk.close();
+  final CountDownLatch postLatch=new CountDownLatch(1);
+  final AtomicInteger postRc=new AtomicInteger(BKException.Code.OK);
+  lc.checkLedger(lh,new GenericCallback<Set<LedgerFragment>>(){
+    @Override public void operationComplete(    int rc,    Set<LedgerFragment> result){
+      postRc.set(rc);
+      postLatch.countDown();
+    }
+  }
+);
+  assertTrue("checkLedger should have finished",postLatch.await(30,TimeUnit.SECONDS));
+  assertEquals("Should have client closed exception",postRc.get(),BKException.Code.ClientClosedException);
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that deleting a ledger using bookkeeper client which is closed
+ * should throw ClientClosedException
+ */
+@Test(timeout=60000) public void testDeleteLedger() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,100);
+  LOG.info("Closing bookkeeper client");
+  bk.close();
+  try {
+    bk.deleteLedger(lh.getId());
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final AtomicInteger returnCode=new AtomicInteger(0);
+  final CountDownLatch openLatch=new CountDownLatch(1);
+  AsyncCallback.DeleteCallback cb=new AsyncCallback.DeleteCallback(){
+    public void deleteComplete(    int rc,    Object ctx){
+      returnCode.set(rc);
+      openLatch.countDown();
+    }
+  }
+;
+  bk.asyncDeleteLedger(lh.getId(),cb,openLatch);
+  LOG.info("Waiting to delete the ledger asynchronously");
+  assertTrue("Delete call should have completed",openLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("Delete should not have succeeded through closed bkclient!",BKException.Code.ClientClosedException,returnCode.get());
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test that the bookkeeper client doesn't leave any threads hanging around.
+ * See {@link https://issues.apache.org/jira/browse/BOOKKEEPER-804}
+ */
+@Test(timeout=60000) public void testBookKeeperCloseThreads() throws Exception {
+  ThreadGroup group=new ThreadGroup("test-group");
+  final SettableFuture<Void> future=SettableFuture.<Void>create();
+  Thread t=new Thread(group,"TestThread"){
+    @Override public void run(){
+      try {
+        BookKeeper bk=new BookKeeper(baseClientConf);
+        LedgerHandle lh=bk.createLedger(BookKeeper.DigestType.CRC32,"passwd".getBytes());
+        lh.addEntry("foobar".getBytes());
+        lh.close();
+        long id=lh.getId();
+        lh=bk.openLedgerNoRecovery(id,BookKeeper.DigestType.CRC32,"passwd".getBytes());
+        Enumeration<LedgerEntry> entries=lh.readEntries(0,0);
+        lh.close();
+        bk.close();
+        future.set(null);
+      }
+ catch (      InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        future.setException(ie);
+      }
+catch (      Exception e) {
+        future.setException(e);
+      }
+    }
+  }
+;
+  t.start();
+  future.get();
+  t.join();
+  for (int i=0; i < 10; i++) {
+    if (group.activeCount() > 0) {
+      Thread[] threads=new Thread[group.activeCount()];
+      group.enumerate(threads);
+      for (      Thread leftover : threads) {
+        LOG.error("Leftover thread after {} secs: {}",i,leftover);
+      }
+      Thread.sleep(1000);
+    }
+ else {
+      break;
+    }
+  }
+  assertEquals("Should be no threads left in group",0,group.activeCount());
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that closing a ledger using bookkeeper client which is closed should
+ * throw ClientClosedException
+ */
+@Test(timeout=60000) public void testCloseLedger() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,100);
+  LedgerHandle lh2=createLedgerWithEntries(bk,100);
+  LOG.info("Closing bookkeeper client");
+  bk.close();
+  try {
+    lh.close();
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final CountDownLatch completeLatch=new CountDownLatch(1);
+  final AtomicInteger rc=new AtomicInteger(BKException.Code.OK);
+  lh2.asyncClose(new CloseCallback(){
+    public void closeComplete(    int rccb,    LedgerHandle lh,    Object ctx){
+      rc.set(rccb);
+      completeLatch.countDown();
+    }
+  }
+,null);
+  LOG.info("Waiting to finish adding another entry asynchronously");
+  assertTrue("Close ledger call should have completed",completeLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("Close ledger should have succeeded through closed bkclient!",BKException.Code.ClientClosedException,rc.get());
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that readlastconfirmed entry from a ledger using bookkeeper client
+ * which is closed should throw ClientClosedException
+ */
+@Test(timeout=60000) public void testReadLastConfirmed() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,100);
+  LOG.info("Closing bookkeeper client");
+  restartBookieSlow();
+  restartBookieSlow();
+  restartBookieSlow();
+  bk.close();
+  final CountDownLatch readLatch=new CountDownLatch(1);
+  final AtomicInteger rc=new AtomicInteger(BKException.Code.OK);
+  AsyncCallback.ReadLastConfirmedCallback cb=new AsyncCallback.ReadLastConfirmedCallback(){
+    @Override public void readLastConfirmedComplete(    int rccb,    long lastConfirmed,    Object ctx){
+      rc.set(rccb);
+      readLatch.countDown();
+    }
+  }
+;
+  lh.asyncReadLastConfirmed(cb,readLatch);
+  LOG.info("Waiting to finish reading last confirmed entry asynchronously");
+  assertTrue("ReadLastConfirmed call should have completed",readLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("ReadLastConfirmed should have succeeded through closed bkclient!",BKException.Code.ClientClosedException,rc.get());
+  try {
+    lh.readLastConfirmed();
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that opening a ledger using bookkeeper client which is closed should
+ * throw ClientClosedException
+ */
+@Test(timeout=60000) public void testFenceLedger() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  LedgerHandle lh=createLedgerWithEntries(bk,100);
+  LOG.info("Closing bookkeeper client");
+  restartBookieSlow();
+  bk.close();
+  try {
+    bk.openLedger(lh.getId(),digestType,PASSWORD.getBytes());
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  try {
+    bk.openLedgerNoRecovery(lh.getId(),digestType,PASSWORD.getBytes());
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final AtomicInteger returnCode=new AtomicInteger(0);
+  final CountDownLatch openLatch=new CountDownLatch(1);
+  AsyncCallback.OpenCallback cb=new AsyncCallback.OpenCallback(){
+    public void openComplete(    int rc,    LedgerHandle lh,    Object ctx){
+      returnCode.set(rc);
+      openLatch.countDown();
+    }
+  }
+;
+  bk.asyncOpenLedger(lh.getId(),digestType,PASSWORD.getBytes(),cb,openLatch);
+  LOG.info("Waiting to open the ledger asynchronously");
+  assertTrue("Open call should have completed",openLatch.await(20,TimeUnit.SECONDS));
+  assertTrue("Open should not have succeeded through closed bkclient!",BKException.Code.ClientClosedException == returnCode.get());
+}
+
+</code></pre>
+
+<pre class="type-8 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that reading entry from a ledger using bookkeeper client which is
+ * closed should throw ClientClosedException
+ */
+@Test(timeout=60000) public void testReadLedgerEntry() throws Exception {
+  BookKeeper bk=new BookKeeper(baseClientConf,zkc);
+  LOG.info("Create ledger and add entries to it");
+  int numOfEntries=100;
+  LedgerHandle lh=createLedgerWithEntries(bk,numOfEntries);
+  LOG.info("Closing bookkeeper client");
+  restartBookieSlow();
+  bk.close();
+  try {
+    lh.readEntries(0,numOfEntries - 1);
+    fail("should have failed, client is closed");
+  }
+ catch (  BKClientClosedException e) {
+  }
+  final CountDownLatch readLatch=new CountDownLatch(1);
+  final AtomicInteger rc=new AtomicInteger(BKException.Code.OK);
+  ReadCallback cb=new ReadCallback(){
+    @Override public void readComplete(    int rccb,    LedgerHandle lh,    Enumeration<LedgerEntry> seq,    Object ctx){
+      rc.set(rccb);
+      readLatch.countDown();
+    }
+  }
+;
+  lh.asyncReadEntries(0,numOfEntries - 1,cb,readLatch);
+  LOG.info("Waiting to finish reading the entries asynchronously");
+  assertTrue("Read entry ledger call should have completed",readLatch.await(20,TimeUnit.SECONDS));
+  assertEquals("Read entry ledger should have succeeded through closed bkclient!",BKException.Code.ClientClosedException,rc.get());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

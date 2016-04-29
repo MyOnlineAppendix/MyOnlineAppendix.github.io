@@ -1,0 +1,162 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestJvmManager (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp(){
+  TEST_DIR.mkdirs();
+}
+
+</code></pre>
+
+<pre class="type-10 type-4 type-7 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Tests the jvm kill from JvmRunner and JvmManager simultaneously.
+ * Starts a process, which sleeps for 60 seconds, in a thread.
+ * Calls JvmRunner.kill() in a thread.
+ * Also calls JvmManager.taskKilled().
+ * Makes sure that the jvm is killed and JvmManager could launch another task
+ * properly.
+ * @throws Exception
+ */
+@Test public void testJvmKill() throws Exception {
+  JvmManagerForType mapJvmManager=jvmManager.getJvmManagerForType(TaskType.MAP);
+  JobConf taskConf=new JobConf(ttConf);
+  TaskAttemptID attemptID=new TaskAttemptID("test",0,TaskType.MAP,0,0);
+  Task task=new MapTask(null,attemptID,0,null,1);
+  task.setConf(taskConf);
+  TaskInProgress tip=tt.new TaskInProgress(task,taskConf);
+  File pidFile=new File(TEST_DIR,"pid");
+  final TaskRunner taskRunner=task.createRunner(tt,tip);
+  final Vector<String> vargs=new Vector<String>(2);
+  vargs.add(writeScript("SLEEP","sleep 60\n",pidFile).getAbsolutePath());
+  final File workDir=new File(TEST_DIR,"work");
+  workDir.mkdir();
+  final File stdout=new File(TEST_DIR,"stdout");
+  final File stderr=new File(TEST_DIR,"stderr");
+  Thread launcher=new Thread(){
+    public void run(){
+      try {
+        taskRunner.launchJvmAndWait(null,vargs,stdout,stderr,100,workDir,null);
+      }
+ catch (      InterruptedException e) {
+        e.printStackTrace();
+        return;
+      }
+    }
+  }
+;
+  launcher.start();
+  for (int i=0; i < 10; i++) {
+    if (pidFile.exists()) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertTrue("pidFile is not present",pidFile.exists());
+  BufferedReader in=new BufferedReader(new FileReader(pidFile));
+  String pid=in.readLine();
+  in.close();
+  JVMId jvmid=mapJvmManager.runningTaskToJvm.get(taskRunner);
+  jvmManager.setPidToJvm(jvmid,pid);
+  final JvmRunner jvmRunner=mapJvmManager.jvmIdToRunner.get(jvmid);
+  Thread killer=new Thread(){
+    public void run(){
+      jvmRunner.kill();
+    }
+  }
+;
+  killer.start();
+  Thread.sleep(100);
+  taskRunner.kill();
+  assertTrue(jvmRunner.killed);
+  attemptID=new TaskAttemptID("test",0,TaskType.MAP,0,1);
+  task=new MapTask(null,attemptID,0,null,1);
+  task.setConf(taskConf);
+  tip=tt.new TaskInProgress(task,taskConf);
+  TaskRunner taskRunner2=task.createRunner(tt,tip);
+  Vector<String> vargs2=new Vector<String>(1);
+  vargs2.add(writeScript("LS","ls",pidFile).getAbsolutePath());
+  File workDir2=new File(TEST_DIR,"work2");
+  workDir.mkdir();
+  File stdout2=new File(TEST_DIR,"stdout2");
+  File stderr2=new File(TEST_DIR,"stderr2");
+  taskRunner2.launchJvmAndWait(null,vargs2,stdout2,stderr2,100,workDir2,null);
+  killer.join();
+  jvmRunner.join();
+  launcher.join();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws IOException {
+  FileUtil.fullyDelete(TEST_DIR);
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Create a bunch of tasks and use a special hash map to detect
+ * racy access to the various internal data structures of JvmManager.
+ * (Regression test for MAPREDUCE-2224)
+ */
+@Test public void testForRaces() throws Exception {
+  JvmManagerForType mapJvmManager=jvmManager.getJvmManagerForType(TaskType.MAP);
+  mapJvmManager.jvmToRunningTask=new RaceHashMap<JVMId,TaskRunner>();
+  mapJvmManager.runningTaskToJvm=new RaceHashMap<TaskRunner,JVMId>();
+  mapJvmManager.jvmIdToRunner=new RaceHashMap<JVMId,JvmRunner>();
+  final ExecutorService exec=Executors.newFixedThreadPool(MAP_SLOTS);
+  final AtomicReference<Throwable> failed=new AtomicReference<Throwable>();
+  for (int i=0; i < MAP_SLOTS * 5; i++) {
+    JobConf taskConf=new JobConf(ttConf);
+    TaskAttemptID attemptID=new TaskAttemptID("test",0,TaskType.MAP,i,0);
+    Task task=new MapTask(null,attemptID,i,null,1);
+    task.setConf(taskConf);
+    TaskInProgress tip=tt.new TaskInProgress(task,taskConf);
+    File pidFile=new File(TEST_DIR,"pid_" + i);
+    final TaskRunner taskRunner=task.createRunner(tt,tip);
+    final Vector<String> vargs=new Vector<String>(2);
+    vargs.add(writeScript("script_" + i,"echo hi\n",pidFile).getAbsolutePath());
+    final File workDir=new File(TEST_DIR,"work_" + i);
+    workDir.mkdir();
+    final File stdout=new File(TEST_DIR,"stdout_" + i);
+    final File stderr=new File(TEST_DIR,"stderr_" + i);
+    Runnable launcher=new Runnable(){
+      public void run(){
+        try {
+          taskRunner.launchJvmAndWait(null,vargs,stdout,stderr,100,workDir,null);
+        }
+ catch (        Throwable t) {
+          failed.compareAndSet(null,t);
+          exec.shutdownNow();
+          return;
+        }
+      }
+    }
+;
+    exec.submit(launcher);
+  }
+  exec.shutdown();
+  exec.awaitTermination(3,TimeUnit.MINUTES);
+  if (failed.get() != null) {
+    throw new RuntimeException(failed.get());
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

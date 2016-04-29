@@ -1,0 +1,457 @@
+<h3 style="margin:0px">Class: org.apache.ambari.server.serveraction.upgrades.UpgradeActionTest (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-5 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests that finalization can occur when the cluster state is{@link RepositoryVersionState#UPGRADING} if all of the hosts and components
+ * are reporting correct versions and states.
+ * @throws Exception
+ */
+@Test public void testFinalizeUpgradeWithClusterStateInconsistencies() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_2_0_1;
+  makeCrossStackUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  Cluster cluster=clusters.getCluster(clusterName);
+  Service service=installService(cluster,"HDFS");
+  addServiceComponent(cluster,service,"NAMENODE");
+  addServiceComponent(cluster,service,"DATANODE");
+  createNewServiceComponentHost(cluster,"HDFS","NAMENODE","h1");
+  createNewServiceComponentHost(cluster,"HDFS","DATANODE","h1");
+  createConfigs(cluster);
+  cluster.setCurrentStackVersion(sourceStack);
+  cluster.setDesiredStackVersion(targetStack);
+  cluster.getServiceComponentHosts("HDFS","NAMENODE").get(0).setVersion(targetRepo);
+  cluster.getServiceComponentHosts("HDFS","DATANODE").get(0).setVersion(targetRepo);
+  ClusterVersionEntity upgradingClusterVersion=clusterVersionDAO.findByClusterAndStackAndVersion(clusterName,HDP_22_STACK,targetRepo);
+  upgradingClusterVersion.setState(RepositoryVersionState.UPGRADING);
+  upgradingClusterVersion=clusterVersionDAO.merge(upgradingClusterVersion);
+  upgradingClusterVersion=clusterVersionDAO.findByClusterAndStackAndVersion(clusterName,HDP_22_STACK,targetRepo);
+  List<HostVersionEntity> hostVersions=hostVersionDAO.findByClusterStackAndVersion(clusterName,HDP_22_STACK,targetRepo);
+  assertEquals(RepositoryVersionState.UPGRADING,upgradingClusterVersion.getState());
+  assertTrue(hostVersions.size() > 0);
+  for (  HostVersionEntity hostVersion : hostVersions) {
+    assertEquals(RepositoryVersionState.UPGRADED,hostVersion.getState());
+  }
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  StackId currentStackId=cluster.getCurrentStackVersion();
+  StackId desiredStackId=cluster.getDesiredStackVersion();
+  assertEquals(desiredStackId,currentStackId);
+  assertEquals(targetStack,currentStackId);
+  assertEquals(targetStack,desiredStackId);
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests some of the action items are completed when finalizing downgrade
+ * across stacks (HDP 2.2 -> HDP 2.3).
+ * @throws Exception
+ */
+@Test public void testFinalizeDowngradeAcrossStacks() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_2_0_1;
+  makeCrossStackUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  Cluster cluster=clusters.getCluster(clusterName);
+  Service service=installService(cluster,"HDFS");
+  addServiceComponent(cluster,service,"NAMENODE");
+  addServiceComponent(cluster,service,"DATANODE");
+  createNewServiceComponentHost(cluster,"HDFS","NAMENODE","h1");
+  createNewServiceComponentHost(cluster,"HDFS","DATANODE","h1");
+  createConfigs(cluster);
+  cluster.setCurrentStackVersion(sourceStack);
+  cluster.setDesiredStackVersion(targetStack);
+  createConfigs(cluster);
+  cluster=clusters.getCluster(clusterName);
+  Collection<Config> configs=cluster.getAllConfigs();
+  assertEquals(8,configs.size());
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"downgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,sourceRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  HostVersionDAO dao=m_injector.getInstance(HostVersionDAO.class);
+  List<HostVersionEntity> hosts=dao.findByClusterStackAndVersion(clusterName,targetStack,targetRepo);
+  assertFalse(hosts.isEmpty());
+  for (  HostVersionEntity hve : hosts) {
+    assertFalse(hve.getState() == RepositoryVersionState.INSTALLED);
+  }
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  StackId currentStackId=cluster.getCurrentStackVersion();
+  StackId desiredStackId=cluster.getDesiredStackVersion();
+  assertEquals(desiredStackId,currentStackId);
+  assertEquals(sourceStack,currentStackId);
+  assertEquals(sourceStack,desiredStackId);
+  cluster=clusters.getCluster(clusterName);
+  configs=cluster.getAllConfigs();
+  assertEquals(4,configs.size());
+  hosts=dao.findByClusterStackAndVersion(clusterName,targetStack,targetRepo);
+  assertFalse(hosts.isEmpty());
+  for (  HostVersionEntity hve : hosts) {
+    assertTrue(hve.getState() == RepositoryVersionState.INSTALLED);
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 type-2 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFinalizeDowngrade() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_21_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_1_1_1;
+  makeDowngradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"downgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,sourceRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  for (  HostVersionEntity entity : hostVersionDAO.findByClusterAndHost(clusterName,"h1")) {
+    if (entity.getRepositoryVersion().getVersion().equals(sourceRepo)) {
+      assertEquals(RepositoryVersionState.CURRENT,entity.getState());
+    }
+ else     if (entity.getRepositoryVersion().getVersion().equals(targetRepo)) {
+      assertEquals(RepositoryVersionState.INSTALLED,entity.getState());
+    }
+  }
+  for (  ClusterVersionEntity entity : clusterVersionDAO.findByCluster(clusterName)) {
+    if (entity.getRepositoryVersion().getVersion().equals(sourceRepo)) {
+      assertEquals(RepositoryVersionState.CURRENT,entity.getState());
+    }
+ else     if (entity.getRepositoryVersion().getVersion().equals(targetRepo)) {
+      assertEquals(RepositoryVersionState.INSTALLED,entity.getState());
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown() throws Exception {
+  m_injector.getInstance(UnitOfWork.class).end();
+  m_injector.getInstance(PersistService.class).stop();
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFinalizeUpgradeAcrossStacks() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_2_0_1;
+  makeCrossStackUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  Cluster cluster=clusters.getCluster(clusterName);
+  cluster.setCurrentStackVersion(sourceStack);
+  cluster.setDesiredStackVersion(targetStack);
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  StackId currentStackId=cluster.getCurrentStackVersion();
+  StackId desiredStackId=cluster.getDesiredStackVersion();
+  assertEquals(desiredStackId,currentStackId);
+  assertEquals(targetStack,currentStackId);
+  assertEquals(targetStack,desiredStackId);
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  m_injector=Guice.createInjector(new InMemoryDefaultTestModule());
+  m_injector.getInstance(GuiceJpaInitializer.class);
+  m_injector.injectMembers(this);
+  m_injector.getInstance(UnitOfWork.class).begin();
+  amc=m_injector.getInstance(AmbariManagementController.class);
+  ambariMetaInfo=m_injector.getInstance(AmbariMetaInfo.class);
+  Field field=AmbariServer.class.getDeclaredField("clusterController");
+  field.setAccessible(true);
+  field.set(null,amc);
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * During an Express Upgrade that crosses a stack version, Ambari calls UpdateDesiredStackAction
+ * in order to change the stack and apply configs.
+ * The configs that are applied must be saved with the username that is passed in the role params.
+ */
+@Test public void testExpressUpgradeUpdateDesiredStackAction() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_2_0_1;
+  String upgradePackName="upgrade_nonrolling_new_stack";
+  AmbariMetaInfo metaInfo=m_injector.getInstance(AmbariMetaInfo.class);
+  Map<String,UpgradePack> packs=metaInfo.getUpgradePacks(sourceStack.getStackName(),sourceStack.getStackVersion());
+  Assert.assertTrue(packs.containsKey(upgradePackName));
+  makeCrossStackUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  RepositoryVersionEntity targetRve=repoVersionDAO.findByStackNameAndVersion("HDP",targetRepo);
+  Assert.assertNotNull(targetRve);
+  Cluster cluster=clusters.getCluster(clusterName);
+  Service zk=installService(cluster,"ZOOKEEPER");
+  addServiceComponent(cluster,zk,"ZOOKEEPER_SERVER");
+  addServiceComponent(cluster,zk,"ZOOKEEPER_CLIENT");
+  createNewServiceComponentHost(cluster,"ZOOKEEPER","ZOOKEEPER_SERVER","h1");
+  createNewServiceComponentHost(cluster,"ZOOKEEPER","ZOOKEEPER_CLIENT","h1");
+  Service hdfs=installService(cluster,"HDFS");
+  addServiceComponent(cluster,hdfs,"NAMENODE");
+  addServiceComponent(cluster,hdfs,"DATANODE");
+  createNewServiceComponentHost(cluster,"HDFS","NAMENODE","h1");
+  createNewServiceComponentHost(cluster,"HDFS","DATANODE","h1");
+  createConfigs(cluster);
+  Collection<Config> configs=cluster.getAllConfigs();
+  Assert.assertFalse(configs.isEmpty());
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(UpdateDesiredStackAction.COMMAND_PARAM_ORIGINAL_STACK,sourceStack.getStackId());
+  commandParams.put(UpdateDesiredStackAction.COMMAND_PARAM_TARGET_STACK,targetStack.getStackId());
+  commandParams.put(UpdateDesiredStackAction.COMMAND_PARAM_DIRECTION,Direction.UPGRADE.toString());
+  commandParams.put(UpdateDesiredStackAction.COMMAND_PARAM_VERSION,targetRepo);
+  commandParams.put(UpdateDesiredStackAction.COMMAND_PARAM_UPGRADE_PACK,upgradePackName);
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  Map<String,String> roleParams=new HashMap<>();
+  String userName="admin";
+  roleParams.put(ServerAction.ACTION_USER_NAME,userName);
+  executionCommand.setRoleParams(roleParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  UpdateDesiredStackAction action=m_injector.getInstance(UpdateDesiredStackAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  List<ServiceConfigVersionResponse> configVersionsBefore=cluster.getServiceConfigVersions();
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  List<ServiceConfigVersionResponse> configVersionsAfter=cluster.getServiceConfigVersions();
+  Assert.assertFalse(configVersionsAfter.isEmpty());
+  assertTrue(configVersionsAfter.size() - configVersionsBefore.size() >= 1);
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test a case in which a customer performs an upgrade from HDP 2.1 to 2.2 (e.g., 2.2.0.0), but skips the step to
+ * finalize, which calls "Save DB State". Therefore, the cluster's current stack is still on HDP 2.1.
+ * They can still modify the database manually to mark HDP 2.2 as CURRENT in the cluster_version and then begin
+ * another upgrade to 2.2.0.2 and then downgrade.
+ * In the downgrade, the original stack is still 2.1 but the stack for the version marked as CURRENT is 2.2; this
+ * mismatch means that the downgrade should not delete configs and will report a warning.
+ * @throws Exception
+ */
+@Test public void testFinalizeDowngradeWhenDidNotFinalizePreviousUpgrade() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId midStack=HDP_22_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String midRepo=HDP_2_2_0_1;
+  String targetRepo=HDP_2_2_0_2;
+  makeTwoUpgradesWhereLastDidNotComplete(sourceStack,sourceRepo,midStack,midRepo,targetStack,targetRepo);
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"downgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,midRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.FAILED.name(),report.getStatus());
+  assertTrue(report.getStdErr().contains(FinalizeUpgradeAction.PREVIOUS_UPGRADE_NOT_COMPLETED_MSG));
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFinalizeUpgrade() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_21_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_1_1_1;
+  makeUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  AmbariMetaInfo metaInfo=m_injector.getInstance(AmbariMetaInfo.class);
+  AmbariCustomCommandExecutionHelper helper=m_injector.getInstance(AmbariCustomCommandExecutionHelper.class);
+  Host host=clusters.getHost("h1");
+  Cluster cluster=clusters.getCluster(clusterName);
+  RepositoryInfo repo=metaInfo.getRepository(sourceStack.getStackName(),sourceStack.getStackVersion(),"redhat6",sourceStack.getStackId());
+  assertEquals(HDP_211_CENTOS6_REPO_URL,repo.getBaseUrl());
+  verifyBaseRepoURL(helper,cluster,host,HDP_211_CENTOS6_REPO_URL);
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  verifyBaseRepoURL(helper,cluster,host,"http://foo1");
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests that finalize still works when there are hosts which are already{@link RepositoryVersionState#CURRENT}.
+ * @throws Exception
+ */
+@Test public void testFinalizeWithHostsAlreadyCurrent() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_21_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_1_1_1;
+  makeUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  List<HostVersionEntity> hostVersions=hostVersionDAO.findAll();
+  for (  HostVersionEntity hostVersion : hostVersions) {
+    if (hostVersion.getState() == RepositoryVersionState.CURRENT) {
+      hostVersion.setState(RepositoryVersionState.INSTALLED);
+    }
+ else {
+      hostVersion.setState(RepositoryVersionState.CURRENT);
+    }
+    hostVersionDAO.merge(hostVersion);
+  }
+  AmbariMetaInfo metaInfo=m_injector.getInstance(AmbariMetaInfo.class);
+  AmbariCustomCommandExecutionHelper helper=m_injector.getInstance(AmbariCustomCommandExecutionHelper.class);
+  Host host=clusters.getHost("h1");
+  Cluster cluster=clusters.getCluster(clusterName);
+  RepositoryInfo repo=metaInfo.getRepository(sourceStack.getStackName(),sourceStack.getStackVersion(),"redhat6",sourceStack.getStackId());
+  assertEquals(HDP_211_CENTOS6_REPO_URL,repo.getBaseUrl());
+  verifyBaseRepoURL(helper,cluster,host,HDP_211_CENTOS6_REPO_URL);
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName(clusterName);
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  FinalizeUpgradeAction action=m_injector.getInstance(FinalizeUpgradeAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

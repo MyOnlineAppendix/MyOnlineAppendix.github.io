@@ -1,0 +1,50 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.ScanFlushWithTimeIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30 * 1000) public void test() throws Exception {
+  log.info("Creating table");
+  String tableName=getUniqueNames(1)[0];
+  Connector c=getConnector();
+  c.tableOperations().create(tableName);
+  log.info("Adding slow iterator");
+  IteratorSetting setting=new IteratorSetting(50,SlowIterator.class);
+  SlowIterator.setSleepTime(setting,1000);
+  c.tableOperations().attachIterator(tableName,setting);
+  log.info("Splitting the table");
+  SortedSet<Text> partitionKeys=new TreeSet<>();
+  partitionKeys.add(new Text("5"));
+  c.tableOperations().addSplits(tableName,partitionKeys);
+  log.info("waiting for zookeeper propagation");
+  UtilWaitThread.sleep(5 * 1000);
+  log.info("Adding a few entries");
+  BatchWriter bw=c.createBatchWriter(tableName,null);
+  for (int i=0; i < 10; i++) {
+    Mutation m=new Mutation("" + i);
+    m.put("","","");
+    bw.addMutation(m);
+  }
+  bw.close();
+  log.info("Fetching some entries: should timeout and return something");
+  log.info("Scanner");
+  Scanner s=c.createScanner(tableName,Authorizations.EMPTY);
+  s.setBatchTimeout(500,TimeUnit.MILLISECONDS);
+  testScanner(s,1200);
+  log.info("IsolatedScanner");
+  IsolatedScanner is=new IsolatedScanner(s);
+  is.setReadaheadThreshold(1);
+  testScanner(is,2200);
+  log.info("BatchScanner");
+  BatchScanner bs=c.createBatchScanner(tableName,Authorizations.EMPTY,5);
+  bs.setBatchTimeout(500,TimeUnit.MILLISECONDS);
+  bs.setRanges(Collections.singletonList(new Range()));
+  testScanner(bs,1200);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

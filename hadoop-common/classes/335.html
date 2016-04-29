@@ -1,0 +1,283 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.TestReservedRawPaths (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(5)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=120000) public void testRelativePathnames() throws Exception {
+  final Path baseFileRaw=new Path("/.reserved/raw/base");
+  final int len=8192;
+  DFSTestUtil.createFile(fs,baseFileRaw,len,(short)1,0xFEED);
+  final Path root=new Path("/");
+  final Path rawRoot=new Path("/.reserved/raw");
+  assertPathEquals(root,new Path(rawRoot,"../raw"));
+  assertPathEquals(root,new Path(rawRoot,"../../.reserved/raw"));
+  assertPathEquals(baseFileRaw,new Path(rawRoot,"../raw/base"));
+  assertPathEquals(baseFileRaw,new Path(rawRoot,"../../.reserved/raw/base"));
+  assertPathEquals(baseFileRaw,new Path(rawRoot,"../../.reserved/raw/base/../base"));
+  assertPathEquals(baseFileRaw,new Path("/.reserved/../.reserved/raw/../raw/base"));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  conf=new HdfsConfiguration();
+  fsHelper=new FileSystemTestHelper();
+  String testRoot=fsHelper.getTestRootDir();
+  File testRootDir=new File(testRoot).getAbsoluteFile();
+  conf.set(KeyProviderFactory.KEY_PROVIDER_PATH,JavaKeyStoreProvider.SCHEME_NAME + "://file" + testRootDir+ "/test.jks");
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+  Logger.getLogger(EncryptionZoneManager.class).setLevel(Level.TRACE);
+  fs=cluster.getFileSystem();
+  fsWrapper=new FileSystemTestWrapper(cluster.getFileSystem());
+  fcWrapper=new FileContextTestWrapper(FileContext.getFileContext(cluster.getURI(),conf));
+  dfsAdmin=new HdfsAdmin(cluster.getURI(),conf);
+  fs.getClient().provider=cluster.getNameNode().getNamesystem().getProvider();
+  DFSTestUtil.createKey(TEST_KEY,cluster,conf);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Basic read/write tests of raw files.
+ * Create a non-encrypted file
+ * Create an encryption zone
+ * Verify that non-encrypted file contents and decrypted file in EZ are equal
+ * Compare the raw encrypted bytes of the file with the decrypted version to
+ * ensure they're different
+ * Compare the raw and non-raw versions of the non-encrypted file to ensure
+ * they're the same.
+ */
+@Test(timeout=120000) public void testReadWriteRaw() throws Exception {
+  final Path baseFile=new Path("/base");
+  final int len=8192;
+  DFSTestUtil.createFile(fs,baseFile,len,(short)1,0xFEED);
+  final Path zone=new Path("/zone");
+  fs.mkdirs(zone);
+  dfsAdmin.createEncryptionZone(zone,TEST_KEY);
+  final Path encFile1=new Path(zone,"myfile");
+  DFSTestUtil.createFile(fs,encFile1,len,(short)1,0xFEED);
+  verifyFilesEqual(fs,baseFile,encFile1,len);
+  final Path encFile1Raw=new Path(zone,"/.reserved/raw/zone/myfile");
+  verifyFilesNotEqual(fs,encFile1Raw,encFile1,len);
+  final Path baseFileRaw=new Path(zone,"/.reserved/raw/base");
+  verifyFilesEqual(fs,baseFile,baseFileRaw,len);
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown(){
+  if (cluster != null) {
+    cluster.shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=120000) public void testAdminAccessOnly() throws Exception {
+  final Path zone=new Path("zone");
+  final Path slashZone=new Path("/",zone);
+  fs.mkdirs(slashZone);
+  dfsAdmin.createEncryptionZone(slashZone,TEST_KEY);
+  final Path base=new Path("base");
+  final Path reservedRaw=new Path("/.reserved/raw");
+  final int len=8192;
+  final UserGroupInformation user=UserGroupInformation.createUserForTesting("user",new String[]{"mygroup"});
+  user.doAs(new PrivilegedExceptionAction(){
+    @Override public Object run() throws Exception {
+      final DistributedFileSystem fs=cluster.getFileSystem();
+      try {
+        final Path ezRawEncFile=new Path(new Path(reservedRaw,zone),base);
+        DFSTestUtil.createFile(fs,ezRawEncFile,len,(short)1,0xFEED);
+        fail("access to /.reserved/raw is superuser-only operation");
+      }
+ catch (      AccessControlException e) {
+        assertExceptionContains("Superuser privilege is required",e);
+      }
+      return null;
+    }
+  }
+);
+  final Path ezRawEncFile=new Path(new Path(reservedRaw,zone),base);
+  DFSTestUtil.createFile(fs,ezRawEncFile,len,(short)1,0xFEED);
+  user.doAs(new PrivilegedExceptionAction(){
+    @Override public Object run() throws Exception {
+      final DistributedFileSystem fs=cluster.getFileSystem();
+      try {
+        fs.getFileStatus(ezRawEncFile);
+        fail("access to /.reserved/raw is superuser-only operation");
+      }
+ catch (      AccessControlException e) {
+        assertExceptionContains("Superuser privilege is required",e);
+      }
+      return null;
+    }
+  }
+);
+  user.doAs(new PrivilegedExceptionAction(){
+    @Override public Object run() throws Exception {
+      final DistributedFileSystem fs=cluster.getFileSystem();
+      try {
+        fs.listStatus(ezRawEncFile);
+        fail("access to /.reserved/raw is superuser-only operation");
+      }
+ catch (      AccessControlException e) {
+        assertExceptionContains("Superuser privilege is required",e);
+      }
+      return null;
+    }
+  }
+);
+  fs.setPermission(new Path("/"),new FsPermission((short)0777));
+  user.doAs(new PrivilegedExceptionAction(){
+    @Override public Object run() throws Exception {
+      final DistributedFileSystem fs=cluster.getFileSystem();
+      final Path d1=new Path(reservedRaw,"dir1");
+      try {
+        fs.mkdirs(d1);
+        fail("access to /.reserved/raw is superuser-only operation");
+      }
+ catch (      AccessControlException e) {
+        assertExceptionContains("Superuser privilege is required",e);
+      }
+      return null;
+    }
+  }
+);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=120000) public void testListDotReserved() throws Exception {
+  final Path baseFileRaw=new Path("/.reserved/raw/base");
+  final int len=8192;
+  DFSTestUtil.createFile(fs,baseFileRaw,len,(short)1,0xFEED);
+  try {
+    fs.listStatus(new Path("/.reserved"));
+    fail("expected FNFE");
+  }
+ catch (  FileNotFoundException e) {
+    assertExceptionContains("/.reserved does not exist",e);
+  }
+  try {
+    fs.listStatus(new Path("/.reserved/.inodes"));
+    fail("expected FNFE");
+  }
+ catch (  FileNotFoundException e) {
+    assertExceptionContains("/.reserved/.inodes does not exist",e);
+  }
+  final FileStatus[] fileStatuses=fs.listStatus(new Path("/.reserved/raw"));
+  assertEquals("expected 1 entry",fileStatuses.length,1);
+  assertMatches(fileStatuses[0].getPath().toString(),"/.reserved/raw/base");
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=120000) public void testReservedRoot() throws Exception {
+  final Path root=new Path("/");
+  final Path rawRoot=new Path("/.reserved/raw");
+  final Path rawRootSlash=new Path("/.reserved/raw/");
+  assertPathEquals(root,rawRoot);
+  assertPathEquals(root,rawRootSlash);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests that getFileStatus on raw and non raw resolve to the same
+ * file.
+ */
+@Test(timeout=120000) public void testGetFileStatus() throws Exception {
+  final Path zone=new Path("zone");
+  final Path slashZone=new Path("/",zone);
+  fs.mkdirs(slashZone);
+  dfsAdmin.createEncryptionZone(slashZone,TEST_KEY);
+  final Path base=new Path("base");
+  final Path reservedRaw=new Path("/.reserved/raw");
+  final Path baseRaw=new Path(reservedRaw,base);
+  final int len=8192;
+  DFSTestUtil.createFile(fs,baseRaw,len,(short)1,0xFEED);
+  assertPathEquals(new Path("/",base),baseRaw);
+  final Path ezEncFile=new Path(slashZone,base);
+  final Path ezRawEncFile=new Path(new Path(reservedRaw,zone),base);
+  DFSTestUtil.createFile(fs,ezEncFile,len,(short)1,0xFEED);
+  assertPathEquals(ezEncFile,ezRawEncFile);
+}
+
+</code></pre>
+
+<pre class="type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=120000) public void testListRecursive() throws Exception {
+  Path rootPath=new Path("/");
+  Path p=rootPath;
+  for (int i=0; i < 3; i++) {
+    p=new Path(p,"dir" + i);
+    fs.mkdirs(p);
+  }
+  Path curPath=new Path("/.reserved/raw");
+  int cnt=0;
+  FileStatus[] fileStatuses=fs.listStatus(curPath);
+  while (fileStatuses != null && fileStatuses.length > 0) {
+    FileStatus f=fileStatuses[0];
+    assertMatches(f.getPath().toString(),"/.reserved/raw");
+    curPath=Path.getPathWithoutSchemeAndAuthority(f.getPath());
+    cnt++;
+    fileStatuses=fs.listStatus(curPath);
+  }
+  assertEquals(3,cnt);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=120000) public void testReservedRawMkdir() throws Exception {
+  final Path zone=new Path("zone");
+  final Path slashZone=new Path("/",zone);
+  fs.mkdirs(slashZone);
+  dfsAdmin.createEncryptionZone(slashZone,TEST_KEY);
+  final Path rawRoot=new Path("/.reserved/raw");
+  final Path dir1=new Path("dir1");
+  final Path rawDir1=new Path(rawRoot,dir1);
+  fs.mkdirs(rawDir1);
+  assertPathEquals(rawDir1,new Path("/",dir1));
+  fs.delete(rawDir1,true);
+  final Path rawZone=new Path(rawRoot,zone);
+  final Path rawDir1EZ=new Path(rawZone,dir1);
+  fs.mkdirs(rawDir1EZ);
+  assertPathEquals(rawDir1EZ,new Path(slashZone,dir1));
+  fs.delete(rawDir1EZ,true);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

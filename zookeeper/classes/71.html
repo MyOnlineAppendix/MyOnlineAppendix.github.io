@@ -1,0 +1,216 @@
+<h3 style="margin:0px">Class: org.apache.zookeeper.server.quorum.ReconfigLegacyTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test case for https://issues.apache.org/jira/browse/ZOOKEEPER-2244
+ * @throws Exception
+ */
+@Test(timeout=120000) public void testRestartZooKeeperServer() throws Exception {
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  String server;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    server="server." + i + "=127.0.0.1:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ":participant;127.0.0.1:"+ clientPorts[i];
+    sb.append(server + "\n");
+  }
+  String currentQuorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],currentQuorumCfgSection,false);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+  }
+  CountdownWatcher watch1=new CountdownWatcher();
+  ZooKeeper zk=new ZooKeeper("127.0.0.1:" + clientPorts[0],ClientBase.CONNECTION_TIMEOUT,watch1);
+  watch1.waitForConnected(ClientBase.CONNECTION_TIMEOUT);
+  String zNodePath="/serverRestartTest";
+  String data="originalData";
+  zk.create(zNodePath,data.getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  zk.close();
+  mt[0].shutdown();
+  mt[1].shutdown();
+  mt[0].start();
+  mt[1].start();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+  }
+  CountdownWatcher watch2=new CountdownWatcher();
+  zk=new ZooKeeper("127.0.0.1:" + clientPorts[0],ClientBase.CONNECTION_TIMEOUT,watch2);
+  watch2.waitForConnected(ClientBase.CONNECTION_TIMEOUT);
+  byte[] dataBytes=zk.getData(zNodePath,null,null);
+  String receivedData=new String(dataBytes);
+  assertEquals(data,receivedData);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-13 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup(){
+  ClientBase.setupTestEnv();
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * {@link https://issues.apache.org/jira/browse/ZOOKEEPER-1992}1. When a server starts from old style static config, without a client port in the server
+ * specification, it should keep the client port in static config file.
+ * 2. After port reconfig, the old port should be removed from static file
+ * and new port added to dynamic file.
+ * @throws Exception
+ */
+@Test public void testReconfigRemoveClientFromStatic() throws Exception {
+  final int clientPorts[]=new int[SERVER_COUNT];
+  final int quorumPorts[]=new int[SERVER_COUNT];
+  final int electionPorts[]=new int[SERVER_COUNT];
+  final int changedServerId=0;
+  final int newClientPort=PortAssignment.unique();
+  StringBuilder sb=new StringBuilder();
+  ArrayList<String> allServers=new ArrayList<String>();
+  ArrayList<String> newServers=new ArrayList<String>();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    quorumPorts[i]=PortAssignment.unique();
+    electionPorts[i]=PortAssignment.unique();
+    String server="server." + i + "=localhost:"+ quorumPorts[i]+ ":"+ electionPorts[i]+ ":participant";
+    allServers.add(server);
+    sb.append(server + "\n");
+    if (i == changedServerId) {
+      newServers.add(server + ";0.0.0.0:" + newClientPort);
+    }
+ else {
+      newServers.add(server);
+    }
+  }
+  String quorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection,false);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    ReconfigTest.testServerHasConfig(zk[i],allServers,null);
+    Properties cfg=readPropertiesFromFile(mt[i].confFile);
+    Assert.assertTrue(cfg.containsKey("dynamicConfigFile"));
+    Assert.assertTrue(cfg.containsKey("clientPort"));
+  }
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  ReconfigTest.reconfig(zk[1],null,null,newServers,-1);
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  Thread.sleep(1000);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    ReconfigTest.testServerHasConfig(zk[i],newServers,null);
+    Properties staticCfg=readPropertiesFromFile(mt[i].confFile);
+    if (i == changedServerId) {
+      Assert.assertFalse(staticCfg.containsKey("clientPort"));
+    }
+ else {
+      Assert.assertTrue(staticCfg.containsKey("clientPort"));
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+    zk[i].close();
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-2 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that when started with a single static config file the
+ * servers will create a valid dynamic config file. Also checks that when
+ * the static config includes a clientPort but the dynamic definition also
+ * includes it, the static definition is erased.
+ */
+@Test public void testConfigFileBackwardCompatibility() throws Exception {
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  String server;
+  ArrayList<String> allServers=new ArrayList<String>();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    server="server." + i + "=localhost:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ":participant;localhost:"+ clientPorts[i];
+    allServers.add(server);
+    sb.append(server + "\n");
+  }
+  String currentQuorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],currentQuorumCfgSection,false);
+    Assert.assertEquals(mt[i].getDynamicFiles().length,0);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    File[] dynamicFiles=mt[i].getDynamicFiles();
+    Assert.assertTrue(dynamicFiles.length == 1);
+    ReconfigTest.testServerHasConfig(zk[i],allServers,null);
+    Properties cfg=readPropertiesFromFile(mt[i].confFile);
+    for (int j=0; j < SERVER_COUNT; j++) {
+      Assert.assertFalse(cfg.containsKey("server." + j));
+    }
+    Assert.assertTrue(cfg.containsKey("dynamicConfigFile"));
+    Assert.assertFalse(cfg.containsKey("clientPort"));
+    cfg=readPropertiesFromFile(dynamicFiles[0]);
+    for (int j=0; j < SERVER_COUNT; j++) {
+      String serverLine=cfg.getProperty("server." + j,"");
+      Assert.assertEquals(allServers.get(j),"server." + j + "="+ serverLine);
+    }
+    Assert.assertFalse(cfg.containsKey("dynamicConfigFile"));
+  }
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    zk[i].close();
+    mt[i].shutdown();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    ReconfigTest.testServerHasConfig(zk[i],allServers,null);
+  }
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+    zk[i].close();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,74 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapred.TestWebUIAuthorization (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 type-13 type-4 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Run a job and validate if JSPs/Servlets are going through authentication
+ * and authorization.
+ * @throws Exception 
+ */
+@Test public void testWebUIAuthorization() throws Exception {
+  setupGroupsProvider();
+  Properties props=new Properties();
+  props.setProperty("hadoop.http.filter.initializers",DummyFilterInitializer.class.getName());
+  props.setProperty(MRConfig.MR_ACLS_ENABLED,String.valueOf(true));
+  props.setProperty("dfs.permissions.enabled","false");
+  props.setProperty(JTConfig.PRIVATE_ACTIONS_KEY,"true");
+  props.setProperty(MRJobConfig.SETUP_CLEANUP_NEEDED,"false");
+  props.setProperty(MRConfig.MR_SUPERGROUP,"superGroup");
+  props.setProperty(MRConfig.MR_ADMINS,mrAdminUser + " " + mrAdminGroup);
+  String[] queueNames={"default"};
+  String[] submitAclStrings={jobSubmitter + "," + jobSubmitter1+ ","+ jobSubmitter2+ ","+ jobSubmitter3};
+  String[] adminsAclStrings=new String[]{qAdmin};
+  startCluster(props,queueNames,submitAclStrings,adminsAclStrings);
+  MiniMRCluster cluster=getMRCluster();
+  int infoPort=cluster.getJobTrackerRunner().getJobTrackerInfoPort();
+  JobConf clusterConf=cluster.createJobConf();
+  JobConf conf=new JobConf(clusterConf);
+  conf.set(MRJobConfig.JOB_ACL_VIEW_JOB,viewColleague + " group3");
+  conf.set(MRJobConfig.JOB_ACL_MODIFY_JOB," group1,group3");
+  Job job=startSleepJobAsUser(jobSubmitter,conf);
+  org.apache.hadoop.mapreduce.JobID jobid=job.getJobID();
+  String jtURL="http://localhost:" + infoPort;
+  String jobTrackerJSP=jtURL + "/jobtracker.jsp?a=b";
+  try {
+    validateJobTrackerJSPAccess(jtURL);
+    validateJobDetailsJSPAccess(jobid,jtURL);
+    validateTaskGraphServletAccess(jobid,jtURL);
+    validateJobTasksJSPAccess(jobid,jtURL);
+    validateJobConfJSPAccess(jobid,jtURL);
+    validateJobFailuresJSPAccess(jobid,jtURL);
+    valiateJobBlacklistedTrackerJSPAccess(jobid,jtURL);
+    validateJobTrackerJSPSetPriorityAction(jobid,jtURL);
+    TaskID tipId=getTIPId(cluster,jobid);
+    validateTaskStatsJSPAccess(jobid,jtURL,tipId);
+    validateTaskDetailsJSPAccess(jobid,jtURL,tipId);
+    validateJobTrackerJSPKillJobAction(jobid,jtURL);
+  }
+  finally {
+    if (!job.isComplete()) {
+      LOG.info("Killing job " + jobid + " from finally block");
+      assertEquals(HttpURLConnection.HTTP_OK,getHttpStatusCode(jobTrackerJSP + "&killJobs=true&jobCheckBox=" + jobid.toString(),jobSubmitter,"GET"));
+    }
+  }
+  validateJobDetailsJSPKillJob(cluster,clusterConf,jtURL);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,viewAndModifyColleague);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,jobSubmitter);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,mrOwner);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,superGroupMember);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,mrAdminUser);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,mrAdminGroupMember);
+  confirmJobTrackerJSPKillJobAsUser(cluster,conf,jtURL,qAdmin);
+  validateKillMultipleJobs(cluster,conf,jtURL);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

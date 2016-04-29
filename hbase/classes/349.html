@@ -1,0 +1,137 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestMasterOperationsForRegionReplicas (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCreateTableWithSingleReplica() throws Exception {
+  final int numRegions=3;
+  final int numReplica=1;
+  final TableName table=TableName.valueOf("singleReplicaTable");
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.setRegionReplication(numReplica);
+    desc.addFamily(new HColumnDescriptor("family"));
+    ADMIN.createTable(desc,Bytes.toBytes("A"),Bytes.toBytes("Z"),numRegions);
+    validateNumberOfRowsInMeta(table,numRegions,ADMIN.getConnection());
+    List<HRegionInfo> hris=MetaTableAccessor.getTableRegions(ADMIN.getConnection(),table);
+    assert (hris.size() == numRegions * numReplica);
+  }
+  finally {
+    ADMIN.disableTable(table);
+    ADMIN.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testCreateTableWithMultipleReplicas() throws Exception {
+  final TableName table=TableName.valueOf("fooTable");
+  final int numRegions=3;
+  final int numReplica=2;
+  try {
+    HTableDescriptor desc=new HTableDescriptor(table);
+    desc.setRegionReplication(numReplica);
+    desc.addFamily(new HColumnDescriptor("family"));
+    ADMIN.createTable(desc,Bytes.toBytes("A"),Bytes.toBytes("Z"),numRegions);
+    TEST_UTIL.waitTableEnabled(table);
+    validateNumberOfRowsInMeta(table,numRegions,ADMIN.getConnection());
+    List<HRegionInfo> hris=MetaTableAccessor.getTableRegions(ADMIN.getConnection(),table);
+    assert (hris.size() == numRegions * numReplica);
+    for (int i=0; i < numRegions; i++) {
+      for (int j=0; j < numReplica; j++) {
+        HRegionInfo replica=RegionReplicaUtil.getRegionInfoForReplica(hris.get(i),j);
+        RegionState state=TEST_UTIL.getHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionState(replica);
+        assert (state != null);
+      }
+    }
+    List<Result> metaRows=MetaTableAccessor.fullScanRegions(ADMIN.getConnection());
+    int numRows=0;
+    for (    Result result : metaRows) {
+      RegionLocations locations=MetaTableAccessor.getRegionLocations(result);
+      HRegionInfo hri=locations.getRegionLocation().getRegionInfo();
+      if (!hri.getTable().equals(table))       continue;
+      numRows+=1;
+      HRegionLocation[] servers=locations.getRegionLocations();
+      assert (servers.length == 2);
+      assert (!servers[0].equals(servers[1]));
+    }
+    assert (numRows == numRegions);
+    validateFromSnapshotFromMeta(TEST_UTIL,table,numRegions,numReplica,ADMIN.getConnection());
+    ServerName master=TEST_UTIL.getHBaseClusterInterface().getClusterStatus().getMaster();
+    TEST_UTIL.getHBaseClusterInterface().stopMaster(master);
+    TEST_UTIL.getHBaseClusterInterface().waitForMasterToStop(master,30000);
+    TEST_UTIL.getHBaseClusterInterface().startMaster(master.getHostname(),master.getPort());
+    TEST_UTIL.getHBaseClusterInterface().waitForActiveAndReadyMaster();
+    for (int i=0; i < numRegions; i++) {
+      for (int j=0; j < numReplica; j++) {
+        HRegionInfo replica=RegionReplicaUtil.getRegionInfoForReplica(hris.get(i),j);
+        RegionState state=TEST_UTIL.getHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionState(replica);
+        assert (state != null);
+      }
+    }
+    validateFromSnapshotFromMeta(TEST_UTIL,table,numRegions,numReplica,ADMIN.getConnection());
+    TEST_UTIL.getConfiguration().setBoolean("hbase.master.startup.retainassign",true);
+    TEST_UTIL.shutdownMiniHBaseCluster();
+    TEST_UTIL.startMiniHBaseCluster(1,numSlaves);
+    TEST_UTIL.waitTableEnabled(table);
+    validateFromSnapshotFromMeta(TEST_UTIL,table,numRegions,numReplica,ADMIN.getConnection());
+    TEST_UTIL.shutdownMiniHBaseCluster();
+    TEST_UTIL.startMiniHBaseCluster(1,1);
+    TEST_UTIL.waitTableEnabled(table);
+    validateSingleRegionServerAssignment(ADMIN.getConnection(),numRegions,numReplica);
+    for (int i=1; i < numSlaves; i++) {
+      TEST_UTIL.getMiniHBaseCluster().startRegionServer();
+    }
+    ADMIN.disableTable(table);
+    assert (ADMIN.isTableDisabled(table));
+    desc.setRegionReplication(numReplica + 1);
+    ADMIN.modifyTable(table,desc);
+    ADMIN.enableTable(table);
+    assert (ADMIN.isTableEnabled(table));
+    List<HRegionInfo> regions=TEST_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionsOfTable(table);
+    assert (regions.size() == numRegions * (numReplica + 1));
+    ADMIN.disableTable(table);
+    desc.setRegionReplication(numReplica);
+    ADMIN.modifyTable(table,desc);
+    ADMIN.enableTable(table);
+    assert (ADMIN.isTableEnabled(table));
+    regions=TEST_UTIL.getMiniHBaseCluster().getMaster().getAssignmentManager().getRegionStates().getRegionsOfTable(table);
+    assert (regions.size() == numRegions * numReplica);
+    hris=MetaTableAccessor.getTableRegions(ADMIN.getConnection(),table);
+    assert (hris.size() == numRegions * numReplica);
+    Map<HRegionInfo,Integer> defaultReplicas=new HashMap<HRegionInfo,Integer>();
+    for (    HRegionInfo hri : hris) {
+      Integer i;
+      HRegionInfo regionReplica0=RegionReplicaUtil.getRegionInfoForDefaultReplica(hri);
+      defaultReplicas.put(regionReplica0,(i=defaultReplicas.get(regionReplica0)) == null ? 1 : i + 1);
+    }
+    assert (defaultReplicas.size() == numRegions);
+    Collection<Integer> counts=new HashSet<Integer>(defaultReplicas.values());
+    assert (counts.size() == 1 && counts.contains(new Integer(numReplica)));
+  }
+  finally {
+    ADMIN.disableTable(table);
+    ADMIN.deleteTable(table);
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  if (ADMIN != null)   ADMIN.close();
+  if (CONNECTION != null && !CONNECTION.isClosed())   CONNECTION.close();
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

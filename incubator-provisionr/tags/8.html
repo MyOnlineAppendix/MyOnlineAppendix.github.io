@@ -1,0 +1,768 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspInternalCallVerifier</h3><kbd>Verifies values of objects/variables related to AUT calls</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.provisionr.amazon.activities.PublishListOfMachinesTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testPublishListOfMachines() throws Exception {
+  AmazonEC2 client=mock(AmazonEC2.class);
+  ProviderClientCache clientCache=mock(ProviderClientCache.class);
+  when(clientCache.get(Matchers.<Provider>any())).thenReturn(client);
+  DelegateExecution execution=mock(DelegateExecution.class);
+  List<String> instanceIds=Lists.newArrayList("i-123","i-456");
+  when(execution.getVariable(ProcessVariables.INSTANCE_IDS)).thenReturn(instanceIds);
+  when(client.describeInstances(Matchers.<DescribeInstancesRequest>any())).thenReturn(new DescribeInstancesResult().withReservations(new Reservation().withInstances(new Instance().withInstanceId("i-123").withPublicDnsName("i1.amazonaws.com").withPublicIpAddress("1.2.3.4").withPrivateDnsName("i1.internal").withPrivateIpAddress("10.1.2.3"),new Instance().withInstanceId("i-456").withPublicDnsName("i2.amazonaws.com").withPublicIpAddress("5.6.7.8").withPrivateDnsName("i2.internal").withPrivateIpAddress("10.4.5.6"))));
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  AmazonActivity activity=new PublishListOfMachines(clientCache);
+  activity.execute(client,null,execution);
+  @SuppressWarnings("unchecked") List<Machine> machines=(List<Machine>)collector.getVariable(CoreProcessVariables.MACHINES);
+  assertThat(machines).hasSize(2);
+  assertThat(machines.get(0).getPublicDnsName()).isEqualTo("i1.amazonaws.com");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.amazon.activities.RunOnDemandInstancesLiveTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testRunInstancesWithABaseImageId() throws Exception {
+  when(software.getImageId()).thenReturn(UBUNTU_AMI_ID);
+  when(pool.getSoftware()).thenReturn(software);
+  activity.execute(execution);
+  @SuppressWarnings("unchecked") List<String> instanceIds=(List<String>)collector.getVariable(ProcessVariables.INSTANCE_IDS);
+  DescribeInstancesResult result=client.describeInstances(new DescribeInstancesRequest().withInstanceIds(instanceIds));
+  Instance instance=result.getReservations().get(0).getInstances().get(0);
+  assertThat(instance.getImageId()).isEqualTo(UBUNTU_AMI_ID);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testRunInstancesWithBlockDevices() throws Exception {
+  BlockDevice blockDevice=mock(BlockDevice.class);
+  when(blockDevice.getSize()).thenReturn(8);
+  when(blockDevice.getName()).thenReturn("/dev/sda1");
+  BlockDevice blockDevice2=mock(BlockDevice.class);
+  when(blockDevice2.getSize()).thenReturn(16);
+  when(blockDevice2.getName()).thenReturn("/dev/sda4");
+  when(hardware.getBlockDevices()).thenReturn(Lists.newArrayList(blockDevice,blockDevice2));
+  activity.execute(execution);
+  Uninterruptibles.sleepUninterruptibly(30,TimeUnit.SECONDS);
+  @SuppressWarnings("unchecked") List<String> instanceIds=(List<String>)collector.getVariable(ProcessVariables.INSTANCE_IDS);
+  DescribeInstancesResult result=client.describeInstances(new DescribeInstancesRequest().withInstanceIds(instanceIds));
+  Instance instance=result.getReservations().get(0).getInstances().get(0);
+  List<InstanceBlockDeviceMapping> bdm=instance.getBlockDeviceMappings();
+  assertThat(bdm).hasSize(2);
+  List<String> volumeIds=Lists.newArrayList();
+  for (int i=0; i < bdm.size(); i++) {
+    assertThat(bdm.get(i).getDeviceName()).isEqualTo("/dev/sda" + ((i + 1) * (i + 1)));
+    assertThat(bdm.get(i).getEbs().getDeleteOnTermination()).isTrue();
+    volumeIds.add(bdm.get(i).getEbs().getVolumeId());
+  }
+  DescribeVolumesResult volumesResult=client.describeVolumes(new DescribeVolumesRequest().withVolumeIds(volumeIds));
+  for (  Volume volume : volumesResult.getVolumes()) {
+    assertThat(volume.getState()).isIn(Lists.newArrayList("creating","available","in-use"));
+  }
+  assertThat(volumesResult.getVolumes().get(0).getSize()).isNotEqualTo(volumesResult.getVolumes().get(1).getSize());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testRunInstances() throws Exception {
+  activity.execute(execution);
+  verify(execution).setVariable(eq(ProcessVariables.RESERVATION_ID),anyString());
+  verify(execution).setVariable(eq(ProcessVariables.INSTANCE_IDS),any());
+  @SuppressWarnings("unchecked") List<String> instanceIds=(List<String>)collector.getVariable(ProcessVariables.INSTANCE_IDS);
+  activity.execute(execution);
+  DescribeInstancesResult result=client.describeInstances(new DescribeInstancesRequest().withInstanceIds(instanceIds));
+  assertThat(result.getReservations()).hasSize(1);
+  assertThat(result.getReservations().get(0).getInstances()).hasSize(1);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.amazon.activities.SetupAdminAccessTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePuppetScript() throws Exception {
+  Pool pool=mock(Pool.class);
+  final AdminAccess adminAccess=AdminAccess.builder().privateKey(TestConstants.PRIVATE_KEY).publicKey(TestConstants.PUBLIC_KEY).username(System.getProperty("user.name")).createAdminAccess();
+  when(pool.getAdminAccess()).thenReturn(adminAccess);
+  PuppetActivity activity=new SetupAdminAccess();
+  String content=activity.createPuppetScript(pool,null);
+  final String username=adminAccess.getUsername();
+  assertThat(content).contains(username).contains(adminAccess.getPublicKey().split(" ")[1]).contains(String.format("user { \"%s\":",username)).contains(String.format("file { \"/home/%s/.ssh\":",username));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.amazon.config.DefaultProviderConfigTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testProviderWithNoRegionAndEndpoint(){
+  DefaultProviderConfig config=new DefaultProviderConfig("access","secret","","");
+  Optional<Provider> provider=config.createProvider();
+  assertThat(provider.isPresent()).isTrue();
+  assertThat(provider.get().getEndpoint().isPresent()).isFalse();
+  assertThat(provider.get().getOptions().containsKey("region")).isFalse();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.amazon.core.ImageTableTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testLoadAmiTableFromResource() throws IOException {
+  ImageTable table=ImageTable.fromCsvResource("/org/apache/provisionr/amazon/ubuntu.csv");
+  String id=table.query().filterBy("region","us-east-1").filterBy("version","12.04 LTS").filterBy("arch","amd64").filterBy("type","instance-store").singleResult();
+  assertThat(id).isEqualTo("ami-9a873ff3");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.amazon.functions.ConvertIpPermissionToRuleAndBackTest </h4><pre class="type-11 type-8 type-12 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConvertIcmpPermissionToRule(){
+  IpPermission expected=new IpPermission().withIpProtocol("icmp").withFromPort(-1).withToPort(-1).withIpRanges("0.0.0.0/0");
+  Rule rule=ConvertIpPermissionToRule.FUNCTION.apply(expected);
+  assertNotNull(rule);
+  assertThat(rule.getProtocol()).isEqualTo(Protocol.ICMP);
+  assertThat(rule.getCidr()).isEqualTo("0.0.0.0/0");
+  IpPermission actual=ConvertRuleToIpPermission.FUNCTION.apply(rule);
+  assertThat(actual).isEqualTo(expected);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-12 type-4 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testConvertTcpIpPermissionToRuleAndBack(){
+  IpPermission expected=new IpPermission().withFromPort(1).withToPort(1024).withIpProtocol("tcp").withIpRanges("0.0.0.0/0");
+  Rule rule=ConvertIpPermissionToRule.FUNCTION.apply(expected);
+  assertNotNull(rule);
+  assertThat(rule.getCidr()).isEqualTo("0.0.0.0/0");
+  assertThat(rule.getProtocol()).isEqualTo(Protocol.TCP);
+  assertThat(rule.getPorts().lowerEndpoint()).isEqualTo(1);
+  assertThat(rule.getPorts().upperEndpoint()).isEqualTo(1024);
+  IpPermission actual=ConvertRuleToIpPermission.FUNCTION.apply(rule);
+  assertThat(actual).isEqualTo(expected);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.access.AdminAccessTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  AdminAccess adminAccess=AdminAccess.builder().username("admin").publicKey("ssh-rsa AAAAB3N").privateKey("-----BEGIN RSA PRIVATE KEY-----\n").createAdminAccess();
+  assertThat(adminAccess.getUsername()).isEqualTo("admin");
+  assertThat(adminAccess.toBuilder().createAdminAccess()).isEqualTo(adminAccess);
+  assertSerializable(adminAccess,AdminAccess.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.network.NetworkTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  final Rule sshRule=Rule.builder().anySource().port(22).tcp().createRule();
+  Network network=Network.builder().type("default").addRules(sshRule,Rule.builder().anySource().port(80).tcp().createRule(),Rule.builder().anySource().protocol(Protocol.ICMP).createRule()).createNetwork();
+  assertThat(network.getType()).isEqualTo("default");
+  assertThat(network.getIngress()).contains(sshRule);
+  assertThat(network.toBuilder().createNetwork()).isEqualTo(network);
+  assertSerializable(network,Network.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.pool.MachineTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  final Machine machine=Machine.builder().externalId("i-12345").publicDnsName("machine1.example.com").publicIp("62.231.75.237").privateDnsName("something.internal").privateIp("10.0.3.45").option("key","value").createMachine();
+  assertThat(machine.getPrivateIp()).startsWith("10.0");
+  assertThat(machine.getSshPort()).isEqualTo(22);
+  assertThat(machine.toBuilder().createMachine()).isEqualTo(machine);
+  assertSerializable(machine,Machine.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.pool.PoolTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  final Provider provider=Provider.builder().id("amazon").accessKey("access").secretKey("secret").createProvider();
+  final Network network=Network.builder().addRules(Rule.builder().anySource().port(22).tcp().createRule(),Rule.builder().anySource().port(8088).tcp().createRule()).createNetwork();
+  final AdminAccess adminAccess=AdminAccess.builder().username("admin").publicKey("ssh-rsa AAAAB3N").privateKey("-----BEGIN RSA PRIVATE KEY-----\n").createAdminAccess();
+  final Software software=Software.builder().packages("hadoop-0.20","hadoop-0.20-native").createSoftware();
+  Pool pool=Pool.builder().provider(provider).network(network).adminAccess(adminAccess).software(software).hardware(Hardware.builder().type("large").createHardware()).minSize(20).expectedSize(25).bootstrapTimeInSeconds(60 * 15).createPool();
+  assertThat(pool.getSoftware().getPackages()).contains("hadoop-0.20");
+  assertThat(pool.toBuilder().createPool()).isEqualTo(pool);
+  assertSerializable(pool,Pool.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.provider.ProviderTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  Provider provider=Provider.builder().id("aws-ec2").accessKey("access").secretKey("secret").option("location","eu-west-1").createProvider();
+  assertThat(provider.getAccessKey()).isEqualTo("access");
+  assertThat(provider.getOptions()).containsKey("location");
+  assertThat(provider.toBuilder().createProvider()).isEqualTo(provider);
+  assertSerializable(provider,Provider.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.software.SoftwareTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSerialization(){
+  final Repository repository=Repository.builder().name("bigtop").addEntry("deb http://bigtop.s3.amazonaws.com/releases/0.5.0/ubuntu/lucid/x86_64  bigtop contrib").key("-----BEGIN PGP PUBLIC KEY BLOCK-----\n" + "Version: GnuPG v1.4.10 (GNU/Linux)\n" + "\n"+ "[....]").createRepository();
+  Software software=Software.builder().imageId("default").repository(repository).packages("vim","git-core","bigtop-utils").file("http://provisionr.incubator.apache.org/something.tar.gz","/root/something.tar.gz").option("provider","specific").createSoftware();
+  assertThat(software.getImageId()).isEqualTo("default");
+  assertThat(software.toBuilder().createSoftware()).isEqualTo(software);
+  assertSerializable(software,Software.class);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.api.util.BuilderWithOptionsTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testLoadOptionsFromProperties(){
+  Properties properties=new Properties();
+  properties.setProperty("K1","V1");
+  TestBuilder builder=new TestBuilder().options(properties);
+  assertThat(builder.buildOptions()).containsKey("K1").containsValue("V1");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.cloudstack.core.ConversionsTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testConvertSinglePortRangeIngressRuleToRule() throws Exception {
+  final IngressRule ingressRule=IngressRule.builder().id("rule1").protocol("tcp").startPort(22).endPort(22).CIDR("0.0.0.1/24").build();
+  Rule rule=ConvertIngressRuleToRule.FUNCTION.apply(ingressRule);
+  assertThat(rule.getProtocol()).isEqualTo(Protocol.TCP);
+  assertThat(rule.getCidr()).isEqualTo(ingressRule.getCIDR());
+  assertThat(rule.getPorts().lowerEndpoint()).isEqualTo(ingressRule.getStartPort());
+  assertThat(rule.getPorts().upperEndpoint()).isEqualTo(ingressRule.getEndPort());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testConvertIngressRuleToRuleICMP() throws Exception {
+  final IngressRule ingressRule=IngressRule.builder().id("rule1").protocol("icmp").ICMPCode(SecurityGroups.DEFAULT_ICMP_CODE).ICMPType(SecurityGroups.DEFAULT_ICMP_TYPE).CIDR("10.0.0.0/24").build();
+  Rule rule=ConvertIngressRuleToRule.FUNCTION.apply(ingressRule);
+  assertThat(rule.getProtocol()).isEqualTo(Protocol.ICMP);
+  assertThat(rule.getCidr()).isEqualTo(ingressRule.getCIDR());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.commands.CreatePoolCommandTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testBlockDeviceOptions(){
+  CreatePoolCommand command=newPoolCommandWithMockedAdminAccess();
+  command.setId("service");
+  command.setKey("key");
+  Provisionr service=mock(Provisionr.class);
+  Provider provider=newProviderMockWithBuilder();
+  when(service.getDefaultProvider()).thenReturn(Optional.of(provider));
+  Pool pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+  assertThat(pool.getHardware().getBlockDevices()).isEmpty();
+  command.setBlockDeviceOptions(Lists.newArrayList("/dev/sda2:8","/dev/sda9:2"));
+  pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+  assertThat(pool.getHardware().getBlockDevices()).hasSize(2);
+  assertThat(pool.getHardware().getBlockDevices().get(0).getSize()).isEqualTo(8);
+  assertThat(pool.getHardware().getBlockDevices().get(0).getName()).isEqualTo("/dev/sda2");
+  assertThat(pool.getHardware().getBlockDevices().get(1).getSize()).isEqualTo(2);
+  assertThat(pool.getHardware().getBlockDevices().get(1).getName()).isEqualTo("/dev/sda9");
+  command.setBlockDeviceOptions(Lists.newArrayList("/dev/sda1:7"));
+  pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+  assertThat(pool.getHardware().getBlockDevices()).hasSize(1);
+  assertThat(pool.getHardware().getBlockDevices().get(0).getSize()).isEqualTo(7);
+  command.setBlockDeviceOptions(Lists.newArrayList("this=breaks"));
+  exception.expect(IllegalArgumentException.class);
+  pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+  command.setBlockDeviceOptions(Lists.newArrayList("/dev/sda1"));
+  exception.expect(IllegalArgumentException.class);
+  pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePoolWithTemplate(){
+  final PoolTemplate template=XmlTemplate.newXmlTemplate(readDefaultTemplate("test-1"));
+  CreatePoolCommand command=newPoolCommandWithMockedAdminAccess(template);
+  command.setId("service");
+  command.setKey("key");
+  command.setTemplate(template.getId());
+  Provisionr service=mock(Provisionr.class);
+  Provider provider=newProviderMockWithBuilder();
+  when(service.getDefaultProvider()).thenReturn(Optional.of(provider));
+  Pool pool=command.createPoolFromArgumentsAndServiceDefaults(service);
+  assertThat(pool.getSoftware().getRepositories()).hasSize(1);
+  assertThat(pool.getSoftware().getPackages()).contains("package-1a");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePoolStartsTheManagementProcess() throws Exception {
+  final Provisionr service=newProvisionrMockWithId(TEST_PROVISIONR_ID);
+  final Pool pool=mock(Pool.class);
+  final List<Provisionr> services=ImmutableList.of(service);
+  final List<PoolTemplate> templates=ImmutableList.of();
+  CreatePoolCommand command=new CreatePoolCommand(services,templates,PATH_TO_PUBLIC_KEY,PATH_TO_PRIVATE_KEY){
+    @Override protected Pool createPoolFromArgumentsAndServiceDefaults(    Provisionr service){
+      return pool;
+    }
+  }
+;
+  command.setId(TEST_PROVISIONR_ID);
+  command.setKey(TEST_BUSINESS_KEY);
+  CommandSession session=mock(CommandSession.class);
+  String output=(String)command.execute(session);
+  verify(service).startPoolManagementProcess(TEST_BUSINESS_KEY,pool);
+  assertThat(output).isEqualTo("Pool management process started (id: null)");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testProviderSpecificOptions(){
+  CreatePoolCommand command=newPoolCommandWithMockedAdminAccess();
+  command.setId("service");
+  command.setKey("key");
+  command.setProviderOptions(Lists.newArrayList("spotBid=0.07"));
+  Provisionr service=mock(Provisionr.class);
+  Provider provider=newProviderMockWithBuilder();
+  when(service.getDefaultProvider()).thenReturn(Optional.of(provider));
+  command.createPoolFromArgumentsAndServiceDefaults(service);
+  @SuppressWarnings("unchecked") ArgumentCaptor<Map<String,String>> argument=(ArgumentCaptor<Map<String,String>>)(Object)ArgumentCaptor.forClass(Map.class);
+  verify(provider.toBuilder()).options(argument.capture());
+  assertThat(argument.getValue().containsKey("spotBid")).isTrue();
+  assertThat(argument.getValue().get("spotBid")).isEqualTo("0.07");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.ProvisionrSupportTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testConvertTimeout(){
+  ProvisionrSupport provisionr=new ProvisionrSupportTestable();
+  assertThat(provisionr.convertTimeoutToISO8601TimeDuration(600)).isEqualTo("PT10M");
+  assertThat(provisionr.convertTimeoutToISO8601TimeDuration(601)).isEqualTo("PT601S");
+  assertThat(provisionr.convertTimeoutToISO8601TimeDuration(300)).isEqualTo("PT5M");
+  assertThat(provisionr.convertTimeoutToISO8601TimeDuration(42)).isEqualTo("PT42S");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.SshLiveTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreateFileOverSsh() throws IOException {
+  SSHClient client=Ssh.newClient(localhost,adminAccess,1000);
+  try {
+    String destination="/tmp/" + UUID.randomUUID().toString();
+    String content=UUID.randomUUID().toString();
+    Ssh.createFile(client,content,0600,destination);
+    Session session=client.startSession();
+    try {
+      final Session.Command command=session.exec("set +x +e && cat " + destination);
+      String output=CharStreams.toString(new InputStreamReader(command.getInputStream()));
+      command.join();
+      assertThat(command.getExitStatus()).isEqualTo(0);
+      assertThat(output).contains(content);
+    }
+  finally {
+      session.close();
+    }
+  }
+  finally {
+    client.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testConnectToLocalhostAndCollectOutput() throws IOException {
+  SSHClient client=Ssh.newClient(localhost,adminAccess,1000);
+  try {
+    Session session=client.startSession();
+    try {
+      final Session.Command command=session.exec("echo 'stdout' && echo 'stderr' 1>&2");
+      String stdout=CharStreams.toString(new InputStreamReader(command.getInputStream()));
+      String stderr=CharStreams.toString(new InputStreamReader(command.getErrorStream()));
+      command.join();
+      assertThat(command.getExitStatus()).isEqualTo(0);
+      assertThat(command.getExitErrorMessage()).isNull();
+      assertThat(stdout).contains("stdout");
+      assertThat(stderr).contains("stderr");
+    }
+  finally {
+      session.close();
+    }
+  }
+  finally {
+    client.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activiti.ConfigurableFailedJobCommandFactoryTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testConfigurableNumberOfRetries() throws InterruptedException {
+  DefaultJobExecutor jobExecutor=new DefaultJobExecutor();
+  jobExecutor.setCorePoolSize(2);
+  jobExecutor.setQueueSize(2);
+  jobExecutor.setMaxJobsPerAcquisition(5);
+  jobExecutor.setWaitTimeInMillis(50);
+  jobExecutor.setLockTimeInMillis(180000);
+  ProcessEngine processEngine=new StandaloneInMemProcessEngineConfiguration().setJobExecutorActivate(true).setJobExecutor(jobExecutor).setFailedJobCommandFactory(new ConfigurableFailedJobCommandFactory(2,1)).buildProcessEngine();
+  processEngine.getRepositoryService().createDeployment().addClasspathResource("diagrams/alwaysFail.bpmn20.xml").deploy();
+  Stopwatch stopwatch=new Stopwatch().start();
+  processEngine.getRuntimeService().startProcessInstanceByKey("alwaysFail");
+  while (AlwaysFailTask.COUNTER.get() != 3) {
+    TimeUnit.MILLISECONDS.sleep(100);
+  }
+  stopwatch.stop();
+  assertThat(stopwatch.elapsedTime(TimeUnit.SECONDS)).isGreaterThanOrEqualTo(2);
+  processEngine.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.CheckProcessesEndedTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+/** 
+ * We consider an invalid process instance ID as ended by default
+ */
+@Test public void testWithOneInvalidProcessId() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  when(execution.getVariable(eq(PROCESS_IDS))).thenReturn(Lists.newArrayList("1","invalid"));
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  RuntimeService runtimeService=mockRuntimeService(ImmutableMap.of("1",mockProcessInstance(true)),"invalid");
+  JavaDelegate delegate=new CheckProcessesEnded(runtimeService,PROCESS_IDS,RESULT);
+  delegate.execute(execution);
+  assertThat((Boolean)collector.getVariable(RESULT)).isTrue();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testWithAListOfEndedProcesses() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  when(execution.getVariable(eq(PROCESS_IDS))).thenReturn(Lists.newArrayList("1","2"));
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  RuntimeService runtimeService=mockRuntimeService(ImmutableMap.of("1",mockProcessInstance(true),"2",mockProcessInstance(true)));
+  JavaDelegate delegate=new CheckProcessesEnded(runtimeService,PROCESS_IDS,RESULT);
+  delegate.execute(execution);
+  assertThat((Boolean)collector.getVariable(RESULT)).isTrue();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testWithOneEndedAndOneStillRunning() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  when(execution.getVariable(eq(PROCESS_IDS))).thenReturn(Lists.newArrayList("1","2"));
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  RuntimeService runtimeService=mockRuntimeService(ImmutableMap.of("1",mockProcessInstance(true),"2",mockProcessInstance(false)));
+  JavaDelegate delegate=new CheckProcessesEnded(runtimeService,PROCESS_IDS,RESULT);
+  delegate.execute(execution);
+  assertThat((Boolean)collector.getVariable(RESULT)).isFalse();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.DownloadFilesTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePuppetScript() throws Exception {
+  Software software=Software.builder().file("http://provisionr.incubator.apache.org/test.tar.gz","/opt/test.tar.gz").file("http://google.com","/opt/google.html").createSoftware();
+  Pool pool=mock(Pool.class);
+  when(pool.getSoftware()).thenReturn(software);
+  PuppetActivity activity=new DownloadFiles();
+  String content=activity.createPuppetScript(pool,null);
+  assertThat(content).contains("download_file {\"/opt/test.tar.gz\":\n" + "  uri => \"http://provisionr.incubator.apache.org/test.tar.gz\"\n" + "}").contains("download_file {\"/opt/google.html\":\n" + "  uri => \"http://google.com\"\n" + "}");
+  assertThat(activity.createAdditionalFiles(pool,null)).isEmpty();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.InstallPackagesTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePuppetScript() throws Exception {
+  Pool pool=mock(Pool.class);
+  when(pool.getSoftware()).thenReturn(Software.builder().packages("git-core","vim").createSoftware());
+  PuppetActivity activity=new InstallPackages();
+  String content=activity.createPuppetScript(pool,null);
+  assertThat(content).contains("Package { ensure => \"installed\" }\n" + "\n" + "package { \"git-core\": }\n"+ "package { \"vim\": }\n");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.InstallRepositoriesTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testCreatePuppetScript() throws Exception {
+  Repository repository=Repository.builder().name("bigtop").addEntry("deb http://bigtop.s3.amazonaws.com/releases/0.5.0/ubuntu/lucid/x86_64  bigtop contrib").key("-----BEGIN PGP PUBLIC KEY BLOCK-----\n" + "Version: GnuPG v1.4.10 (GNU/Linux)\n" + "\n"+ "[....]").createRepository();
+  Pool pool=mock(Pool.class);
+  when(pool.getSoftware()).thenReturn(Software.builder().repository(repository).createSoftware());
+  PuppetActivity activity=new InstallRepositories();
+  String content=activity.createPuppetScript(pool,null);
+  assertThat(content).contains("apt::repository { \"bigtop\":\n" + "  content => \"deb http://bigtop.s3.amazonaws.com/releases/0.5.0/ubuntu/lucid/x86_64  bigtop contrib\\n\",\n" + "  key => \"-----BEGIN PGP PUBLIC KEY BLOCK-----\\nVersion: GnuPG v1.4.10 (GNU/Linux)\\n\\n[....]\"\n"+ "}");
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.IsMachinePortOpenTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testWithRandomClosedPort() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  when(execution.getVariable(eq(IsMachinePortOpen.MACHINE))).thenReturn(Machine.builder().localhost().createMachine());
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  JavaDelegate delegate=new IsMachinePortOpen(RESULT,findRandomNotUsedPort());
+  delegate.execute(execution);
+  assertThat((Boolean)collector.getVariable(RESULT)).isFalse();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testWithRandomOpenPort() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  when(execution.getVariable(eq(IsMachinePortOpen.MACHINE))).thenReturn(Machine.builder().localhost().createMachine());
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  ServerSocket socket=null;
+  try {
+    socket=new ServerSocket(0);
+    JavaDelegate delegate=new IsMachinePortOpen(RESULT,socket.getLocalPort());
+    delegate.execute(execution);
+    assertThat((Boolean)collector.getVariable(RESULT)).isTrue();
+  }
+  finally {
+    if (socket != null) {
+      socket.close();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.activities.SpawnProcessForEachMachineTest </h4><pre class="type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testSpawnSampleProcessForLocalhost() throws Exception {
+  DelegateExecution execution=mock(DelegateExecution.class);
+  Pool pool=mock(Pool.class,withSettings().serializable());
+  Software software=mock(Software.class,withSettings().serializable());
+  when(software.isCachedImage()).thenReturn(false);
+  when(pool.getSoftware()).thenReturn(software);
+  when(execution.getVariable(eq(CoreProcessVariables.POOL))).thenReturn(pool);
+  when(execution.getVariable(eq(CoreProcessVariables.POOL_BUSINESS_KEY))).thenReturn(BUSINESS_KEY);
+  List<Machine> machines=Lists.newArrayList(Machine.builder().localhost().createMachine(),Machine.builder().localhost().externalId("local-2").createMachine());
+  when(execution.getVariable(eq(CoreProcessVariables.MACHINES))).thenReturn(machines);
+  ProcessVariablesCollector collector=new ProcessVariablesCollector();
+  collector.install(execution);
+  ProcessEngine processEngine=new StandaloneInMemProcessEngineConfiguration().setJobExecutorActivate(true).buildProcessEngine();
+  processEngine.getRepositoryService().createDeployment().addClasspathResource("diagrams/empty.bpmn20.xml").deploy();
+  try {
+    JavaDelegate delegate=new SpawnProcessForEachMachine(processEngine,EMPTY_PROCESS_KEY,"test",RESULT);
+    delegate.execute(execution);
+    @SuppressWarnings("unchecked") List<String> processInstanceIds=(List<String>)collector.getVariable(RESULT);
+    assertThat(processInstanceIds).hasSize(2);
+  }
+  finally {
+    processEngine.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.provisionr.core.templates.xml.ExampleTemplatesTest </h4><pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testApplyCdh3TemplateToNetworkAndSoftware() throws Exception {
+  XmlTemplate template=XmlTemplate.newXmlTemplate(readResource(DEFAULT_CDH3_TEMPLATE));
+  Network network=template.apply(Network.builder().createNetwork());
+  assertThat(network.getIngress()).contains(Rule.builder().anySource().tcp().port(8080).createRule());
+  Software software=template.apply(Software.builder().createSoftware());
+  assertThat(software.getPackages()).contains("hue").contains("hadoop-0.20");
+  assertThat(software.getFiles()).hasSize(1);
+  assertThat(software.getRepositories()).hasSize(2);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testLoadDefaultCdh3Template() throws Exception {
+  XmlTemplate template=XmlTemplate.newXmlTemplate(readResource(DEFAULT_CDH3_TEMPLATE));
+  assertThat(template.getId()).isEqualTo("cdh3");
+  assertThat(template.getPackages()).contains("hue");
+  assertThat(template.getOsVersion()).isEqualTo("10.04 LTS");
+  assertThat(template.getRepositories()).hasSize(2);
+  assertThat(template.getFiles()).hasSize(1);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-11 type-8 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies logic rules using matcher-style statements
+"></span><br>
+@Test public void testLoadDefaultJenkinsTemplate() throws Exception {
+  XmlTemplate template=XmlTemplate.newXmlTemplate(readResource(DEFAULT_JENKINS_TEMPLATE));
+  assertThat(template.getPorts()).contains(8080);
+  assertThat(template.getRepositories()).hasSize(1);
+  assertThat(template.getPackages()).contains("jenkins").contains("git-core");
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

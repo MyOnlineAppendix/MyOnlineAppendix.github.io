@@ -1,0 +1,260 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.master.TestMasterFailover (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-10 type-7 type-8 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Simple test of master failover.
+ * <p>
+ * Starts with three masters.  Kills a backup master.  Then kills the active
+ * master.  Ensures the final master becomes active and we can still contact
+ * the cluster.
+ * @throws Exception
+ */
+@Test(timeout=240000) public void testSimpleMasterFailover() throws Exception {
+  final int NUM_MASTERS=3;
+  final int NUM_RS=3;
+  HBaseTestingUtility TEST_UTIL=new HBaseTestingUtility();
+  TEST_UTIL.startMiniCluster(NUM_MASTERS,NUM_RS);
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  List<MasterThread> masterThreads=cluster.getMasterThreads();
+  for (  MasterThread mt : masterThreads) {
+    assertTrue(mt.isAlive());
+  }
+  int numActive=0;
+  int activeIndex=-1;
+  ServerName activeName=null;
+  HMaster active=null;
+  for (int i=0; i < masterThreads.size(); i++) {
+    if (masterThreads.get(i).getMaster().isActiveMaster()) {
+      numActive++;
+      activeIndex=i;
+      active=masterThreads.get(activeIndex).getMaster();
+      activeName=active.getServerName();
+    }
+  }
+  assertEquals(1,numActive);
+  assertEquals(NUM_MASTERS,masterThreads.size());
+  LOG.info("Active master " + activeName);
+  assertNotNull(active);
+  ClusterStatus status=active.getClusterStatus();
+  assertTrue(status.getMaster().equals(activeName));
+  assertEquals(2,status.getBackupMastersSize());
+  assertEquals(2,status.getBackupMasters().size());
+  int backupIndex=(activeIndex == 0 ? 1 : activeIndex - 1);
+  HMaster master=cluster.getMaster(backupIndex);
+  LOG.debug("\n\nStopping a backup master: " + master.getServerName() + "\n");
+  cluster.stopMaster(backupIndex,false);
+  cluster.waitOnMaster(backupIndex);
+  for (int i=0; i < masterThreads.size(); i++) {
+    if (masterThreads.get(i).getMaster().isActiveMaster()) {
+      assertTrue(activeName.equals(masterThreads.get(i).getMaster().getServerName()));
+      activeIndex=i;
+      active=masterThreads.get(activeIndex).getMaster();
+    }
+  }
+  assertEquals(1,numActive);
+  assertEquals(2,masterThreads.size());
+  int rsCount=masterThreads.get(activeIndex).getMaster().getClusterStatus().getServersSize();
+  LOG.info("Active master " + active.getServerName() + " managing "+ rsCount+ " regions servers");
+  assertEquals(4,rsCount);
+  assertNotNull(active);
+  status=active.getClusterStatus();
+  assertTrue(status.getMaster().equals(activeName));
+  assertEquals(1,status.getBackupMastersSize());
+  assertEquals(1,status.getBackupMasters().size());
+  LOG.debug("\n\nStopping the active master " + active.getServerName() + "\n");
+  cluster.stopMaster(activeIndex,false);
+  cluster.waitOnMaster(activeIndex);
+  assertTrue(cluster.waitForActiveAndReadyMaster());
+  LOG.debug("\n\nVerifying backup master is now active\n");
+  assertEquals(1,masterThreads.size());
+  active=masterThreads.get(0).getMaster();
+  assertNotNull(active);
+  status=active.getClusterStatus();
+  ServerName mastername=status.getMaster();
+  assertTrue(mastername.equals(active.getServerName()));
+  assertTrue(active.isActiveMaster());
+  assertEquals(0,status.getBackupMastersSize());
+  assertEquals(0,status.getBackupMasters().size());
+  int rss=status.getServersSize();
+  LOG.info("Active master " + mastername.getServerName() + " managing "+ rss+ " region servers");
+  assertEquals(4,rss);
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test region in pending_open/close when master failover
+ */
+@Test(timeout=180000) public void testPendingOpenOrCloseWhenMasterFailover() throws Exception {
+  final int NUM_MASTERS=1;
+  final int NUM_RS=1;
+  Configuration conf=HBaseConfiguration.create();
+  HBaseTestingUtility TEST_UTIL=new HBaseTestingUtility(conf);
+  TEST_UTIL.startMiniCluster(NUM_MASTERS,NUM_RS);
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  log("Cluster started");
+  List<MasterThread> masterThreads=cluster.getMasterThreads();
+  assertEquals(1,masterThreads.size());
+  assertTrue(cluster.waitForActiveAndReadyMaster());
+  HMaster master=masterThreads.get(0).getMaster();
+  assertTrue(master.isActiveMaster());
+  assertTrue(master.isInitialized());
+  Table onlineTable=TEST_UTIL.createTable(TableName.valueOf("onlineTable"),"family");
+  onlineTable.close();
+  HTableDescriptor offlineTable=new HTableDescriptor(TableName.valueOf(Bytes.toBytes("offlineTable")));
+  offlineTable.addFamily(new HColumnDescriptor(Bytes.toBytes("family")));
+  FileSystem filesystem=FileSystem.get(conf);
+  Path rootdir=FSUtils.getRootDir(conf);
+  FSTableDescriptors fstd=new FSTableDescriptors(conf,filesystem,rootdir);
+  fstd.createTableDescriptor(offlineTable);
+  HRegionInfo hriOffline=new HRegionInfo(offlineTable.getTableName(),null,null);
+  createRegion(hriOffline,rootdir,conf,offlineTable);
+  MetaTableAccessor.addRegionToMeta(master.getConnection(),hriOffline);
+  log("Regions in hbase:meta and namespace have been created");
+  assertEquals(3,cluster.countServedRegions());
+  HRegionInfo hriOnline=null;
+  try (RegionLocator locator=TEST_UTIL.getConnection().getRegionLocator(TableName.valueOf("onlineTable"))){
+    hriOnline=locator.getRegionLocation(HConstants.EMPTY_START_ROW).getRegionInfo();
+  }
+   RegionStates regionStates=master.getAssignmentManager().getRegionStates();
+  RegionStateStore stateStore=master.getAssignmentManager().getRegionStateStore();
+  RegionState oldState=regionStates.getRegionState(hriOnline);
+  RegionState newState=new RegionState(hriOnline,State.PENDING_CLOSE,oldState.getServerName());
+  stateStore.updateRegionState(HConstants.NO_SEQNUM,newState,oldState);
+  oldState=new RegionState(hriOffline,State.OFFLINE);
+  newState=new RegionState(hriOffline,State.PENDING_OPEN,newState.getServerName());
+  stateStore.updateRegionState(HConstants.NO_SEQNUM,newState,oldState);
+  HRegionInfo failedClose=new HRegionInfo(offlineTable.getTableName(),null,null);
+  createRegion(failedClose,rootdir,conf,offlineTable);
+  MetaTableAccessor.addRegionToMeta(master.getConnection(),failedClose);
+  oldState=new RegionState(failedClose,State.PENDING_CLOSE);
+  newState=new RegionState(failedClose,State.FAILED_CLOSE,newState.getServerName());
+  stateStore.updateRegionState(HConstants.NO_SEQNUM,newState,oldState);
+  HRegionInfo failedOpen=new HRegionInfo(offlineTable.getTableName(),null,null);
+  createRegion(failedOpen,rootdir,conf,offlineTable);
+  MetaTableAccessor.addRegionToMeta(master.getConnection(),failedOpen);
+  oldState=new RegionState(failedOpen,State.PENDING_OPEN);
+  newState=new RegionState(failedOpen,State.FAILED_OPEN,newState.getServerName());
+  stateStore.updateRegionState(HConstants.NO_SEQNUM,newState,oldState);
+  HRegionInfo failedOpenNullServer=new HRegionInfo(offlineTable.getTableName(),null,null);
+  LOG.info("Failed open NUll server " + failedOpenNullServer.getEncodedName());
+  createRegion(failedOpenNullServer,rootdir,conf,offlineTable);
+  MetaTableAccessor.addRegionToMeta(master.getConnection(),failedOpenNullServer);
+  oldState=new RegionState(failedOpenNullServer,State.OFFLINE);
+  newState=new RegionState(failedOpenNullServer,State.FAILED_OPEN,null);
+  stateStore.updateRegionState(HConstants.NO_SEQNUM,newState,oldState);
+  log("Aborting master");
+  cluster.abortMaster(0);
+  cluster.waitOnMaster(0);
+  log("Master has aborted");
+  log("Starting up a new master");
+  master=cluster.startMaster().getMaster();
+  log("Waiting for master to be ready");
+  cluster.waitForActiveAndReadyMaster();
+  log("Master is ready");
+  TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  regionStates=master.getAssignmentManager().getRegionStates();
+  assertTrue(regionStates.isRegionOnline(hriOffline));
+  assertTrue(regionStates.isRegionOnline(hriOnline));
+  assertTrue(regionStates.isRegionOnline(failedClose));
+  assertTrue(regionStates.isRegionOnline(failedOpenNullServer));
+  assertTrue(regionStates.isRegionOnline(failedOpen));
+  log("Done with verification, shutting down cluster");
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test meta in transition when master failover
+ */
+@Test(timeout=180000) public void testMetaInTransitionWhenMasterFailover() throws Exception {
+  final int NUM_MASTERS=1;
+  final int NUM_RS=1;
+  HBaseTestingUtility TEST_UTIL=new HBaseTestingUtility();
+  TEST_UTIL.startMiniCluster(NUM_MASTERS,NUM_RS);
+  MiniHBaseCluster cluster=TEST_UTIL.getHBaseCluster();
+  log("Cluster started");
+  log("Moving meta off the master");
+  HMaster activeMaster=cluster.getMaster();
+  HRegionServer rs=cluster.getRegionServer(0);
+  ServerName metaServerName=cluster.getLiveRegionServerThreads().get(0).getRegionServer().getServerName();
+  activeMaster.move(HRegionInfo.FIRST_META_REGIONINFO.getEncodedNameAsBytes(),Bytes.toBytes(metaServerName.getServerName()));
+  TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  assertEquals("Meta should be assigned on expected regionserver",metaServerName,activeMaster.getMetaTableLocator().getMetaRegionLocation(activeMaster.getZooKeeper()));
+  log("Aborting master");
+  activeMaster.abort("test-kill");
+  cluster.waitForMasterToStop(activeMaster.getServerName(),30000);
+  log("Master has aborted");
+  RegionState metaState=MetaTableLocator.getMetaRegionState(rs.getZooKeeper());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getServerName(),rs.getServerName());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getState(),State.OPEN);
+  log("Starting up a new master");
+  activeMaster=cluster.startMaster().getMaster();
+  log("Waiting for master to be ready");
+  cluster.waitForActiveAndReadyMaster();
+  log("Master is ready");
+  metaState=MetaTableLocator.getMetaRegionState(activeMaster.getZooKeeper());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getServerName(),rs.getServerName());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getState(),State.OPEN);
+  MetaTableLocator.setMetaLocation(activeMaster.getZooKeeper(),rs.getServerName(),State.PENDING_OPEN);
+  Region meta=rs.getFromOnlineRegions(HRegionInfo.FIRST_META_REGIONINFO.getEncodedName());
+  rs.removeFromOnlineRegions(meta,null);
+  ((HRegion)meta).close();
+  log("Aborting master");
+  activeMaster.abort("test-kill");
+  cluster.waitForMasterToStop(activeMaster.getServerName(),30000);
+  log("Master has aborted");
+  log("Starting up a new master");
+  activeMaster=cluster.startMaster().getMaster();
+  log("Waiting for master to be ready");
+  cluster.waitForActiveAndReadyMaster();
+  log("Master is ready");
+  TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  log("Meta was assigned");
+  metaState=MetaTableLocator.getMetaRegionState(activeMaster.getZooKeeper());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getServerName(),rs.getServerName());
+  assertEquals("hbase:meta should be onlined on RS",metaState.getState(),State.OPEN);
+  MetaTableLocator.setMetaLocation(activeMaster.getZooKeeper(),rs.getServerName(),State.PENDING_CLOSE);
+  log("Aborting master");
+  activeMaster.abort("test-kill");
+  cluster.waitForMasterToStop(activeMaster.getServerName(),30000);
+  log("Master has aborted");
+  rs.getRSRpcServices().closeRegion(null,RequestConverter.buildCloseRegionRequest(rs.getServerName(),HRegionInfo.FIRST_META_REGIONINFO.getEncodedName()));
+  log("Starting up a new master");
+  activeMaster=cluster.startMaster().getMaster();
+  log("Waiting for master to be ready");
+  cluster.waitForActiveAndReadyMaster();
+  log("Master is ready");
+  TEST_UTIL.waitUntilNoRegionsInTransition(60000);
+  log("Meta was assigned");
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

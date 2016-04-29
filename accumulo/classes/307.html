@@ -1,0 +1,69 @@
+<h3 style="margin:0px">Class: org.apache.accumulo.test.TotalQueuedIT (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=4 * 60 * 1000) public void test() throws Exception {
+  Random random=new Random();
+  Connector c=getConnector();
+  c.instanceOperations().setProperty(Property.TSERV_TOTAL_MUTATION_QUEUE_MAX.getKey(),"" + SMALL_QUEUE_SIZE);
+  String tableName=getUniqueNames(1)[0];
+  c.tableOperations().create(tableName);
+  c.tableOperations().setProperty(tableName,Property.TABLE_MAJC_RATIO.getKey(),"9999");
+  c.tableOperations().setProperty(tableName,Property.TABLE_FILE_MAX.getKey(),"999");
+  sleepUninterruptibly(1,TimeUnit.SECONDS);
+  byte row[]=new byte[250];
+  BatchWriterConfig cfg=new BatchWriterConfig();
+  cfg.setMaxWriteThreads(10);
+  cfg.setMaxLatency(1,TimeUnit.SECONDS);
+  cfg.setMaxMemory(1024 * 1024);
+  long realSyncs=getSyncs();
+  BatchWriter bw=c.createBatchWriter(tableName,cfg);
+  long now=System.currentTimeMillis();
+  long bytesSent=0;
+  for (int i=0; i < N; i++) {
+    random.nextBytes(row);
+    Mutation m=new Mutation(row);
+    m.put("","","");
+    bw.addMutation(m);
+    bytesSent+=m.estimatedMemoryUsed();
+  }
+  bw.close();
+  long diff=System.currentTimeMillis() - now;
+  double secs=diff / 1000.;
+  double syncs=bytesSent / SMALL_QUEUE_SIZE;
+  double syncsPerSec=syncs / secs;
+  System.out.println(String.format("Sent %d bytes in %f secs approximately %d syncs (%f syncs per sec)",bytesSent,secs,((long)syncs),syncsPerSec));
+  long update=getSyncs();
+  System.out.println("Syncs " + (update - realSyncs));
+  realSyncs=update;
+  c.instanceOperations().setProperty(Property.TSERV_TOTAL_MUTATION_QUEUE_MAX.getKey(),"" + LARGE_QUEUE_SIZE);
+  c.tableOperations().flush(tableName,null,null,true);
+  sleepUninterruptibly(1,TimeUnit.SECONDS);
+  bw=c.createBatchWriter(tableName,cfg);
+  now=System.currentTimeMillis();
+  bytesSent=0;
+  for (int i=0; i < N; i++) {
+    random.nextBytes(row);
+    Mutation m=new Mutation(row);
+    m.put("","","");
+    bw.addMutation(m);
+    bytesSent+=m.estimatedMemoryUsed();
+  }
+  bw.close();
+  diff=System.currentTimeMillis() - now;
+  secs=diff / 1000.;
+  syncs=bytesSent / LARGE_QUEUE_SIZE;
+  syncsPerSec=syncs / secs;
+  System.out.println(String.format("Sent %d bytes in %f secs approximately %d syncs (%f syncs per sec)",bytesSent,secs,((long)syncs),syncsPerSec));
+  update=getSyncs();
+  System.out.println("Syncs " + (update - realSyncs));
+  assertTrue(update - realSyncs < realSyncs);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

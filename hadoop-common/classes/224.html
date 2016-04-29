@@ -1,0 +1,104 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.ha.TestHealthMonitor (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that, if the callback throws an RTE, this will terminate the
+ * health monitor and thus change its state to FAILED
+ * @throws Exception
+ */
+@Test(timeout=15000) public void testCallbackThrowsRTE() throws Exception {
+  hm.addCallback(new Callback(){
+    @Override public void enteredState(    State newState){
+      throw new RuntimeException("Injected RTE");
+    }
+  }
+);
+  LOG.info("Mocking bad health check, waiting for UNHEALTHY");
+  svc.isHealthy=false;
+  waitForState(hm,HealthMonitor.State.HEALTH_MONITOR_FAILED);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setupHM() throws InterruptedException, IOException {
+  Configuration conf=new Configuration();
+  conf.setInt(CommonConfigurationKeys.IPC_CLIENT_CONNECT_MAX_RETRIES_KEY,1);
+  conf.setInt(CommonConfigurationKeys.HA_HM_CHECK_INTERVAL_KEY,50);
+  conf.setInt(CommonConfigurationKeys.HA_HM_CONNECT_RETRY_INTERVAL_KEY,50);
+  conf.setInt(CommonConfigurationKeys.HA_HM_SLEEP_AFTER_DISCONNECT_KEY,50);
+  svc=new DummyHAService(HAServiceState.ACTIVE,null);
+  hm=new HealthMonitor(conf,svc){
+    @Override protected HAServiceProtocol createProxy() throws IOException {
+      createProxyCount.incrementAndGet();
+      if (throwOOMEOnCreate) {
+        throw new OutOfMemoryError("oome");
+      }
+      return super.createProxy();
+    }
+  }
+;
+  LOG.info("Starting health monitor");
+  hm.start();
+  LOG.info("Waiting for HEALTHY signal");
+  waitForState(hm,HealthMonitor.State.SERVICE_HEALTHY);
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that the proper state is propagated when the health monitor
+ * sees an uncaught exception in its thread.
+ */
+@Test(timeout=15000) public void testHealthMonitorDies() throws Exception {
+  LOG.info("Mocking RTE in health monitor, waiting for FAILED");
+  throwOOMEOnCreate=true;
+  svc.actUnreachable=true;
+  waitForState(hm,HealthMonitor.State.HEALTH_MONITOR_FAILED);
+  hm.shutdown();
+  hm.join();
+  assertFalse(hm.isAlive());
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=15000) public void testMonitor() throws Exception {
+  LOG.info("Mocking bad health check, waiting for UNHEALTHY");
+  svc.isHealthy=false;
+  waitForState(hm,HealthMonitor.State.SERVICE_UNHEALTHY);
+  LOG.info("Returning to healthy state, waiting for HEALTHY");
+  svc.isHealthy=true;
+  waitForState(hm,HealthMonitor.State.SERVICE_HEALTHY);
+  LOG.info("Returning an IOException, as if node went down");
+  int countBefore=createProxyCount.get();
+  svc.actUnreachable=true;
+  waitForState(hm,HealthMonitor.State.SERVICE_NOT_RESPONDING);
+  while (createProxyCount.get() < countBefore + 3) {
+    Thread.sleep(10);
+  }
+  LOG.info("Returning to healthy state, waiting for HEALTHY");
+  svc.actUnreachable=false;
+  waitForState(hm,HealthMonitor.State.SERVICE_HEALTHY);
+  hm.shutdown();
+  hm.join();
+  assertFalse(hm.isAlive());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,173 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.client.SlowBookieTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=60000) public void testSlowBookie() throws Exception {
+  ClientConfiguration conf=new ClientConfiguration();
+  conf.setZkServers(zkUtil.getZooKeeperConnectString()).setReadTimeout(360);
+  BookKeeper bkc=new BookKeeper(conf);
+  LedgerHandle lh=bkc.createLedger(4,3,2,BookKeeper.DigestType.CRC32,new byte[]{});
+  byte[] entry="Test Entry".getBytes();
+  for (int i=0; i < 10; i++) {
+    lh.addEntry(entry);
+  }
+  final CountDownLatch b0latch=new CountDownLatch(1);
+  final CountDownLatch b1latch=new CountDownLatch(1);
+  final CountDownLatch addEntrylatch=new CountDownLatch(1);
+  List<BookieSocketAddress> curEns=lh.getLedgerMetadata().currentEnsemble;
+  try {
+    sleepBookie(curEns.get(0),b0latch);
+    for (int i=0; i < 10; i++) {
+      lh.addEntry(entry);
+    }
+    sleepBookie(curEns.get(2),b1latch);
+    final AtomicInteger i=new AtomicInteger(0xdeadbeef);
+    AsyncCallback.AddCallback cb=new AsyncCallback.AddCallback(){
+      public void addComplete(      int rc,      LedgerHandle lh,      long entryId,      Object ctx){
+        i.set(rc);
+        addEntrylatch.countDown();
+      }
+    }
+;
+    lh.asyncAddEntry(entry,cb,null);
+    Thread.sleep(3000);
+    assertEquals("Successfully added entry!",0xdeadbeef,i.get());
+    b0latch.countDown();
+    b1latch.countDown();
+    addEntrylatch.await(4000,TimeUnit.MILLISECONDS);
+    assertEquals("Failed to add entry!",BKException.Code.OK,i.get());
+  }
+  finally {
+    b0latch.countDown();
+    b1latch.countDown();
+    addEntrylatch.countDown();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testManyBookieFailureWithSlowBookies() throws Exception {
+  ClientConfiguration conf=new ClientConfiguration();
+  conf.setZkServers(zkUtil.getZooKeeperConnectString()).setReadTimeout(5);
+  BookKeeper bkc=new BookKeeper(conf);
+  byte[] pwd=new byte[]{};
+  final LedgerHandle lh=bkc.createLedger(4,3,1,BookKeeper.DigestType.CRC32,pwd);
+  final AtomicBoolean finished=new AtomicBoolean(false);
+  final AtomicBoolean failTest=new AtomicBoolean(false);
+  final byte[] entry="Test Entry".getBytes();
+  Thread t=new Thread(){
+    public void run(){
+      try {
+        while (!finished.get()) {
+          lh.addEntry(entry);
+        }
+      }
+ catch (      Exception e) {
+        LOG.error("Exception in add entry thread",e);
+        failTest.set(true);
+      }
+    }
+  }
+;
+  t.start();
+  final CountDownLatch b0latch=new CountDownLatch(1);
+  final CountDownLatch b1latch=new CountDownLatch(1);
+  startNewBookie();
+  startNewBookie();
+  sleepBookie(getBookie(0),b0latch);
+  sleepBookie(getBookie(1),b1latch);
+  Thread.sleep(10000);
+  b0latch.countDown();
+  b1latch.countDown();
+  finished.set(true);
+  t.join();
+  assertFalse(failTest.get());
+  lh.close();
+  LedgerHandle lh2=bkc.openLedger(lh.getId(),BookKeeper.DigestType.CRC32,pwd);
+  LedgerChecker lc=new LedgerChecker(bkc);
+  final CountDownLatch checklatch=new CountDownLatch(1);
+  final AtomicInteger numFragments=new AtomicInteger(-1);
+  lc.checkLedger(lh2,new GenericCallback<Set<LedgerFragment>>(){
+    public void operationComplete(    int rc,    Set<LedgerFragment> fragments){
+      LOG.debug("Checked ledgers returned {} {}",rc,fragments);
+      if (rc == BKException.Code.OK) {
+        numFragments.set(fragments.size());
+      }
+      checklatch.countDown();
+    }
+  }
+);
+  checklatch.await();
+  assertEquals("There should be no missing fragments",0,numFragments.get());
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testBookieFailureWithSlowBookie() throws Exception {
+  ClientConfiguration conf=new ClientConfiguration();
+  conf.setZkServers(zkUtil.getZooKeeperConnectString()).setReadTimeout(5);
+  BookKeeper bkc=new BookKeeper(conf);
+  byte[] pwd=new byte[]{};
+  final LedgerHandle lh=bkc.createLedger(4,3,2,BookKeeper.DigestType.CRC32,pwd);
+  final AtomicBoolean finished=new AtomicBoolean(false);
+  final AtomicBoolean failTest=new AtomicBoolean(false);
+  final byte[] entry="Test Entry".getBytes();
+  Thread t=new Thread(){
+    public void run(){
+      try {
+        while (!finished.get()) {
+          lh.addEntry(entry);
+        }
+      }
+ catch (      Exception e) {
+        LOG.error("Exception in add entry thread",e);
+        failTest.set(true);
+      }
+    }
+  }
+;
+  t.start();
+  final CountDownLatch b0latch=new CountDownLatch(1);
+  startNewBookie();
+  sleepBookie(getBookie(0),b0latch);
+  Thread.sleep(10000);
+  b0latch.countDown();
+  finished.set(true);
+  t.join();
+  assertFalse(failTest.get());
+  lh.close();
+  LedgerHandle lh2=bkc.openLedger(lh.getId(),BookKeeper.DigestType.CRC32,pwd);
+  LedgerChecker lc=new LedgerChecker(bkc);
+  final CountDownLatch checklatch=new CountDownLatch(1);
+  final AtomicInteger numFragments=new AtomicInteger(-1);
+  lc.checkLedger(lh2,new GenericCallback<Set<LedgerFragment>>(){
+    public void operationComplete(    int rc,    Set<LedgerFragment> fragments){
+      LOG.debug("Checked ledgers returned {} {}",rc,fragments);
+      if (rc == BKException.Code.OK) {
+        numFragments.set(fragments.size());
+      }
+      checklatch.countDown();
+    }
+  }
+);
+  checklatch.await();
+  assertEquals("There should be no missing fragments",0,numFragments.get());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

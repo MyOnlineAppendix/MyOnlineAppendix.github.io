@@ -1,0 +1,225 @@
+<h3 style="margin:0px">Class: org.apache.oozie.sla.TestSLAService (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 type-2 type-8 type-6 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUpdateSLA() throws Exception {
+  SLAService slas=Services.get().get(SLAService.class);
+  assertNotNull(slas);
+  assertTrue(SLAService.isEnabled());
+  EventHandlerService ehs=Services.get().get(EventHandlerService.class);
+  SLARegistrationBean sla1=_createSLARegistration("job-1",AppType.WORKFLOW_JOB);
+  sla1.setExpectedStart(new Date(System.currentTimeMillis() - 1 * 1 * 3600* 1000));
+  sla1.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 1 * 3600* 1000));
+  sla1.setExpectedDuration(10 * 60 * 1000);
+  slas.addRegistrationEvent(sla1);
+  assertEquals(1,slas.getSLACalculator().size());
+  slas.runSLAWorker();
+  ehs.new EventWorker().run();
+  assertEventNoDuplicates(output.toString(),"Sla START - MISS!!!");
+  assertEventNoDuplicates(output.toString(),"Sla END - MISS!!!");
+  output.setLength(0);
+  sla1=_createSLARegistration("job-2",AppType.WORKFLOW_JOB);
+  sla1.setExpectedStart(new Date(System.currentTimeMillis() + 1 * 3600 * 1000));
+  sla1.setExpectedEnd(new Date(System.currentTimeMillis() + 2 * 3600 * 1000));
+  slas.addRegistrationEvent(sla1);
+  slas.addStatusEvent(sla1.getId(),WorkflowJob.Status.RUNNING.name(),EventStatus.STARTED,new Date(),new Date());
+  SLARegistrationBean sla2=_createSLARegistration("job-3",AppType.COORDINATOR_JOB);
+  sla2.setExpectedStart(new Date(System.currentTimeMillis() + 1 * 3600 * 1000));
+  sla2.setExpectedEnd(new Date(System.currentTimeMillis() - 2 * 3600 * 1000));
+  sla2.setExpectedDuration(10);
+  slas.addRegistrationEvent(sla2);
+  assertEquals(3,slas.getSLACalculator().size());
+  Date startTime=new Date();
+  slas.addStatusEvent(sla2.getId(),CoordinatorJob.Status.RUNNING.name(),EventStatus.STARTED,startTime,null);
+  slas.addStatusEvent(sla2.getId(),CoordinatorJob.Status.SUCCEEDED.name(),EventStatus.SUCCESS,startTime,new Date());
+  slas.runSLAWorker();
+  ehs.new EventWorker().run();
+  assertTrue(output.toString().contains(sla1.getId() + " Sla START - MET!!!"));
+  assertTrue(output.toString().contains(sla2.getId() + " Sla END - MISS!!!"));
+  assertTrue(output.toString().contains(sla2.getId() + " Sla DURATION - MET!!!"));
+  output.setLength(0);
+  WorkflowJobBean job4=addRecordToWfJobTable(WorkflowJob.Status.KILLED,WorkflowInstance.Status.KILLED);
+  sla2=_createSLARegistration(job4.getId(),AppType.WORKFLOW_JOB);
+  sla2.setExpectedStart(new Date(System.currentTimeMillis() - 2 * 3600 * 1000));
+  sla2.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 3600 * 1000));
+  slas.addRegistrationEvent(sla2);
+  assertEquals(3,slas.getSLACalculator().size());
+  slas.runSLAWorker();
+  ehs.new EventWorker().run();
+  assertTrue(output.toString().contains(sla2.getId() + " Sla START - MISS!!!"));
+  assertTrue(output.toString().contains(sla2.getId() + " Sla END - MISS!!!"));
+  output.setLength(0);
+  assertEquals(2,slas.getSLACalculator().size());
+  sla1=_createSLARegistration("action@1",AppType.COORDINATOR_ACTION);
+  sla1.setExpectedStart(new Date(System.currentTimeMillis() + 1 * 3600 * 1000));
+  sla1.setExpectedEnd(new Date(System.currentTimeMillis() + 2 * 3600 * 1000));
+  slas.addRegistrationEvent(sla1);
+  assertEquals(3,slas.getSLACalculator().size());
+  slas.addStatusEvent(sla1.getId(),CoordinatorAction.Status.RUNNING.name(),EventStatus.STARTED,new Date(),new Date());
+  slas.addStatusEvent(sla1.getId(),CoordinatorAction.Status.SUCCEEDED.name(),EventStatus.SUCCESS,new Date(),new Date());
+  slas.runSLAWorker();
+  assertEquals(2,ehs.getEventQueue().size());
+  ehs.new EventWorker().run();
+  assertTrue(output.toString().contains(sla1.getId() + " Sla START - MET!!!"));
+  assertTrue(output.toString().contains(sla1.getId() + " Sla END - MET!!!"));
+}
+
+</code></pre>
+
+<pre class="type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testBasicService() throws Exception {
+  Services services=Services.get();
+  SLAService slas=services.get(SLAService.class);
+  assertNotNull(slas);
+  assertTrue(SLAService.isEnabled());
+  services.destroy();
+  services=new Services();
+  Configuration conf=services.getConf();
+  conf.set(Services.CONF_SERVICE_EXT_CLASSES,"");
+  services.init();
+  assertFalse(SLAService.isEnabled());
+}
+
+</code></pre>
+
+<pre class="type-2 type-8 type-6 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testEndMissDBConfirm() throws Exception {
+  SLAService slas=Services.get().get(SLAService.class);
+  EventHandlerService ehs=Services.get().get(EventHandlerService.class);
+  JPAService jpaService=Services.get().get(JPAService.class);
+  WorkflowJobBean job1=addRecordToWfJobTable(WorkflowJob.Status.PREP,WorkflowInstance.Status.PREP);
+  SLARegistrationBean sla=_createSLARegistration(job1.getId(),AppType.WORKFLOW_JOB);
+  sla.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 1800 * 1000));
+  slas.addRegistrationEvent(sla);
+  WorkflowJobBean job2=addRecordToWfJobTable(WorkflowJob.Status.SUCCEEDED,WorkflowInstance.Status.SUCCEEDED);
+  job2.setEndTime(new Date(System.currentTimeMillis() - 1 * 1800 * 1000));
+  job2.setStartTime(new Date(System.currentTimeMillis() - 1 * 2000 * 1000));
+  job2.setLastModifiedTime(new Date());
+  WorkflowJobQueryExecutor.getInstance().executeUpdate(WorkflowJobQuery.UPDATE_WORKFLOW_STATUS_INSTANCE_MOD_START_END,job2);
+  sla=_createSLARegistration(job2.getId(),AppType.WORKFLOW_JOB);
+  sla.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 1500 * 1000));
+  sla.setExpectedDuration(100);
+  slas.addRegistrationEvent(sla);
+  CoordinatorActionBean action1=addRecordToCoordActionTable("coord-action-1",1,CoordinatorAction.Status.WAITING,"coord-action-get.xml",0);
+  WorkflowJobBean extWf=new WorkflowJobBean();
+  extWf.setId(action1.getExternalId());
+  extWf.setEndTime(new Date(System.currentTimeMillis() - 1 * 1800 * 1000));
+  extWf.setStartTime(new Date(System.currentTimeMillis() - 1 * 2100 * 1000));
+  jpaService.execute(new WorkflowJobInsertJPAExecutor(extWf));
+  sla=_createSLARegistration(action1.getId(),AppType.COORDINATOR_ACTION);
+  sla.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 2000 * 1000));
+  slas.addRegistrationEvent(sla);
+  CoordinatorActionBean action2=addRecordToCoordActionTable("coord-action-2",1,CoordinatorAction.Status.FAILED,"coord-action-get.xml",0);
+  extWf=new WorkflowJobBean();
+  extWf.setId(action2.getExternalId());
+  extWf.setEndTime(new Date(System.currentTimeMillis() - 1 * 1800 * 1000));
+  extWf.setStartTime(new Date(System.currentTimeMillis() - 1 * 2000 * 1000));
+  jpaService.execute(new WorkflowJobInsertJPAExecutor(extWf));
+  sla=_createSLARegistration(action2.getId(),AppType.COORDINATOR_ACTION);
+  sla.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 1500 * 1000));
+  slas.addRegistrationEvent(sla);
+  CoordinatorActionBean action3=addRecordToCoordActionTable("coord-action-3",1,CoordinatorAction.Status.SUCCEEDED,"coord-action-get.xml",0);
+  extWf=new WorkflowJobBean();
+  extWf.setId(action3.getExternalId());
+  extWf.setStartTime(new Date(System.currentTimeMillis() - 1 * 2100 * 1000));
+  extWf.setEndTime(new Date(System.currentTimeMillis() - 1 * 1800 * 1000));
+  jpaService.execute(new WorkflowJobInsertJPAExecutor(extWf));
+  sla=_createSLARegistration(action3.getId(),AppType.COORDINATOR_ACTION);
+  sla.setExpectedStart(new Date(System.currentTimeMillis() - 1 * 3600 * 1000));
+  sla.setExpectedEnd(new Date(System.currentTimeMillis() - 1 * 1500 * 1000));
+  sla.setExpectedDuration(0);
+  slas.addRegistrationEvent(sla);
+  slas.runSLAWorker();
+  ehs.new EventWorker().run();
+  int count=0;
+  for (int ptr=output.indexOf("END - MISS"); ptr < output.length() && ptr > 0; ptr=output.indexOf("END - MISS",ptr + 1)) {
+    count++;
+  }
+  assertEquals(3,count);
+  assertEventNoDuplicates(output.toString(),job1.getId() + " Sla END - MISS!!!");
+  assertEventNoDuplicates(output.toString(),action1.getId() + " Sla END - MISS!!!");
+  assertEventNoDuplicates(output.toString(),action2.getId() + " Sla END - MISS!!!");
+  assertEventNoDuplicates(output.toString(),job2.getId() + " Sla END - MET!!!");
+  assertEventNoDuplicates(output.toString(),job2.getId() + " Sla DURATION - MISS!!!");
+  assertEventNoDuplicates(output.toString(),action3.getId() + " Sla START - MISS!!!");
+  assertEventNoDuplicates(output.toString(),action3.getId() + " Sla DURATION - MISS!!!");
+  assertEventNoDuplicates(output.toString(),action3.getId() + " Sla END - MET!!!");
+  SLASummaryBean slaSummary=SLASummaryQueryExecutor.getInstance().get(SLASummaryQuery.GET_SLA_SUMMARY,job2.getId());
+  assertEquals(job2.getStartTime(),slaSummary.getActualStart());
+  assertEquals(job2.getEndTime(),slaSummary.getActualEnd());
+  assertEquals(job2.getEndTime().getTime() - job2.getStartTime().getTime(),slaSummary.getActualDuration());
+  assertEquals(job2.getStatusStr(),slaSummary.getJobStatus());
+  assertEquals(SLAEvent.EventStatus.END_MET,slaSummary.getEventStatus());
+  assertEquals(SLAStatus.MET,slaSummary.getSLAStatus());
+  assertEquals(8,slaSummary.getEventProcessed());
+  assertNull(slas.getSLACalculator().get(job2.getId()));
+  slaSummary=SLASummaryQueryExecutor.getInstance().get(SLASummaryQuery.GET_SLA_SUMMARY,action2.getId());
+  extWf=jpaService.execute(new WorkflowJobGetJPAExecutor(action2.getExternalId()));
+  assertEquals(extWf.getStartTime(),slaSummary.getActualStart());
+  assertEquals(extWf.getEndTime(),slaSummary.getActualEnd());
+  assertEquals(extWf.getEndTime().getTime() - extWf.getStartTime().getTime(),slaSummary.getActualDuration());
+  assertEquals(action2.getStatusStr(),slaSummary.getJobStatus());
+  assertEquals(SLAEvent.EventStatus.END_MISS,slaSummary.getEventStatus());
+  assertEquals(SLAStatus.MISS,slaSummary.getSLAStatus());
+  assertEquals(8,slaSummary.getEventProcessed());
+  assertNull(slas.getSLACalculator().get(action2.getId()));
+  slaSummary=SLASummaryQueryExecutor.getInstance().get(SLASummaryQuery.GET_SLA_SUMMARY,action1.getId());
+  extWf=jpaService.execute(new WorkflowJobGetJPAExecutor(action1.getExternalId()));
+  assertEquals(extWf.getStartTime(),slaSummary.getActualStart());
+  assertEquals(extWf.getEndTime(),slaSummary.getActualEnd());
+  assertEquals(extWf.getEndTime().getTime() - extWf.getStartTime().getTime(),slaSummary.getActualDuration());
+  assertEquals(action1.getStatusStr(),slaSummary.getJobStatus());
+  assertEquals(SLAEvent.EventStatus.END_MISS,slaSummary.getEventStatus());
+  assertEquals(SLAStatus.MISS,slaSummary.getSLAStatus());
+  assertEquals(8,slaSummary.getEventProcessed());
+  assertNull(slas.getSLACalculator().get(action1.getId()));
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before protected void setUp() throws Exception {
+  super.setUp();
+  Services services=new Services();
+  Configuration conf=services.getConf();
+  conf.set(Services.CONF_SERVICE_EXT_CLASSES,"org.apache.oozie.service.EventHandlerService," + "org.apache.oozie.sla.service.SLAService");
+  conf.setClass(EventHandlerService.CONF_LISTENERS,DummySLAEventListener.class,SLAEventListener.class);
+  conf.setLong(SLAService.CONF_JOB_EVENT_LATENCY,0);
+  conf.setInt(EventHandlerService.CONF_WORKER_THREADS,0);
+  services.init();
+  output.setLength(0);
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After protected void tearDown() throws Exception {
+  Services.get().destroy();
+  super.tearDown();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

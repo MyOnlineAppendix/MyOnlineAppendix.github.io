@@ -1,0 +1,237 @@
+<h3 style="margin:0px">Class: org.apache.twill.internal.zookeeper.LeaderElectionTest (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=150000) public void testElection() throws ExecutionException, InterruptedException, BrokenBarrierException {
+  ExecutorService executor=Executors.newCachedThreadPool();
+  int participantCount=5;
+  final CyclicBarrier barrier=new CyclicBarrier(participantCount + 1);
+  final Semaphore leaderSem=new Semaphore(0);
+  final Semaphore followerSem=new Semaphore(0);
+  final CountDownLatch[] stopLatch=new CountDownLatch[participantCount];
+  final List<ZKClientService> zkClients=Lists.newArrayList();
+  try {
+    final AtomicInteger currentLeader=new AtomicInteger(-1);
+    for (int i=0; i < participantCount; i++) {
+      final ZKClientService zkClient=ZKClientService.Builder.of(zkServer.getConnectionStr()).build();
+      zkClient.startAndWait();
+      stopLatch[i]=new CountDownLatch(1);
+      zkClients.add(zkClient);
+      final int idx=i;
+      executor.submit(new Runnable(){
+        @Override public void run(){
+          try {
+            barrier.await();
+            LeaderElection leaderElection=new LeaderElection(zkClient,"/test",new ElectionHandler(){
+              @Override public void leader(){
+                currentLeader.set(idx);
+                leaderSem.release();
+              }
+              @Override public void follower(){
+                followerSem.release();
+              }
+            }
+);
+            leaderElection.start();
+            stopLatch[idx].await(10,TimeUnit.SECONDS);
+            leaderElection.stopAndWait();
+          }
+ catch (          Exception e) {
+            LOG.error(e.getMessage(),e);
+          }
+        }
+      }
+);
+    }
+    barrier.await();
+    leaderSem.tryAcquire(10,TimeUnit.SECONDS);
+    followerSem.tryAcquire(participantCount - 1,10,TimeUnit.SECONDS);
+    for (int i=0; i < participantCount - 1; i++) {
+      stopLatch[currentLeader.get()].countDown();
+      leaderSem.tryAcquire(10,TimeUnit.SECONDS);
+      followerSem.tryAcquire(10,TimeUnit.SECONDS);
+    }
+    stopLatch[currentLeader.get()].countDown();
+  }
+  finally {
+    executor.shutdown();
+    executor.awaitTermination(5L,TimeUnit.SECONDS);
+    for (    ZKClientService zkClient : zkClients) {
+      zkClient.stopAndWait();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=150000) public void testDisconnect() throws IOException, InterruptedException {
+  File zkDataDir=tmpFolder.newFolder();
+  InMemoryZKServer ownZKServer=InMemoryZKServer.builder().setDataDir(zkDataDir).build();
+  ownZKServer.startAndWait();
+  try {
+    ZKClientService zkClient=ZKClientService.Builder.of(ownZKServer.getConnectionStr()).build();
+    zkClient.startAndWait();
+    try {
+      final Semaphore leaderSem=new Semaphore(0);
+      final Semaphore followerSem=new Semaphore(0);
+      LeaderElection leaderElection=new LeaderElection(zkClient,"/testDisconnect",new ElectionHandler(){
+        @Override public void leader(){
+          leaderSem.release();
+        }
+        @Override public void follower(){
+          followerSem.release();
+        }
+      }
+);
+      leaderElection.start();
+      leaderSem.tryAcquire(20,TimeUnit.SECONDS);
+      int zkPort=ownZKServer.getLocalAddress().getPort();
+      ownZKServer.stopAndWait();
+      followerSem.tryAcquire(20,TimeUnit.SECONDS);
+      ownZKServer=InMemoryZKServer.builder().setDataDir(zkDataDir).setPort(zkPort).build();
+      ownZKServer.startAndWait();
+      leaderSem.tryAcquire(20,TimeUnit.SECONDS);
+      ownZKServer.stopAndWait();
+      followerSem.tryAcquire(20,TimeUnit.SECONDS);
+      ListenableFuture<?> cancelFuture=leaderElection.stop();
+      ownZKServer=InMemoryZKServer.builder().setDataDir(zkDataDir).setPort(zkPort).build();
+      ownZKServer.startAndWait();
+      Futures.getUnchecked(cancelFuture);
+      Assert.assertFalse(leaderSem.tryAcquire(10,TimeUnit.SECONDS));
+    }
+  finally {
+      zkClient.stopAndWait();
+    }
+  }
+  finally {
+    ownZKServer.stopAndWait();
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=150000) public void testCancel() throws InterruptedException, IOException {
+  List<LeaderElection> leaderElections=Lists.newArrayList();
+  List<ZKClientService> zkClients=Lists.newArrayList();
+  final Semaphore leaderSem=new Semaphore(0);
+  final Semaphore followerSem=new Semaphore(0);
+  final AtomicInteger leaderIdx=new AtomicInteger();
+  try {
+    for (int i=0; i < 2; i++) {
+      ZKClientService zkClient=ZKClientService.Builder.of(zkServer.getConnectionStr()).build();
+      zkClient.startAndWait();
+      zkClients.add(zkClient);
+      final int finalI=i;
+      leaderElections.add(new LeaderElection(zkClient,"/testCancel",new ElectionHandler(){
+        @Override public void leader(){
+          leaderIdx.set(finalI);
+          leaderSem.release();
+        }
+        @Override public void follower(){
+          followerSem.release();
+        }
+      }
+));
+    }
+    for (    LeaderElection leaderElection : leaderElections) {
+      leaderElection.start();
+    }
+    leaderSem.tryAcquire(10,TimeUnit.SECONDS);
+    followerSem.tryAcquire(10,TimeUnit.SECONDS);
+    int leader=leaderIdx.get();
+    int follower=1 - leader;
+    KillZKSession.kill(zkClients.get(follower).getZooKeeperSupplier().get(),zkClients.get(follower).getConnectString(),20000);
+    leaderElections.get(leader).stopAndWait();
+    leaderSem.tryAcquire(30,TimeUnit.SECONDS);
+    leader=leaderIdx.get();
+    follower=1 - leader;
+    leaderElections.set(follower,new LeaderElection(zkClients.get(follower),"/testCancel",new ElectionHandler(){
+      @Override public void leader(){
+        leaderSem.release();
+      }
+      @Override public void follower(){
+        followerSem.release();
+      }
+    }
+));
+    leaderElections.get(follower).start();
+    leaderElections.get(follower).stopAndWait();
+    leaderElections.get(leader).stopAndWait();
+    Assert.assertFalse(leaderSem.tryAcquire(10,TimeUnit.SECONDS));
+  }
+  finally {
+    for (    ZKClientService zkClient : zkClients) {
+      zkClient.stopAndWait();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void finish(){
+  zkServer.stopAndWait();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testRace() throws InterruptedException {
+  ExecutorService executor=Executors.newFixedThreadPool(2);
+  final AtomicInteger leaderCount=new AtomicInteger(0);
+  final CountDownLatch completeLatch=new CountDownLatch(2);
+  for (int i=0; i < 2; i++) {
+    final ZKClientService zkClient=ZKClientService.Builder.of(zkServer.getConnectionStr()).build();
+    zkClient.startAndWait();
+    executor.execute(new Runnable(){
+      @Override public void run(){
+        try {
+          for (int i=0; i < 1000; i++) {
+            final CountDownLatch leaderLatch=new CountDownLatch(1);
+            LeaderElection election=new LeaderElection(zkClient,"/testRace",new ElectionHandler(){
+              @Override public void leader(){
+                leaderCount.incrementAndGet();
+                leaderLatch.countDown();
+              }
+              @Override public void follower(){
+              }
+            }
+);
+            election.startAndWait();
+            Uninterruptibles.awaitUninterruptibly(leaderLatch);
+            election.stopAndWait();
+          }
+          completeLatch.countDown();
+        }
+  finally {
+          zkClient.stopAndWait();
+        }
+      }
+    }
+);
+  }
+  try {
+    Assert.assertTrue(completeLatch.await(2,TimeUnit.MINUTES));
+  }
+  finally {
+    executor.shutdownNow();
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

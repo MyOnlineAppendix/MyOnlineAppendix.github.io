@@ -1,0 +1,152 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestScannerWithBulkload (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void tearDownAfterClass() throws Exception {
+  TEST_UTIL.shutdownMiniCluster();
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBulkLoad() throws Exception {
+  TableName tableName=TableName.valueOf("testBulkLoad");
+  long l=System.currentTimeMillis();
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  createTable(admin,tableName);
+  Scan scan=createScan();
+  final Table table=init(admin,l,scan,tableName);
+  final Path hfilePath=writeToHFile(l,"/temp/testBulkLoad/","/temp/testBulkLoad/col/file",false);
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.setBoolean("hbase.mapreduce.bulkload.assign.sequenceNumbers",true);
+  final LoadIncrementalHFiles bulkload=new LoadIncrementalHFiles(conf);
+  try (RegionLocator locator=TEST_UTIL.getConnection().getRegionLocator(tableName)){
+    bulkload.doBulkLoad(hfilePath,admin,table,locator);
+  }
+   ResultScanner scanner=table.getScanner(scan);
+  Result result=scanner.next();
+  result=scanAfterBulkLoad(scanner,result,"version2");
+  Put put0=new Put(Bytes.toBytes("row1"));
+  put0.add(new KeyValue(Bytes.toBytes("row1"),Bytes.toBytes("col"),Bytes.toBytes("q"),l,Bytes.toBytes("version3")));
+  table.put(put0);
+  admin.flush(tableName);
+  scanner=table.getScanner(scan);
+  result=scanner.next();
+  while (result != null) {
+    List<Cell> cells=result.getColumnCells(Bytes.toBytes("col"),Bytes.toBytes("q"));
+    for (    Cell _c : cells) {
+      if (Bytes.toString(_c.getRowArray(),_c.getRowOffset(),_c.getRowLength()).equals("row1")) {
+        System.out.println(Bytes.toString(_c.getRowArray(),_c.getRowOffset(),_c.getRowLength()));
+        System.out.println(Bytes.toString(_c.getQualifierArray(),_c.getQualifierOffset(),_c.getQualifierLength()));
+        System.out.println(Bytes.toString(_c.getValueArray(),_c.getValueOffset(),_c.getValueLength()));
+        Assert.assertEquals("version3",Bytes.toString(_c.getValueArray(),_c.getValueOffset(),_c.getValueLength()));
+      }
+    }
+    result=scanner.next();
+  }
+  scanner.close();
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testBulkLoadWithParallelScan() throws Exception {
+  final TableName tableName=TableName.valueOf("testBulkLoadWithParallelScan");
+  final long l=System.currentTimeMillis();
+  final Admin admin=TEST_UTIL.getHBaseAdmin();
+  createTable(admin,tableName);
+  Scan scan=createScan();
+  final Table table=init(admin,l,scan,tableName);
+  final Path hfilePath=writeToHFile(l,"/temp/testBulkLoadWithParallelScan/","/temp/testBulkLoadWithParallelScan/col/file",false);
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.setBoolean("hbase.mapreduce.bulkload.assign.sequenceNumbers",true);
+  final LoadIncrementalHFiles bulkload=new LoadIncrementalHFiles(conf);
+  ResultScanner scanner=table.getScanner(scan);
+  final CountDownLatch latch=new CountDownLatch(1);
+  new Thread(){
+    public void run(){
+      try {
+        Put put1=new Put(Bytes.toBytes("row5"));
+        put1.add(new KeyValue(Bytes.toBytes("row5"),Bytes.toBytes("col"),Bytes.toBytes("q"),l,Bytes.toBytes("version0")));
+        table.put(put1);
+        try (RegionLocator locator=TEST_UTIL.getConnection().getRegionLocator(tableName)){
+          bulkload.doBulkLoad(hfilePath,admin,table,locator);
+        }
+         latch.countDown();
+      }
+ catch (      TableNotFoundException e) {
+      }
+catch (      IOException e) {
+      }
+    }
+  }
+.start();
+  latch.await();
+  Result result=scanner.next();
+  scanAfterBulkLoad(scanner,result,"version1");
+  scanner.close();
+  table.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testBulkLoadNativeHFile() throws Exception {
+  TableName tableName=TableName.valueOf("testBulkLoadNativeHFile");
+  long l=System.currentTimeMillis();
+  Admin admin=TEST_UTIL.getHBaseAdmin();
+  createTable(admin,tableName);
+  Scan scan=createScan();
+  final Table table=init(admin,l,scan,tableName);
+  final Path hfilePath=writeToHFile(l,"/temp/testBulkLoadNativeHFile/","/temp/testBulkLoadNativeHFile/col/file",true);
+  Configuration conf=TEST_UTIL.getConfiguration();
+  conf.setBoolean("hbase.mapreduce.bulkload.assign.sequenceNumbers",true);
+  final LoadIncrementalHFiles bulkload=new LoadIncrementalHFiles(conf);
+  try (RegionLocator locator=TEST_UTIL.getConnection().getRegionLocator(tableName)){
+    bulkload.doBulkLoad(hfilePath,admin,table,locator);
+  }
+   ResultScanner scanner=table.getScanner(scan);
+  Result result=scanner.next();
+  result=scanAfterBulkLoad(scanner,result,"version2");
+  Put put0=new Put(Bytes.toBytes("row1"));
+  put0.add(new KeyValue(Bytes.toBytes("row1"),Bytes.toBytes("col"),Bytes.toBytes("q"),l,Bytes.toBytes("version3")));
+  table.put(put0);
+  admin.flush(tableName);
+  scanner=table.getScanner(scan);
+  result=scanner.next();
+  while (result != null) {
+    List<Cell> cells=result.getColumnCells(Bytes.toBytes("col"),Bytes.toBytes("q"));
+    for (    Cell _c : cells) {
+      if (Bytes.toString(_c.getRowArray(),_c.getRowOffset(),_c.getRowLength()).equals("row1")) {
+        System.out.println(Bytes.toString(_c.getRowArray(),_c.getRowOffset(),_c.getRowLength()));
+        System.out.println(Bytes.toString(_c.getQualifierArray(),_c.getQualifierOffset(),_c.getQualifierLength()));
+        System.out.println(Bytes.toString(_c.getValueArray(),_c.getValueOffset(),_c.getValueLength()));
+        Assert.assertEquals("version3",Bytes.toString(_c.getValueArray(),_c.getValueOffset(),_c.getValueLength()));
+      }
+    }
+    result=scanner.next();
+  }
+  scanner.close();
+  table.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

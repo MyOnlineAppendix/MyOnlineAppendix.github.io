@@ -1,0 +1,361 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.fs.http.server.TestHttpFSServer (11 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test ACL operations on a directory, including default ACLs.
+ * General strategy is to use GETFILESTATUS and GETACLSTATUS to verify:
+ * <ol>
+ * <li>Initial status with no ACLs</li>
+ * <li>The addition of a default ACL</li>
+ * <li>The removal of default ACLs</li>
+ * </ol>
+ * @throws Exception
+ */
+@Test @TestDir @TestJetty @TestHdfs public void testDirAcls() throws Exception {
+  final String defUser1="default:user:glarch:r-x";
+  final String defSpec1="aclspec=" + defUser1;
+  final String dir="/aclDirTest";
+  String statusJson;
+  List<String> aclEntries;
+  createHttpFSServer(false);
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path(dir));
+  statusJson=getStatus(dir,"GETFILESTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 0);
+  putCmd(dir,"SETACL",defSpec1);
+  statusJson=getStatus(dir,"GETFILESTATUS");
+  Assert.assertNotEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 5);
+  Assert.assertTrue(aclEntries.contains(defUser1));
+  putCmd(dir,"REMOVEDEFAULTACL",null);
+  statusJson=getStatus(dir,"GETFILESTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 0);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Validate that files are created with 755 permissions when no
+ * 'permissions' attribute is specified, and when 'permissions'
+ * is specified, that value is honored.
+ */
+@Test @TestDir @TestJetty @TestHdfs public void testPerms() throws Exception {
+  createHttpFSServer(false);
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path("/perm"));
+  createWithHttp("/perm/none",null);
+  String statusJson=getStatus("/perm/none","GETFILESTATUS");
+  Assert.assertTrue("755".equals(getPerms(statusJson)));
+  createWithHttp("/perm/p-777","777");
+  statusJson=getStatus("/perm/p-777","GETFILESTATUS");
+  Assert.assertTrue("777".equals(getPerms(statusJson)));
+  createWithHttp("/perm/p-654","654");
+  statusJson=getStatus("/perm/p-654","GETFILESTATUS");
+  Assert.assertTrue("654".equals(getPerms(statusJson)));
+  createWithHttp("/perm/p-321","321");
+  statusJson=getStatus("/perm/p-321","GETFILESTATUS");
+  Assert.assertTrue("321".equals(getPerms(statusJson)));
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void testGlobFilter() throws Exception {
+  createHttpFSServer(false);
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path("/tmp"));
+  fs.create(new Path("/tmp/foo.txt")).close();
+  String user=HadoopUsersConfTestHelper.getHadoopUsers()[0];
+  URL url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1/tmp?user.name={0}&op=liststatus&filter=f*",user));
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_OK);
+  BufferedReader reader=new BufferedReader(new InputStreamReader(conn.getInputStream()));
+  reader.readLine();
+  reader.close();
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void testPutNoOperation() throws Exception {
+  createHttpFSServer(false);
+  String user=HadoopUsersConfTestHelper.getHadoopUsers()[0];
+  URL url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1/foo?user.name={0}",user));
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  conn.setDoInput(true);
+  conn.setDoOutput(true);
+  conn.setRequestMethod("PUT");
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_BAD_REQUEST);
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void instrumentation() throws Exception {
+  createHttpFSServer(false);
+  URL url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1?user.name={0}&op=instrumentation","nobody"));
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_UNAUTHORIZED);
+  url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1?user.name={0}&op=instrumentation",HadoopUsersConfTestHelper.getHadoopUsers()[0]));
+  conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_OK);
+  BufferedReader reader=new BufferedReader(new InputStreamReader(conn.getInputStream()));
+  String line=reader.readLine();
+  reader.close();
+  Assert.assertTrue(line.contains("\"counters\":{"));
+  url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1/foo?user.name={0}&op=instrumentation",HadoopUsersConfTestHelper.getHadoopUsers()[0]));
+  conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_BAD_REQUEST);
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void testOpenOffsetLength() throws Exception {
+  createHttpFSServer(false);
+  byte[] array=new byte[]{0,1,2,3};
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path("/tmp"));
+  OutputStream os=fs.create(new Path("/tmp/foo"));
+  os.write(array);
+  os.close();
+  String user=HadoopUsersConfTestHelper.getHadoopUsers()[0];
+  URL url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1/tmp/foo?user.name={0}&op=open&offset=1&length=2",user));
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  InputStream is=conn.getInputStream();
+  Assert.assertEquals(1,is.read());
+  Assert.assertEquals(2,is.read());
+  Assert.assertEquals(-1,is.read());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void testDelegationTokenOperations() throws Exception {
+  createHttpFSServer(true);
+  URL url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=GETHOMEDIRECTORY");
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED,conn.getResponseCode());
+  AuthenticationToken token=new AuthenticationToken("u","p",new KerberosDelegationTokenAuthenticationHandler().getType());
+  token.setExpires(System.currentTimeMillis() + 100000000);
+  Signer signer=new Signer(new StringSignerSecretProvider("secret"));
+  String tokenSigned=signer.sign(token.toString());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=GETHOMEDIRECTORY");
+  conn=(HttpURLConnection)url.openConnection();
+  conn.setRequestProperty("Cookie",AuthenticatedURL.AUTH_COOKIE + "=" + tokenSigned);
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=GETDELEGATIONTOKEN");
+  conn=(HttpURLConnection)url.openConnection();
+  conn.setRequestProperty("Cookie",AuthenticatedURL.AUTH_COOKIE + "=" + tokenSigned);
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  JSONObject json=(JSONObject)new JSONParser().parse(new InputStreamReader(conn.getInputStream()));
+  json=(JSONObject)json.get(DelegationTokenAuthenticator.DELEGATION_TOKEN_JSON);
+  String tokenStr=(String)json.get(DelegationTokenAuthenticator.DELEGATION_TOKEN_URL_STRING_JSON);
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=GETHOMEDIRECTORY&delegation=" + tokenStr);
+  conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=RENEWDELEGATIONTOKEN&token=" + tokenStr);
+  conn=(HttpURLConnection)url.openConnection();
+  conn.setRequestMethod("PUT");
+  Assert.assertEquals(HttpURLConnection.HTTP_UNAUTHORIZED,conn.getResponseCode());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=RENEWDELEGATIONTOKEN&token=" + tokenStr);
+  conn=(HttpURLConnection)url.openConnection();
+  conn.setRequestMethod("PUT");
+  conn.setRequestProperty("Cookie",AuthenticatedURL.AUTH_COOKIE + "=" + tokenSigned);
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=CANCELDELEGATIONTOKEN&token=" + tokenStr);
+  conn=(HttpURLConnection)url.openConnection();
+  conn.setRequestMethod("PUT");
+  Assert.assertEquals(HttpURLConnection.HTTP_OK,conn.getResponseCode());
+  url=new URL(TestJettyHelper.getJettyURL(),"/webhdfs/v1/?op=GETHOMEDIRECTORY&delegation=" + tokenStr);
+  conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(HttpURLConnection.HTTP_FORBIDDEN,conn.getResponseCode());
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Validate XAttr get/set/remove calls.
+ */
+@Test @TestDir @TestJetty @TestHdfs public void testXAttrs() throws Exception {
+  final String name1="user.a1";
+  final byte[] value1=new byte[]{0x31,0x32,0x33};
+  final String name2="user.a2";
+  final byte[] value2=new byte[]{0x41,0x42,0x43};
+  final String dir="/xattrTest";
+  final String path=dir + "/file";
+  createHttpFSServer(false);
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path(dir));
+  createWithHttp(path,null);
+  String statusJson=getStatus(path,"GETXATTRS");
+  Map<String,byte[]> xAttrs=getXAttrs(statusJson);
+  Assert.assertEquals(0,xAttrs.size());
+  putCmd(path,"SETXATTR",setXAttrParam(name1,value1));
+  putCmd(path,"SETXATTR",setXAttrParam(name2,value2));
+  statusJson=getStatus(path,"GETXATTRS");
+  xAttrs=getXAttrs(statusJson);
+  Assert.assertEquals(2,xAttrs.size());
+  Assert.assertArrayEquals(value1,xAttrs.get(name1));
+  Assert.assertArrayEquals(value2,xAttrs.get(name2));
+  putCmd(path,"REMOVEXATTR","xattr.name=" + name1);
+  statusJson=getStatus(path,"GETXATTRS");
+  xAttrs=getXAttrs(statusJson);
+  Assert.assertEquals(1,xAttrs.size());
+  Assert.assertArrayEquals(value2,xAttrs.get(name2));
+  putCmd(path,"REMOVEXATTR","xattr.name=" + name2);
+  statusJson=getStatus(path,"GETXATTRS");
+  xAttrs=getXAttrs(statusJson);
+  Assert.assertEquals(0,xAttrs.size());
+}
+
+</code></pre>
+
+<pre class="type-9 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Validate the various ACL set/modify/remove calls.  General strategy is
+ * to verify each of the following steps with GETFILESTATUS, LISTSTATUS,
+ * and GETACLSTATUS:
+ * <ol>
+ * <li>Create a file with no ACLs</li>
+ * <li>Add a user + group ACL</li>
+ * <li>Add another user ACL</li>
+ * <li>Remove the first user ACL</li>
+ * <li>Remove all ACLs</li>
+ * </ol>
+ */
+@Test @TestDir @TestJetty @TestHdfs public void testFileAcls() throws Exception {
+  final String aclUser1="user:foo:rw-";
+  final String aclUser2="user:bar:r--";
+  final String aclGroup1="group::r--";
+  final String aclSpec="aclspec=user::rwx," + aclUser1 + ","+ aclGroup1+ ",other::---";
+  final String modAclSpec="aclspec=" + aclUser2;
+  final String remAclSpec="aclspec=" + aclUser1;
+  final String dir="/aclFileTest";
+  final String path=dir + "/test";
+  String statusJson;
+  List<String> aclEntries;
+  createHttpFSServer(false);
+  FileSystem fs=FileSystem.get(TestHdfsHelper.getHdfsConf());
+  fs.mkdirs(new Path(dir));
+  createWithHttp(path,null);
+  statusJson=getStatus(path,"GETFILESTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"LISTSTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(path,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 0);
+  putCmd(path,"SETACL",aclSpec);
+  statusJson=getStatus(path,"GETFILESTATUS");
+  Assert.assertNotEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"LISTSTATUS");
+  Assert.assertNotEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(path,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 2);
+  Assert.assertTrue(aclEntries.contains(aclUser1));
+  Assert.assertTrue(aclEntries.contains(aclGroup1));
+  putCmd(path,"MODIFYACLENTRIES",modAclSpec);
+  statusJson=getStatus(path,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 3);
+  Assert.assertTrue(aclEntries.contains(aclUser1));
+  Assert.assertTrue(aclEntries.contains(aclUser2));
+  Assert.assertTrue(aclEntries.contains(aclGroup1));
+  putCmd(path,"REMOVEACLENTRIES",remAclSpec);
+  statusJson=getStatus(path,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 2);
+  Assert.assertTrue(aclEntries.contains(aclUser2));
+  Assert.assertTrue(aclEntries.contains(aclGroup1));
+  putCmd(path,"REMOVEACL",null);
+  statusJson=getStatus(path,"GETACLSTATUS");
+  aclEntries=getAclEntries(statusJson);
+  Assert.assertTrue(aclEntries.size() == 0);
+  statusJson=getStatus(path,"GETFILESTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+  statusJson=getStatus(dir,"LISTSTATUS");
+  Assert.assertEquals(-1,statusJson.indexOf("aclBit"));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test @TestDir @TestJetty public void server() throws Exception {
+  String dir=TestDirHelper.getTestDir().getAbsolutePath();
+  Configuration httpfsConf=new Configuration(false);
+  HttpFSServerWebApp server=new HttpFSServerWebApp(dir,dir,dir,dir,httpfsConf);
+  server.init();
+  server.destroy();
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test @TestDir @TestJetty @TestHdfs public void testHdfsAccess() throws Exception {
+  createHttpFSServer(false);
+  String user=HadoopUsersConfTestHelper.getHadoopUsers()[0];
+  URL url=new URL(TestJettyHelper.getJettyURL(),MessageFormat.format("/webhdfs/v1/?user.name={0}&op=liststatus",user));
+  HttpURLConnection conn=(HttpURLConnection)url.openConnection();
+  Assert.assertEquals(conn.getResponseCode(),HttpURLConnection.HTTP_OK);
+  BufferedReader reader=new BufferedReader(new InputStreamReader(conn.getInputStream()));
+  reader.readLine();
+  reader.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

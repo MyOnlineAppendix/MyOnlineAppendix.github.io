@@ -1,0 +1,212 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.qjournal.server.TestJournalNode (8 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown() throws Exception {
+  jn.stop(0);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that the JournalNode performs correctly as a Paxos
+ * <em>Acceptor</em> process.
+ */
+@Test(timeout=100000) public void testAcceptRecoveryBehavior() throws Exception {
+  try {
+    ch.prepareRecovery(1L).get();
+    fail("Did not throw IllegalState when trying to run paxos without an epoch");
+  }
+ catch (  ExecutionException ise) {
+    GenericTestUtils.assertExceptionContains("bad epoch",ise);
+  }
+  ch.newEpoch(1).get();
+  ch.setEpoch(1);
+  PrepareRecoveryResponseProto prep=ch.prepareRecovery(1L).get();
+  System.err.println("Prep: " + prep);
+  assertFalse(prep.hasAcceptedInEpoch());
+  assertFalse(prep.hasSegmentState());
+  ch.startLogSegment(1L,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION).get();
+  ch.sendEdits(1L,1L,1,QJMTestUtil.createTxnData(1,1)).get();
+  prep=ch.prepareRecovery(1L).get();
+  System.err.println("Prep: " + prep);
+  assertFalse(prep.hasAcceptedInEpoch());
+  assertTrue(prep.hasSegmentState());
+  ch.acceptRecovery(prep.getSegmentState(),new URL("file:///dev/null")).get();
+  ch.newEpoch(2);
+  ch.setEpoch(2);
+  prep=ch.prepareRecovery(1L).get();
+  assertEquals(1L,prep.getAcceptedInEpoch());
+  assertEquals(1L,prep.getSegmentState().getEndTxId());
+  ch.setEpoch(1);
+  try {
+    ch.prepareRecovery(1L).get();
+    fail("prepare from earlier epoch not rejected");
+  }
+ catch (  ExecutionException ioe) {
+    GenericTestUtils.assertExceptionContains("epoch 1 is less than the last promised epoch 2",ioe);
+  }
+  try {
+    ch.acceptRecovery(prep.getSegmentState(),new URL("file:///dev/null")).get();
+    fail("accept from earlier epoch not rejected");
+  }
+ catch (  ExecutionException ioe) {
+    GenericTestUtils.assertExceptionContains("epoch 1 is less than the last promised epoch 2",ioe);
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Simple test of how fast the code path is to write edits.
+ * This isn't a true unit test, but can be run manually to
+ * check performance.
+ * At the time of development, this test ran in ~4sec on an
+ * SSD-enabled laptop (1.8ms/batch).
+ */
+@Test(timeout=100000) public void testPerformance() throws Exception {
+  doPerfTest(8192,1024);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  File editsDir=new File(MiniDFSCluster.getBaseDirectory() + File.separator + "TestJournalNode");
+  FileUtil.fullyDelete(editsDir);
+  conf.set(DFSConfigKeys.DFS_JOURNALNODE_EDITS_DIR_KEY,editsDir.getAbsolutePath());
+  conf.set(DFSConfigKeys.DFS_JOURNALNODE_RPC_ADDRESS_KEY,"0.0.0.0:0");
+  jn=new JournalNode();
+  jn.setConf(conf);
+  jn.start();
+  journalId="test-journalid-" + GenericTestUtils.uniqueSequenceId();
+  journal=jn.getOrCreateJournal(journalId);
+  journal.format(FAKE_NSINFO);
+  ch=new IPCLoggerChannel(conf,FAKE_NSINFO,journalId,jn.getBoundIpcAddress());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=100000) public void testHttpServer() throws Exception {
+  String urlRoot=jn.getHttpServerURI();
+  String pageContents=DFSTestUtil.urlGet(new URL(urlRoot + "/jmx"));
+  assertTrue("Bad contents: " + pageContents,pageContents.contains("Hadoop:service=JournalNode,name=JvmMetrics"));
+  byte[] EDITS_DATA=QJMTestUtil.createTxnData(1,3);
+  IPCLoggerChannel ch=new IPCLoggerChannel(conf,FAKE_NSINFO,journalId,jn.getBoundIpcAddress());
+  ch.newEpoch(1).get();
+  ch.setEpoch(1);
+  ch.startLogSegment(1,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION).get();
+  ch.sendEdits(1L,1,3,EDITS_DATA).get();
+  ch.finalizeLogSegment(1,3).get();
+  byte[] retrievedViaHttp=DFSTestUtil.urlGetBytes(new URL(urlRoot + "/getJournal?segmentTxId=1&jid=" + journalId));
+  byte[] expected=Bytes.concat(Ints.toByteArray(HdfsConstants.NAMENODE_LAYOUT_VERSION),(new byte[]{0,0,0,0}),EDITS_DATA);
+  assertArrayEquals(expected,retrievedViaHttp);
+  URL badUrl=new URL(urlRoot + "/getJournal?segmentTxId=12345&jid=" + journalId);
+  HttpURLConnection connection=(HttpURLConnection)badUrl.openConnection();
+  try {
+    assertEquals(404,connection.getResponseCode());
+  }
+  finally {
+    connection.disconnect();
+  }
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=100000) public void testFailToStartWithBadConfig() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(DFSConfigKeys.DFS_JOURNALNODE_EDITS_DIR_KEY,"non-absolute-path");
+  assertJNFailsToStart(conf,"should be an absolute path");
+  File existingFile=new File(TEST_BUILD_DATA,"testjournalnodefile");
+  assertTrue(existingFile.createNewFile());
+  try {
+    conf.set(DFSConfigKeys.DFS_JOURNALNODE_EDITS_DIR_KEY,existingFile.getAbsolutePath());
+    assertJNFailsToStart(conf,"Not a directory");
+  }
+  finally {
+    existingFile.delete();
+  }
+  conf.set(DFSConfigKeys.DFS_JOURNALNODE_EDITS_DIR_KEY,Shell.WINDOWS ? "\\\\cannotBeCreated" : "/proc/does-not-exist");
+  assertJNFailsToStart(conf,"Can not create directory");
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=100000) public void testReturnsSegmentInfoAtEpochTransition() throws Exception {
+  ch.newEpoch(1).get();
+  ch.setEpoch(1);
+  ch.startLogSegment(1,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION).get();
+  ch.sendEdits(1L,1,2,QJMTestUtil.createTxnData(1,2)).get();
+  NewEpochResponseProto response=ch.newEpoch(2).get();
+  ch.setEpoch(2);
+  assertEquals(1,response.getLastSegmentTxId());
+  ch.finalizeLogSegment(1,2).get();
+  response=ch.newEpoch(3).get();
+  ch.setEpoch(3);
+  assertEquals(1,response.getLastSegmentTxId());
+  ch.startLogSegment(3,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION).get();
+  response=ch.newEpoch(4).get();
+  ch.setEpoch(4);
+  assertEquals(1,response.getLastSegmentTxId());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=100000) public void testJournal() throws Exception {
+  MetricsRecordBuilder metrics=MetricsAsserts.getMetrics(journal.getMetricsForTests().getName());
+  MetricsAsserts.assertCounter("BatchesWritten",0L,metrics);
+  MetricsAsserts.assertCounter("BatchesWrittenWhileLagging",0L,metrics);
+  MetricsAsserts.assertGauge("CurrentLagTxns",0L,metrics);
+  IPCLoggerChannel ch=new IPCLoggerChannel(conf,FAKE_NSINFO,journalId,jn.getBoundIpcAddress());
+  ch.newEpoch(1).get();
+  ch.setEpoch(1);
+  ch.startLogSegment(1,NameNodeLayoutVersion.CURRENT_LAYOUT_VERSION).get();
+  ch.sendEdits(1L,1,1,"hello".getBytes(Charsets.UTF_8)).get();
+  metrics=MetricsAsserts.getMetrics(journal.getMetricsForTests().getName());
+  MetricsAsserts.assertCounter("BatchesWritten",1L,metrics);
+  MetricsAsserts.assertCounter("BatchesWrittenWhileLagging",0L,metrics);
+  MetricsAsserts.assertGauge("CurrentLagTxns",0L,metrics);
+  ch.setCommittedTxId(100L);
+  ch.sendEdits(1L,2,1,"goodbye".getBytes(Charsets.UTF_8)).get();
+  metrics=MetricsAsserts.getMetrics(journal.getMetricsForTests().getName());
+  MetricsAsserts.assertCounter("BatchesWritten",2L,metrics);
+  MetricsAsserts.assertCounter("BatchesWrittenWhileLagging",1L,metrics);
+  MetricsAsserts.assertGauge("CurrentLagTxns",98L,metrics);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,392 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.TestRM (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions inside branch conditions"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >BranchVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Validate killing an application when it is at accepted state.
+ * @throws Exception exception
+ */
+@Test(timeout=60000) public void testApplicationKillAtAcceptedState() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  final Dispatcher dispatcher=new AsyncDispatcher(){
+    @Override public EventHandler getEventHandler(){
+class EventArgMatcher extends ArgumentMatcher<AbstractEvent> {
+        @Override public boolean matches(        Object argument){
+          if (argument instanceof RMAppAttemptEvent) {
+            if (((RMAppAttemptEvent)argument).getType().equals(RMAppAttemptEventType.KILL)) {
+              return true;
+            }
+          }
+          return false;
+        }
+      }
+      EventHandler handler=spy(super.getEventHandler());
+      doNothing().when(handler).handle(argThat(new EventArgMatcher()));
+      return handler;
+    }
+  }
+;
+  MockRM rm=new MockRM(conf){
+    @Override protected Dispatcher createDispatcher(){
+      return dispatcher;
+    }
+  }
+;
+  QueueMetrics metrics=rm.getResourceScheduler().getRootQueueMetrics();
+  int appsKilled=metrics.getAppsKilled();
+  int appsSubmitted=metrics.getAppsSubmitted();
+  rm.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm.getResourceTrackerService());
+  nm1.registerNode();
+  RMApp application=rm.submitApp(200);
+  MockAM am=MockRM.launchAM(application,rm,nm1);
+  am.waitForState(RMAppAttemptState.LAUNCHED);
+  nm1.nodeHeartbeat(am.getApplicationAttemptId(),1,ContainerState.RUNNING);
+  rm.waitForState(application.getApplicationId(),RMAppState.ACCEPTED);
+  KillApplicationRequest request=KillApplicationRequest.newInstance(application.getApplicationId());
+  rm.getClientRMService().forceKillApplication(request);
+  am.registerAppAttempt(false);
+  rm.waitForState(application.getApplicationId(),RMAppState.KILLING);
+  rm.waitForState(am.getApplicationAttemptId(),RMAppAttemptState.RUNNING);
+  rm.getRMContext().getDispatcher().getEventHandler().handle(new RMAppEvent(application.getApplicationId(),RMAppEventType.ATTEMPT_KILLED));
+  rm.waitForState(application.getApplicationId(),RMAppState.KILLED);
+  metrics=rm.getResourceScheduler().getRootQueueMetrics();
+  Assert.assertEquals(appsKilled + 1,metrics.getAppsKilled());
+  Assert.assertEquals(appsSubmitted + 1,metrics.getAppsSubmitted());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=60000) public void testInvalidatedAMHostPortOnAMRestart() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  MockRM rm1=new MockRM(conf);
+  rm1.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  RMApp app2=rm1.submitApp(200);
+  MockAM am2=MockRM.launchAndRegisterAM(app2,rm1,nm1);
+  nm1.nodeHeartbeat(am2.getApplicationAttemptId(),1,ContainerState.COMPLETE);
+  am2.waitForState(RMAppAttemptState.FAILED);
+  rm1.waitForState(app2.getApplicationId(),RMAppState.ACCEPTED);
+  GetApplicationReportRequest request1=GetApplicationReportRequest.newInstance(app2.getApplicationId());
+  ApplicationReport report1=rm1.getClientRMService().getApplicationReport(request1).getApplicationReport();
+  Assert.assertEquals("N/A",report1.getHost());
+  Assert.assertEquals(-1,report1.getRpcPort());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=300000) public void testActivatingApplicationAfterAddingNM() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  MockRM rm1=new MockRM(conf);
+  rm1.start();
+  RMApp app1=rm1.submitApp(200);
+  RMApp app2=rm1.submitApp(200);
+  RMAppAttempt attempt1=app1.getCurrentAppAttempt();
+  ApplicationAttemptId attemptId1=attempt1.getAppAttemptId();
+  rm1.waitForState(attemptId1,RMAppAttemptState.SCHEDULED);
+  RMAppAttempt attempt2=app2.getCurrentAppAttempt();
+  ApplicationAttemptId attemptId2=attempt2.getAppAttemptId();
+  rm1.waitForState(attemptId2,RMAppAttemptState.SCHEDULED);
+  MockNM nm1=new MockNM("h1:1234",15120,rm1.getResourceTrackerService());
+  MockNM nm2=new MockNM("h2:5678",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  nm2.registerNode();
+  nm1.nodeHeartbeat(true);
+  rm1.waitForState(attemptId1,RMAppAttemptState.ALLOCATED);
+  rm1.waitForState(attemptId2,RMAppAttemptState.SCHEDULED);
+  nm2.nodeHeartbeat(true);
+  rm1.waitForState(attemptId1,RMAppAttemptState.ALLOCATED);
+  rm1.waitForState(attemptId2,RMAppAttemptState.ALLOCATED);
+  rm1.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testGetNewAppId() throws Exception {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  MockRM rm=new MockRM();
+  rm.start();
+  GetNewApplicationResponse resp=rm.getNewAppId();
+  assert (resp.getApplicationId().getId() != 0);
+  assert (resp.getMaximumResourceCapability().getMemory() > 0);
+  rm.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testAppWithNoContainers() throws Exception {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  MockRM rm=new MockRM();
+  rm.start();
+  MockNM nm1=rm.registerNode("h1:1234",5120);
+  RMApp app=rm.submitApp(2000);
+  nm1.nodeHeartbeat(true);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  MockAM am=rm.sendAMLaunched(attempt.getAppAttemptId());
+  am.registerAppAttempt();
+  am.unregisterAppAttempt();
+  nm1.nodeHeartbeat(attempt.getAppAttemptId(),1,ContainerState.COMPLETE);
+  am.waitForState(RMAppAttemptState.FINISHED);
+  rm.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-11 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=80000) public void testInvalidateAMHostPortWhenAMFailedOrKilled() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,1);
+  MockRM rm1=new MockRM(conf);
+  rm1.start();
+  RMApp app1=rm1.submitApp(200);
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  MockAM am1=MockRM.launchAndRegisterAM(app1,rm1,nm1);
+  MockRM.finishAMAndVerifyAppState(app1,rm1,nm1,am1);
+  RMApp app2=rm1.submitApp(200);
+  MockAM am2=MockRM.launchAndRegisterAM(app2,rm1,nm1);
+  nm1.nodeHeartbeat(am2.getApplicationAttemptId(),1,ContainerState.COMPLETE);
+  am2.waitForState(RMAppAttemptState.FAILED);
+  rm1.waitForState(app2.getApplicationId(),RMAppState.FAILED);
+  RMApp app3=rm1.submitApp(200);
+  MockAM am3=MockRM.launchAndRegisterAM(app3,rm1,nm1);
+  rm1.killApp(app3.getApplicationId());
+  rm1.waitForState(app3.getApplicationId(),RMAppState.KILLED);
+  rm1.waitForState(am3.getApplicationAttemptId(),RMAppAttemptState.KILLED);
+  GetApplicationsRequest request1=GetApplicationsRequest.newInstance(EnumSet.of(YarnApplicationState.FINISHED,YarnApplicationState.KILLED,YarnApplicationState.FAILED));
+  GetApplicationsResponse response1=rm1.getClientRMService().getApplications(request1);
+  List<ApplicationReport> appList1=response1.getApplicationList();
+  Assert.assertEquals(3,appList1.size());
+  for (  ApplicationReport report : appList1) {
+    if (report.getApplicationId().equals(app2.getApplicationId()) || report.getApplicationId().equals(app3.getApplicationId())) {
+      Assert.assertEquals("N/A",report.getHost());
+      Assert.assertEquals(-1,report.getRpcPort());
+    }
+    if (report.getApplicationId().equals(app1.getApplicationId())) {
+      Assert.assertFalse(report.getHost().equals("N/A"));
+      Assert.assertTrue(report.getRpcPort() != -1);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=30000) public void testAppOnMultiNode() throws Exception {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  YarnConfiguration conf=new YarnConfiguration();
+  conf.set("yarn.scheduler.capacity.node-locality-delay","-1");
+  MockRM rm=new MockRM(conf);
+  rm.start();
+  MockNM nm1=rm.registerNode("h1:1234",5120);
+  MockNM nm2=rm.registerNode("h2:5678",10240);
+  RMApp app=rm.submitApp(2000);
+  nm1.nodeHeartbeat(true);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  MockAM am=rm.sendAMLaunched(attempt.getAppAttemptId());
+  am.registerAppAttempt();
+  int request=13;
+  am.allocate("h1",1000,request,new ArrayList<ContainerId>());
+  List<Container> conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+  int contReceived=conts.size();
+  while (contReceived < 3) {
+    nm1.nodeHeartbeat(true);
+    conts.addAll(am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers());
+    contReceived=conts.size();
+    LOG.info("Got " + contReceived + " containers. Waiting to get "+ 3);
+    Thread.sleep(WAIT_SLEEP_MS);
+  }
+  Assert.assertEquals(3,conts.size());
+  conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+  contReceived=conts.size();
+  while (contReceived < 10) {
+    nm2.nodeHeartbeat(true);
+    conts.addAll(am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers());
+    contReceived=conts.size();
+    LOG.info("Got " + contReceived + " containers. Waiting to get "+ 10);
+    Thread.sleep(WAIT_SLEEP_MS);
+  }
+  Assert.assertEquals(10,conts.size());
+  am.unregisterAppAttempt();
+  nm1.nodeHeartbeat(attempt.getAppAttemptId(),1,ContainerState.COMPLETE);
+  am.waitForState(RMAppAttemptState.FINISHED);
+  rm.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=20000) public void testNMTokenSentForNormalContainer() throws Exception {
+  YarnConfiguration conf=new YarnConfiguration();
+  conf.set(YarnConfiguration.RM_SCHEDULER,CapacityScheduler.class.getCanonicalName());
+  MockRM rm=new MockRM(conf);
+  rm.start();
+  MockNM nm1=rm.registerNode("h1:1234",5120);
+  RMApp app=rm.submitApp(2000);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  CapacityScheduler cs=(CapacityScheduler)rm.getResourceScheduler();
+  cs.getApplicationAttempt(attempt.getAppAttemptId()).getNewContainerId();
+  nm1.nodeHeartbeat(true);
+  MockAM am=MockRM.launchAM(app,rm,nm1);
+  Assert.assertTrue(attempt.getMasterContainer().getId().getId() != 1);
+  Assert.assertFalse(rm.getRMContext().getNMTokenSecretManager().isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm1.getNodeId()));
+  am.registerAppAttempt();
+  rm.waitForState(app.getApplicationId(),RMAppState.RUNNING);
+  int NUM_CONTAINERS=1;
+  List<Container> containers=new ArrayList<Container>();
+  List<NMToken> expectedNMTokens=new ArrayList<NMToken>();
+  while (true) {
+    AllocateResponse response=am.allocate("127.0.0.1",2000,NUM_CONTAINERS,new ArrayList<ContainerId>());
+    nm1.nodeHeartbeat(true);
+    containers.addAll(response.getAllocatedContainers());
+    expectedNMTokens.addAll(response.getNMTokens());
+    if (containers.size() == NUM_CONTAINERS) {
+      break;
+    }
+    Thread.sleep(200);
+    System.out.println("Waiting for container to be allocated.");
+  }
+  NodeId nodeId=expectedNMTokens.get(0).getNodeId();
+  Assert.assertEquals(nm1.getNodeId(),nodeId);
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=40000) public void testNMToken() throws Exception {
+  MockRM rm=new MockRM();
+  try {
+    rm.start();
+    MockNM nm1=rm.registerNode("h1:1234",10000);
+    NMTokenSecretManagerInRM nmTokenSecretManager=rm.getRMContext().getNMTokenSecretManager();
+    RMApp app=rm.submitApp(1000);
+    nm1.nodeHeartbeat(true);
+    RMAppAttempt attempt=app.getCurrentAppAttempt();
+    MockAM am=rm.sendAMLaunched(attempt.getAppAttemptId());
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptRegistered(attempt.getAppAttemptId()));
+    am.registerAppAttempt();
+    ArrayList<Container> containersReceivedForNM1=new ArrayList<Container>();
+    List<ContainerId> releaseContainerList=new ArrayList<ContainerId>();
+    HashMap<String,Token> nmTokens=new HashMap<String,Token>();
+    AllocateResponse response=am.allocate("h1",1000,2,releaseContainerList);
+    Assert.assertEquals(0,response.getAllocatedContainers().size());
+    allocateContainersAndValidateNMTokens(am,containersReceivedForNM1,2,nmTokens,nm1);
+    Assert.assertEquals(1,nmTokens.size());
+    response=am.allocate("h1",1000,2,releaseContainerList);
+    Assert.assertEquals(0,response.getAllocatedContainers().size());
+    allocateContainersAndValidateNMTokens(am,containersReceivedForNM1,4,nmTokens,nm1);
+    Assert.assertEquals(1,nmTokens.size());
+    MockNM nm2=rm.registerNode("h2:1234",10000);
+    nm2.nodeHeartbeat(true);
+    ArrayList<Container> containersReceivedForNM2=new ArrayList<Container>();
+    response=am.allocate("h2",1000,2,releaseContainerList);
+    Assert.assertEquals(0,response.getAllocatedContainers().size());
+    allocateContainersAndValidateNMTokens(am,containersReceivedForNM2,2,nmTokens,nm2);
+    Assert.assertEquals(2,nmTokens.size());
+    nm2=rm.registerNode("h2:1234",10000);
+    Map<NodeId,RMNode> nodes=rm.getRMContext().getRMNodes();
+    while (nodes.get(nm2.getNodeId()).getLastNodeHeartBeatResponse().getResponseId() > 0) {
+      Thread.sleep(WAIT_SLEEP_MS);
+    }
+    int interval=40;
+    while (nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm2.getNodeId()) && interval-- > 0) {
+      LOG.info("waiting for nmToken to be cleared for : " + nm2.getNodeId());
+      Thread.sleep(WAIT_SLEEP_MS);
+    }
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptRegistered(attempt.getAppAttemptId()));
+    nmTokens.remove(nm2.getNodeId().toString());
+    Assert.assertEquals(1,nmTokens.size());
+    response=am.allocate("h2",1000,2,releaseContainerList);
+    Assert.assertEquals(0,response.getAllocatedContainers().size());
+    allocateContainersAndValidateNMTokens(am,containersReceivedForNM2,4,nmTokens,nm2);
+    Assert.assertEquals(2,nmTokens.size());
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm1.getNodeId()));
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm2.getNodeId()));
+    nmTokenSecretManager.rollMasterKey();
+    nmTokenSecretManager.activateNextMasterKey();
+    Assert.assertFalse(nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm1.getNodeId()));
+    Assert.assertFalse(nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm2.getNodeId()));
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptRegistered(attempt.getAppAttemptId()));
+    nmTokens.clear();
+    Assert.assertEquals(0,nmTokens.size());
+    response=am.allocate("h2",1000,1,releaseContainerList);
+    Assert.assertEquals(0,response.getAllocatedContainers().size());
+    allocateContainersAndValidateNMTokens(am,containersReceivedForNM2,5,nmTokens,nm2);
+    Assert.assertEquals(1,nmTokens.size());
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptNMTokenPresent(attempt.getAppAttemptId(),nm2.getNodeId()));
+    Assert.assertTrue(nmTokenSecretManager.isApplicationAttemptRegistered(attempt.getAppAttemptId()));
+    am.unregisterAppAttempt();
+    for (    Container container : containersReceivedForNM1) {
+      nm1.nodeHeartbeat(attempt.getAppAttemptId(),container.getId().getId(),ContainerState.COMPLETE);
+    }
+    for (    Container container : containersReceivedForNM2) {
+      nm2.nodeHeartbeat(attempt.getAppAttemptId(),container.getId().getId(),ContainerState.COMPLETE);
+    }
+    nm1.nodeHeartbeat(am.getApplicationAttemptId(),1,ContainerState.COMPLETE);
+    am.waitForState(RMAppAttemptState.FINISHED);
+    Assert.assertFalse(nmTokenSecretManager.isApplicationAttemptRegistered(attempt.getAppAttemptId()));
+  }
+  finally {
+    rm.stop();
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown(){
+  ClusterMetrics.destroy();
+  QueueMetrics.clearQueueMetrics();
+  DefaultMetricsSystem.shutdown();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

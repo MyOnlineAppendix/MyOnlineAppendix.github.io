@@ -1,0 +1,113 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hive.metastore.hbase.TestHBaseAggregateStatsCacheWithBitVector (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void allPartitions() throws Exception {
+  String dbName="default";
+  String tableName="snp";
+  List<String> partVals1=Arrays.asList("today");
+  List<String> partVals2=Arrays.asList("yesterday");
+  long now=System.currentTimeMillis();
+  List<FieldSchema> cols=new ArrayList<>();
+  cols.add(new FieldSchema("col1","boolean","nocomment"));
+  SerDeInfo serde=new SerDeInfo("serde","seriallib",null);
+  StorageDescriptor sd=new StorageDescriptor(cols,"file:/tmp","input","output",false,0,serde,null,null,Collections.<String,String>emptyMap());
+  List<FieldSchema> partCols=new ArrayList<>();
+  partCols.add(new FieldSchema("ds","string",""));
+  Table table=new Table(tableName,dbName,"me",(int)now,(int)now,0,sd,partCols,Collections.<String,String>emptyMap(),null,null,null);
+  store.createTable(table);
+  StorageDescriptor psd=new StorageDescriptor(sd);
+  psd.setLocation("file:/tmp/default/hit/ds=" + partVals1.get(0));
+  Partition part=new Partition(partVals1,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+  store.addPartition(part);
+  psd=new StorageDescriptor(sd);
+  psd.setLocation("file:/tmp/default/hit/ds=" + partVals2.get(0));
+  part=new Partition(partVals2,dbName,tableName,(int)now,(int)now,psd,Collections.<String,String>emptyMap());
+  store.addPartition(part);
+  ColumnStatistics cs=new ColumnStatistics();
+  ColumnStatisticsDesc desc=new ColumnStatisticsDesc(false,dbName,tableName);
+  desc.setLastAnalyzed(now);
+  desc.setPartName("ds=" + partVals1.get(0));
+  cs.setStatsDesc(desc);
+  ColumnStatisticsObj obj=new ColumnStatisticsObj();
+  obj.setColName("col1");
+  obj.setColType("double");
+  ColumnStatisticsData data=new ColumnStatisticsData();
+  DoubleColumnStatsData dcsd=new DoubleColumnStatsData();
+  dcsd.setHighValue(1000.2342343);
+  dcsd.setLowValue(-20.1234213423);
+  dcsd.setNumNulls(30);
+  dcsd.setNumDVs(12342);
+  dcsd.setBitVectors("{0, 4, 5, 7}{0, 1}{0, 1, 2}{0, 1, 4}{0}{0, 2}{0, 3}{0, 2, 3, 4}{0, 1, 4}{0, 1}{0}{0, 1, 3, 8}{0, 2}{0, 2}{0, 9}{0, 1, 4}");
+  data.setDoubleStats(dcsd);
+  obj.setStatsData(data);
+  cs.addToStatsObj(obj);
+  store.updatePartitionColumnStatistics(cs,partVals1);
+  cs=new ColumnStatistics();
+  desc=new ColumnStatisticsDesc(false,dbName,tableName);
+  desc.setLastAnalyzed(now);
+  desc.setPartName("ds=" + partVals2.get(0));
+  cs.setStatsDesc(desc);
+  obj=new ColumnStatisticsObj();
+  obj.setColName("col1");
+  obj.setColType("double");
+  data=new ColumnStatisticsData();
+  dcsd=new DoubleColumnStatsData();
+  dcsd.setHighValue(1000.2342343);
+  dcsd.setLowValue(-20.1234213423);
+  dcsd.setNumNulls(30);
+  dcsd.setNumDVs(12342);
+  dcsd.setBitVectors("{0, 1}{0, 1}{1, 2, 4}{0, 1, 2}{0, 1, 2}{0, 2}{0, 1, 3, 4}{0, 1}{0, 1}{3, 4, 6}{2}{0, 1}{0, 3}{0}{0, 1}{0, 1, 4}");
+  data.setDoubleStats(dcsd);
+  obj.setStatsData(data);
+  cs.addToStatsObj(obj);
+  store.updatePartitionColumnStatistics(cs,partVals2);
+  Checker statChecker=new Checker(){
+    @Override public void checkStats(    AggrStats aggrStats) throws Exception {
+      Assert.assertEquals(2,aggrStats.getPartsFound());
+      Assert.assertEquals(1,aggrStats.getColStatsSize());
+      ColumnStatisticsObj cso=aggrStats.getColStats().get(0);
+      Assert.assertEquals("col1",cso.getColName());
+      Assert.assertEquals("double",cso.getColType());
+      DoubleColumnStatsData dcsd=cso.getStatsData().getDoubleStats();
+      Assert.assertEquals(1000.23,dcsd.getHighValue(),0.01);
+      Assert.assertEquals(-20.12,dcsd.getLowValue(),0.01);
+      Assert.assertEquals(60,dcsd.getNumNulls());
+      Assert.assertEquals(5,dcsd.getNumDVs());
+      Assert.assertEquals("{0, 1, 4, 5, 7}{0, 1}{0, 1, 2, 4}{0, 1, 2, 4}{0, 1, 2}{0, 2}{0, 1, 3, 4}{0, 1, 2, 3, 4}{0, 1, 4}{0, 1, 3, 4, 6}{0, 2}{0, 1, 3, 8}{0, 2, 3}{0, 2}{0, 1, 9}{0, 1, 4}",dcsd.getBitVectors());
+    }
+  }
+;
+  AggrStats aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=today","ds=yesterday"),Arrays.asList("col1"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+  aggrStats=store.get_aggr_stats_for(dbName,tableName,Arrays.asList("ds=yesterday","ds=today"),Arrays.asList("col1"));
+  statChecker.checkStats(aggrStats);
+  Assert.assertEquals(0,store.backdoor().getStatsCache().hbaseHits.getCnt());
+  Assert.assertEquals(2,store.backdoor().getStatsCache().totalGets.getCnt());
+  Assert.assertEquals(1,store.backdoor().getStatsCache().misses.getCnt());
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void before() throws IOException {
+  MockitoAnnotations.initMocks(this);
+  HiveConf conf=new HiveConf();
+  conf.setBoolean(HBaseReadWrite.NO_CACHE_CONF,true);
+  store=MockUtils.init(conf,htable,rows);
+  store.backdoor().getStatsCache().resetCounters();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,133 @@
+<h3 style="margin:0px">Class: org.apache.ambari.server.checks.PreviousUpgradeCompletedTest (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+/** 
+ */
+@Before public void setup(){
+  puc=new PreviousUpgradeCompleted();
+  puc.clustersProvider=new Provider<Clusters>(){
+    @Override public Clusters get(){
+      return clusters;
+    }
+  }
+;
+  puc.ambariMetaInfo=new Provider<AmbariMetaInfo>(){
+    @Override public AmbariMetaInfo get(){
+      return ambariMetaInfo;
+    }
+  }
+;
+  puc.clusterVersionDAOProvider=new Provider<ClusterVersionDAO>(){
+    @Override public ClusterVersionDAO get(){
+      return clusterVersionDAO;
+    }
+  }
+;
+  puc.requestDaoProvider=new Provider<RequestDAO>(){
+    @Override public RequestDAO get(){
+      return requestDAO;
+    }
+  }
+;
+  puc.hostRoleCommandDaoProvider=new Provider<HostRoleCommandDAO>(){
+    @Override public HostRoleCommandDAO get(){
+      return hrcDAO;
+    }
+  }
+;
+  puc.upgradeDaoProvider=new Provider<UpgradeDAO>(){
+    @Override public UpgradeDAO get(){
+      return upgradeDAO;
+    }
+  }
+;
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPerform() throws Exception {
+  StackId stackId=new StackId("HDP","2.2");
+  StackEntity stack=new StackEntity();
+  stack.setStackName(stackId.getStackName());
+  stack.setStackVersion(stackId.getStackVersion());
+  RepositoryVersionEntity rve=new RepositoryVersionEntity(stack,sourceRepositoryVersion,sourceRepositoryVersion,"rhel6");
+  final Cluster cluster=Mockito.mock(Cluster.class);
+  Mockito.when(cluster.getClusterName()).thenReturn(clusterName);
+  final long clusterId=1L;
+  Mockito.when(cluster.getClusterId()).thenReturn(clusterId);
+  PrereqCheckRequest checkRequest=new PrereqCheckRequest(clusterName);
+  checkRequest.setRepositoryVersion(sourceRepositoryVersion);
+  checkRequest.setSourceStackId(sourceStackId);
+  checkRequest.setTargetStackId(targetStackId);
+  List<UpgradeEntity> upgrades=new ArrayList<>();
+  Mockito.when(upgradeDAO.findAll()).thenReturn(upgrades);
+  Mockito.when(clusters.getCluster(clusterName)).thenReturn(cluster);
+  PrerequisiteCheck check=new PrerequisiteCheck(null,null);
+  puc.perform(check,checkRequest);
+  Assert.assertEquals(PrereqCheckStatus.PASS,check.getStatus());
+  final long upgradeRequestId=1L;
+  RequestEntity upgradeRequest=Mockito.mock(RequestEntity.class);
+  Mockito.when(upgradeRequest.getRequestId()).thenReturn(upgradeRequestId);
+  Mockito.when(upgradeRequest.getStartTime()).thenReturn(System.currentTimeMillis() - 1000);
+  Mockito.when(requestDAO.findByPK(upgradeRequestId)).thenReturn(upgradeRequest);
+  UpgradeEntity upgrade=Mockito.mock(UpgradeEntity.class);
+  Mockito.when(upgrade.getClusterId()).thenReturn(clusterId);
+  Mockito.when(upgrade.getRequestId()).thenReturn(upgradeRequestId);
+  Mockito.when(upgrade.getDirection()).thenReturn(Direction.UPGRADE);
+  Mockito.when(upgrade.getFromVersion()).thenReturn(sourceRepositoryVersion);
+  Mockito.when(upgrade.getToVersion()).thenReturn(destRepositoryVersion);
+  upgrades.add(upgrade);
+  Mockito.when(upgradeDAO.findAll()).thenReturn(upgrades);
+  check=new PrerequisiteCheck(null,null);
+  puc.perform(check,checkRequest);
+  Assert.assertEquals(PrereqCheckStatus.PASS,check.getStatus());
+  final long downgradeRequestId=2L;
+  RequestEntity downgradeRequest=Mockito.mock(RequestEntity.class);
+  Mockito.when(downgradeRequest.getRequestId()).thenReturn(downgradeRequestId);
+  Mockito.when(downgradeRequest.getStartTime()).thenReturn(System.currentTimeMillis() - 500);
+  Mockito.when(requestDAO.findByPK(downgradeRequestId)).thenReturn(downgradeRequest);
+  UpgradeEntity downgrade=Mockito.mock(UpgradeEntity.class);
+  Mockito.when(downgrade.getClusterId()).thenReturn(clusterId);
+  Mockito.when(downgrade.getRequestId()).thenReturn(downgradeRequestId);
+  Mockito.when(downgrade.getDirection()).thenReturn(Direction.DOWNGRADE);
+  Mockito.when(downgrade.getFromVersion()).thenReturn(sourceRepositoryVersion);
+  Mockito.when(downgrade.getToVersion()).thenReturn(sourceRepositoryVersion);
+  upgrades.clear();
+  upgrades.add(upgrade);
+  upgrades.add(downgrade);
+  Mockito.when(upgradeDAO.findAll()).thenReturn(upgrades);
+  check=new PrerequisiteCheck(null,null);
+  puc.perform(check,checkRequest);
+  Assert.assertEquals(PrereqCheckStatus.PASS,check.getStatus());
+  HostRoleCommandEntity finalizeCommand=Mockito.mock(HostRoleCommandEntity.class);
+  Mockito.when(finalizeCommand.getStatus()).thenReturn(HostRoleStatus.COMPLETED);
+  Mockito.when(finalizeCommand.getTaskId()).thenReturn(1000L);
+  List<HostRoleCommandEntity> commands=new ArrayList<>();
+  commands.add(finalizeCommand);
+  Mockito.when(hrcDAO.findSortedCommandsByRequestIdAndCustomCommandName(upgradeRequestId,PreviousUpgradeCompleted.FINALIZE_ACTION_CLASS_NAME)).thenReturn(commands);
+  upgrades.clear();
+  upgrades.add(upgrade);
+  Mockito.when(upgradeDAO.findAll()).thenReturn(upgrades);
+  check=new PrerequisiteCheck(null,null);
+  puc.perform(check,checkRequest);
+  Assert.assertEquals(PrereqCheckStatus.PASS,check.getStatus());
+  Mockito.when(finalizeCommand.getStatus()).thenReturn(HostRoleStatus.ABORTED);
+  upgrades.clear();
+  upgrades.add(upgrade);
+  Mockito.when(upgradeDAO.findAll()).thenReturn(upgrades);
+  check=new PrerequisiteCheck(null,null);
+  puc.perform(check,checkRequest);
+  Assert.assertEquals(PrereqCheckStatus.FAIL,check.getStatus());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

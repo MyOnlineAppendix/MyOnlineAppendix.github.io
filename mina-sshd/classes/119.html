@@ -1,0 +1,58 @@
+<h3 style="margin:0px">Class: org.apache.sshd.server.config.keys.AuthorizedKeysAuthenticatorTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies whether two objects/variables are the same"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >IdentityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-11 type-8 type-2 type-3 type-15 type-7 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether two objects/variables are the same">IdentityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether two objects/variables are the same
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testAutomaticReload() throws Exception {
+  final Path file=getTempTargetRelativeFile(getCurrentTestName());
+  if (Files.exists(file)) {
+    Files.delete(file);
+  }
+  final AtomicInteger reloadCount=new AtomicInteger(0);
+  PublickeyAuthenticator auth=new AuthorizedKeysAuthenticator(file){
+    @Override protected Collection<AuthorizedKeyEntry> reloadAuthorizedKeys(    Path path,    String username,    ServerSession session) throws IOException {
+      assertSame("Mismatched reload path",file,path);
+      reloadCount.incrementAndGet();
+      return super.reloadAuthorizedKeys(path,username,session);
+    }
+  }
+;
+  assertFalse("Unexpected authentication success for missing file " + file,auth.authenticate(getCurrentTestName(),Mockito.mock(PublicKey.class),null));
+  List<String> keyLines=loadDefaultSupportedKeys();
+  assertHierarchyTargetFolderExists(file.getParent());
+  while (keyLines.size() > 0) {
+    try (Writer w=Files.newBufferedWriter(file,StandardCharsets.UTF_8)){
+      w.append(PublicKeyEntry.COMMENT_CHAR).append(' ').append(getCurrentTestName()).append(' ').append(String.valueOf(keyLines.size())).append(" remaining keys").append(IoUtils.EOL);
+      for (      String l : keyLines) {
+        w.append(l).append(IoUtils.EOL);
+      }
+    }
+     List<AuthorizedKeyEntry> entries=AuthorizedKeyEntry.readAuthorizedKeys(file);
+    assertEquals("Mismatched number of loaded entries",keyLines.size(),entries.size());
+    List<PublicKey> keySet=AuthorizedKeyEntry.resolveAuthorizedKeys(PublicKeyEntryResolver.FAILING,entries);
+    assertEquals("Mismatched number of loaded keys",entries.size(),keySet.size());
+    reloadCount.set(0);
+    for (int index=0; index < keySet.size(); index++) {
+      PublicKey k=keySet.get(index);
+      String keyData=keyLines.get(index);
+      assertTrue("Failed to authenticate with key #" + (index + 1) + " "+ k.getAlgorithm()+ "["+ keyData+ "] on file="+ file,auth.authenticate(getCurrentTestName(),k,null));
+      assertEquals("Unexpected keys re-loading of " + keyLines.size() + " remaining at key #"+ (index + 1)+ " on file="+ file,1,reloadCount.get());
+    }
+    keyLines.remove(0);
+  }
+  assertTrue("File no longer exists: " + file,Files.exists(file));
+  assertFalse("Unexpected authentication success for empty file " + file,auth.authenticate(getCurrentTestName(),Mockito.mock(PublicKey.class),null));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

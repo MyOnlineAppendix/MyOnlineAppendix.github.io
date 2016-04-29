@@ -1,0 +1,322 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestSaveNamespace (13 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(10)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testRTEWhileSavingSecondImage() throws Exception {
+  saveNamespaceWithInjectedFault(Fault.SAVE_SECOND_FSIMAGE_RTE);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testCrashWhenWritingVersionFiles() throws Exception {
+  saveNamespaceWithInjectedFault(Fault.WRITE_STORAGE_ALL);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Verify that a saveNamespace command brings faulty directories
+ * in fs.name.dir and fs.edit.dir back online.
+ */
+@Test(timeout=30000) public void testReinsertnamedirsInSavenamespace() throws Exception {
+  Configuration conf=getConf();
+  conf.setBoolean(DFSConfigKeys.DFS_NAMENODE_NAME_DIR_RESTORE_KEY,true);
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  FSNamesystem fsn=FSNamesystem.loadFromDisk(conf);
+  FSImage originalImage=fsn.getFSImage();
+  NNStorage storage=originalImage.getStorage();
+  FSImage spyImage=spy(originalImage);
+  Whitebox.setInternalState(fsn,"fsImage",spyImage);
+  FileSystem fs=FileSystem.getLocal(conf);
+  File rootDir=storage.getStorageDir(0).getRoot();
+  Path rootPath=new Path(rootDir.getPath(),"current");
+  final FsPermission permissionNone=new FsPermission((short)0);
+  final FsPermission permissionAll=new FsPermission(FsAction.ALL,FsAction.READ_EXECUTE,FsAction.READ_EXECUTE);
+  fs.setPermission(rootPath,permissionNone);
+  try {
+    doAnEdit(fsn,1);
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    LOG.info("Doing the first savenamespace.");
+    fsn.saveNamespace();
+    LOG.info("First savenamespace sucessful.");
+    assertTrue("Savenamespace should have marked one directory as bad." + " But found " + storage.getRemovedStorageDirs().size() + " bad directories.",storage.getRemovedStorageDirs().size() == 1);
+    fs.setPermission(rootPath,permissionAll);
+    LOG.info("Doing the second savenamespace.");
+    fsn.saveNamespace();
+    LOG.warn("Second savenamespace sucessful.");
+    assertTrue("Savenamespace should have been successful in removing " + " bad directories from Image." + " But found " + storage.getRemovedStorageDirs().size() + " bad directories.",storage.getRemovedStorageDirs().size() == 0);
+    LOG.info("Shutting down fsimage.");
+    originalImage.close();
+    fsn.close();
+    fsn=null;
+    LOG.info("Loading new FSmage from disk.");
+    fsn=FSNamesystem.loadFromDisk(conf);
+    LOG.info("Checking reloaded image.");
+    checkEditExists(fsn,1);
+    LOG.info("Reloaded image is good.");
+  }
+  finally {
+    if (rootDir.exists()) {
+      fs.setPermission(rootPath,permissionAll);
+    }
+    if (fsn != null) {
+      try {
+        fsn.close();
+      }
+ catch (      Throwable t) {
+        LOG.fatal("Failed to shut down",t);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testSaveWhileEditsRolled() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  FSNamesystem fsn=FSNamesystem.loadFromDisk(conf);
+  try {
+    doAnEdit(fsn,1);
+    CheckpointSignature sig=fsn.rollEditLog();
+    LOG.warn("Checkpoint signature: " + sig);
+    doAnEdit(fsn,2);
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    fsn.saveNamespace();
+    fsn.close();
+    fsn=null;
+    fsn=FSNamesystem.loadFromDisk(conf);
+    checkEditExists(fsn,1);
+    checkEditExists(fsn,2);
+  }
+  finally {
+    if (fsn != null) {
+      fsn.close();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testSaveNamespaceWithDanglingLease() throws Exception {
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(new Configuration()).numDataNodes(1).build();
+  cluster.waitActive();
+  DistributedFileSystem fs=cluster.getFileSystem();
+  try {
+    cluster.getNamesystem().leaseManager.addLease("me","/non-existent");
+    fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    cluster.getNameNodeRpc().saveNamespace();
+    fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testCrashWhenWritingVersionFileInOneDir() throws Exception {
+  saveNamespaceWithInjectedFault(Fault.WRITE_STORAGE_ONE);
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=20000) public void testCancelSaveNamespace() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  FSNamesystem fsn=FSNamesystem.loadFromDisk(conf);
+  final FSImage image=fsn.getFSImage();
+  NNStorage storage=image.getStorage();
+  storage.close();
+  storage.setStorageDirectories(FSNamesystem.getNamespaceDirs(conf),FSNamesystem.getNamespaceEditsDirs(conf));
+  FSNamesystem spyFsn=spy(fsn);
+  final FSNamesystem finalFsn=spyFsn;
+  DelayAnswer delayer=new GenericTestUtils.DelayAnswer(LOG);
+  doAnswer(delayer).when(spyFsn).getGenerationStampV2();
+  ExecutorService pool=Executors.newFixedThreadPool(2);
+  try {
+    doAnEdit(fsn,1);
+    final Canceler canceler=new Canceler();
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    try {
+      Future<Void> saverFuture=pool.submit(new Callable<Void>(){
+        @Override public Void call() throws Exception {
+          image.saveNamespace(finalFsn,NameNodeFile.IMAGE,canceler);
+          return null;
+        }
+      }
+);
+      delayer.waitForCall();
+      Future<Void> cancelFuture=pool.submit(new Callable<Void>(){
+        @Override public Void call() throws Exception {
+          canceler.cancel("cancelled");
+          return null;
+        }
+      }
+);
+      Thread.sleep(500);
+      delayer.proceed();
+      cancelFuture.get();
+      saverFuture.get();
+      fail("saveNamespace did not fail even though cancelled!");
+    }
+ catch (    Throwable t) {
+      GenericTestUtils.assertExceptionContains("SaveNamespaceCancelledException",t);
+    }
+    LOG.info("Successfully cancelled a saveNamespace");
+    FSImageTestUtil.logStorageContents(LOG,storage);
+    for (    StorageDirectory sd : storage.dirIterable(null)) {
+      File curDir=sd.getCurrentDir();
+      GenericTestUtils.assertGlobEquals(curDir,"fsimage_.*",NNStorage.getImageFileName(0),NNStorage.getImageFileName(0) + MD5FileUtils.MD5_SUFFIX);
+    }
+  }
+  finally {
+    if (fsn != null) {
+      fsn.close();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=30000) public void testTxIdPersistence() throws Exception {
+  Configuration conf=getConf();
+  NameNode.initMetrics(conf,NamenodeRole.NAMENODE);
+  DFSTestUtil.formatNameNode(conf);
+  FSNamesystem fsn=FSNamesystem.loadFromDisk(conf);
+  try {
+    assertEquals(1,fsn.getEditLog().getLastWrittenTxId());
+    doAnEdit(fsn,1);
+    assertEquals(2,fsn.getEditLog().getLastWrittenTxId());
+    fsn.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    fsn.saveNamespace();
+    assertEquals(4,fsn.getEditLog().getLastWrittenTxId());
+    fsn.getFSImage().close();
+    fsn.close();
+    assertEquals(5,fsn.getEditLog().getLastWrittenTxId());
+    fsn=null;
+    fsn=FSNamesystem.loadFromDisk(conf);
+    assertEquals(6,fsn.getEditLog().getLastWrittenTxId());
+  }
+  finally {
+    if (fsn != null) {
+      fsn.close();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test case where savenamespace fails in all directories
+ * and then the NN shuts down. Here we should recover from the
+ * failed checkpoint since it only affected ".ckpt" files, not
+ * valid image files
+ */
+@Test(timeout=30000) public void testFailedSaveNamespace() throws Exception {
+  doTestFailedSaveNamespace(false);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test for save namespace should succeed when parent directory renamed with
+ * open lease and destination directory exist. 
+ * This test is a regression for HDFS-2827
+ */
+@Test(timeout=30000) public void testSaveNamespaceWithRenamedLease() throws Exception {
+  MiniDFSCluster cluster=new MiniDFSCluster.Builder(new Configuration()).numDataNodes(1).build();
+  cluster.waitActive();
+  DistributedFileSystem fs=cluster.getFileSystem();
+  OutputStream out=null;
+  try {
+    fs.mkdirs(new Path("/test-target"));
+    out=fs.create(new Path("/test-source/foo"));
+    fs.rename(new Path("/test-source/"),new Path("/test-target/"));
+    fs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    cluster.getNameNodeRpc().saveNamespace();
+    fs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+  }
+  finally {
+    IOUtils.cleanup(LOG,out,fs);
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testIOEWhileSavingSecondImage() throws Exception {
+  saveNamespaceWithInjectedFault(Fault.SAVE_SECOND_FSIMAGE_IOE);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test case where saveNamespace fails in all directories, but then
+ * the operator restores the directories and calls it again.
+ * This should leave the NN in a clean state for next start.
+ */
+@Test(timeout=30000) public void testFailedSaveNamespaceWithRecovery() throws Exception {
+  doTestFailedSaveNamespace(true);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=30000) public void testCrashInAllImageDirs() throws Exception {
+  saveNamespaceWithInjectedFault(Fault.SAVE_ALL_FSIMAGES);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,276 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.yarn.server.resourcemanager.TestApplicationCleanup (7 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("resource") @Test(timeout=60000) public void testAppCleanupWhenRMRestartedAfterAppFinished() throws Exception {
+  conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,1);
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  MockRM rm1=new MockRM(conf,memStore);
+  rm1.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  RMApp app0=rm1.submitApp(200);
+  MockAM am0=launchAM(app0,rm1,nm1);
+  nm1.nodeHeartbeat(am0.getApplicationAttemptId(),1,ContainerState.COMPLETE);
+  rm1.waitForState(app0.getApplicationId(),RMAppState.FAILED);
+  MockRM rm2=new MockRM(conf,memStore);
+  rm2.start();
+  nm1.setResourceTrackerService(rm2.getResourceTrackerService());
+  nm1.registerNode(Arrays.asList(app0.getApplicationId()));
+  rm2.waitForState(app0.getApplicationId(),RMAppState.FAILED);
+  waitForAppCleanupMessageRecved(nm1,app0.getApplicationId());
+  rm1.stop();
+  rm2.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("resource") @Test(timeout=60000) public void testContainerCleanupWhenRMRestartedAppNotRegistered() throws Exception {
+  conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,1);
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  final DrainDispatcher dispatcher=new DrainDispatcher();
+  MockRM rm1=new MockRM(conf,memStore){
+    @Override protected Dispatcher createDispatcher(){
+      return dispatcher;
+    }
+  }
+;
+  rm1.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  RMApp app0=rm1.submitApp(200);
+  MockAM am0=launchAM(app0,rm1,nm1);
+  nm1.nodeHeartbeat(am0.getApplicationAttemptId(),1,ContainerState.RUNNING);
+  rm1.waitForState(app0.getApplicationId(),RMAppState.RUNNING);
+  final DrainDispatcher dispatcher2=new DrainDispatcher();
+  MockRM rm2=new MockRM(conf,memStore){
+    @Override protected Dispatcher createDispatcher(){
+      return dispatcher2;
+    }
+  }
+;
+  rm2.start();
+  nm1.setResourceTrackerService(rm2.getResourceTrackerService());
+  nm1.registerNode(Arrays.asList(app0.getApplicationId()));
+  rm2.waitForState(app0.getApplicationId(),RMAppState.ACCEPTED);
+  NodeHeartbeatResponse response=nm1.nodeHeartbeat(am0.getApplicationAttemptId(),2,ContainerState.RUNNING);
+  waitForContainerCleanup(dispatcher2,nm1,response);
+  rm1.stop();
+  rm2.stop();
+}
+
+</code></pre>
+
+<pre class="type-8 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void setup() throws UnknownHostException {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  conf=new YarnConfiguration();
+  UserGroupInformation.setConfiguration(conf);
+  conf.set(YarnConfiguration.RECOVERY_ENABLED,"true");
+  conf.set(YarnConfiguration.RM_STORE,MemoryRMStateStore.class.getName());
+  Assert.assertTrue(YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS > 1);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@SuppressWarnings("resource") @Test public void testContainerCleanup() throws Exception {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  final DrainDispatcher dispatcher=new DrainDispatcher();
+  MockRM rm=new MockRM(){
+    @Override protected EventHandler<SchedulerEvent> createSchedulerEventDispatcher(){
+      return new SchedulerEventDispatcher(this.scheduler){
+        @Override public void handle(        SchedulerEvent event){
+          scheduler.handle(event);
+        }
+      }
+;
+    }
+    @Override protected Dispatcher createDispatcher(){
+      return dispatcher;
+    }
+  }
+;
+  rm.start();
+  MockNM nm1=rm.registerNode("127.0.0.1:1234",5000);
+  RMApp app=rm.submitApp(2000);
+  nm1.nodeHeartbeat(true);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  MockAM am=rm.sendAMLaunched(attempt.getAppAttemptId());
+  am.registerAppAttempt();
+  int request=2;
+  am.allocate("127.0.0.1",1000,request,new ArrayList<ContainerId>());
+  dispatcher.await();
+  nm1.nodeHeartbeat(true);
+  List<Container> conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+  int contReceived=conts.size();
+  int waitCount=0;
+  while (contReceived < request && waitCount++ < 200) {
+    LOG.info("Got " + contReceived + " containers. Waiting to get "+ request);
+    Thread.sleep(100);
+    conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+    dispatcher.await();
+    contReceived+=conts.size();
+    nm1.nodeHeartbeat(true);
+  }
+  Assert.assertEquals(request,contReceived);
+  ArrayList<ContainerId> release=new ArrayList<ContainerId>();
+  release.add(conts.get(0).getId());
+  am.allocate(new ArrayList<ResourceRequest>(),release);
+  dispatcher.await();
+  Map<ApplicationId,List<ContainerStatus>> containerStatuses=new HashMap<ApplicationId,List<ContainerStatus>>();
+  ArrayList<ContainerStatus> containerStatusList=new ArrayList<ContainerStatus>();
+  containerStatusList.add(BuilderUtils.newContainerStatus(conts.get(0).getId(),ContainerState.RUNNING,"nothing",0));
+  containerStatuses.put(app.getApplicationId(),containerStatusList);
+  NodeHeartbeatResponse resp=nm1.nodeHeartbeat(containerStatuses,true);
+  waitForContainerCleanup(dispatcher,nm1,resp);
+  LOG.info("Testing container launch much after release and " + "NM getting cleanup");
+  containerStatuses.clear();
+  containerStatusList.clear();
+  containerStatusList.add(BuilderUtils.newContainerStatus(conts.get(0).getId(),ContainerState.RUNNING,"nothing",0));
+  containerStatuses.put(app.getApplicationId(),containerStatusList);
+  resp=nm1.nodeHeartbeat(containerStatuses,true);
+  waitForContainerCleanup(dispatcher,nm1,resp);
+  rm.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@SuppressWarnings("resource") @Test(timeout=60000) public void testAppCleanupWhenRMRestartedBeforeAppFinished() throws Exception {
+  conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,1);
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  MockRM rm1=new MockRM(conf,memStore);
+  rm1.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",1024,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  MockNM nm2=new MockNM("127.0.0.1:5678",1024,rm1.getResourceTrackerService());
+  nm2.registerNode();
+  RMApp app0=rm1.submitApp(200);
+  MockAM am0=launchAM(app0,rm1,nm1);
+  AllocateResponse allocResponse=am0.allocate(Arrays.asList(ResourceRequest.newInstance(Priority.newInstance(1),"*",Resource.newInstance(1024,0),1)),null);
+  while (null == allocResponse.getAllocatedContainers() || allocResponse.getAllocatedContainers().isEmpty()) {
+    nm2.nodeHeartbeat(true);
+    allocResponse=am0.allocate(null,null);
+    Thread.sleep(1000);
+  }
+  MockRM rm2=new MockRM(conf,memStore);
+  rm2.start();
+  nm1.setResourceTrackerService(rm2.getResourceTrackerService());
+  nm1.registerNode(Arrays.asList(NMContainerStatus.newInstance(ContainerId.newInstance(am0.getApplicationAttemptId(),1),ContainerState.COMPLETE,Resource.newInstance(1024,1),"",0,Priority.newInstance(0),1234)),Arrays.asList(app0.getApplicationId()));
+  nm2.setResourceTrackerService(rm2.getResourceTrackerService());
+  nm2.registerNode(Arrays.asList(app0.getApplicationId()));
+  rm2.waitForState(app0.getApplicationId(),RMAppState.FAILED);
+  waitForAppCleanupMessageRecved(nm1,app0.getApplicationId());
+  waitForAppCleanupMessageRecved(nm2,app0.getApplicationId());
+  rm1.stop();
+  rm2.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@SuppressWarnings("resource") @Test public void testAppCleanup() throws Exception {
+  Logger rootLogger=LogManager.getRootLogger();
+  rootLogger.setLevel(Level.DEBUG);
+  MockRM rm=new MockRM();
+  rm.start();
+  MockNM nm1=rm.registerNode("127.0.0.1:1234",5000);
+  RMApp app=rm.submitApp(2000);
+  nm1.nodeHeartbeat(true);
+  RMAppAttempt attempt=app.getCurrentAppAttempt();
+  MockAM am=rm.sendAMLaunched(attempt.getAppAttemptId());
+  am.registerAppAttempt();
+  int request=2;
+  am.allocate("127.0.0.1",1000,request,new ArrayList<ContainerId>());
+  nm1.nodeHeartbeat(true);
+  List<Container> conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+  int contReceived=conts.size();
+  int waitCount=0;
+  while (contReceived < request && waitCount++ < 200) {
+    LOG.info("Got " + contReceived + " containers. Waiting to get "+ request);
+    Thread.sleep(100);
+    conts=am.allocate(new ArrayList<ResourceRequest>(),new ArrayList<ContainerId>()).getAllocatedContainers();
+    contReceived+=conts.size();
+    nm1.nodeHeartbeat(true);
+  }
+  Assert.assertEquals(request,contReceived);
+  am.unregisterAppAttempt();
+  NodeHeartbeatResponse resp=nm1.nodeHeartbeat(attempt.getAppAttemptId(),1,ContainerState.COMPLETE);
+  am.waitForState(RMAppAttemptState.FINISHED);
+  resp=nm1.nodeHeartbeat(true);
+  List<ContainerId> containersToCleanup=resp.getContainersToCleanup();
+  List<ApplicationId> appsToCleanup=resp.getApplicationsToCleanup();
+  int numCleanedContainers=containersToCleanup.size();
+  int numCleanedApps=appsToCleanup.size();
+  waitCount=0;
+  while ((numCleanedContainers < 2 || numCleanedApps < 1) && waitCount++ < 200) {
+    LOG.info("Waiting to get cleanup events.. cleanedConts: " + numCleanedContainers + " cleanedApps: "+ numCleanedApps);
+    Thread.sleep(100);
+    resp=nm1.nodeHeartbeat(true);
+    List<ContainerId> deltaContainersToCleanup=resp.getContainersToCleanup();
+    List<ApplicationId> deltaAppsToCleanup=resp.getApplicationsToCleanup();
+    containersToCleanup.addAll(deltaContainersToCleanup);
+    appsToCleanup.addAll(deltaAppsToCleanup);
+    numCleanedContainers=containersToCleanup.size();
+    numCleanedApps=appsToCleanup.size();
+  }
+  Assert.assertEquals(1,appsToCleanup.size());
+  Assert.assertEquals(app.getApplicationId(),appsToCleanup.get(0));
+  Assert.assertEquals(1,numCleanedApps);
+  Assert.assertEquals(2,numCleanedContainers);
+  rm.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testAppCleanupWhenNMReconnects() throws Exception {
+  conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,1);
+  MemoryRMStateStore memStore=new MemoryRMStateStore();
+  memStore.init(conf);
+  MockRM rm1=new MockRM(conf,memStore);
+  rm1.start();
+  MockNM nm1=new MockNM("127.0.0.1:1234",15120,rm1.getResourceTrackerService());
+  nm1.registerNode();
+  RMApp app0=rm1.submitApp(200);
+  MockAM am0=launchAM(app0,rm1,nm1);
+  nm1.nodeHeartbeat(am0.getApplicationAttemptId(),1,ContainerState.COMPLETE);
+  rm1.waitForState(app0.getApplicationId(),RMAppState.FAILED);
+  waitForAppCleanupMessageRecved(nm1,app0.getApplicationId());
+  nm1.registerNode(Arrays.asList(app0.getApplicationId()));
+  waitForAppCleanupMessageRecved(nm1,app0.getApplicationId());
+  rm1.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

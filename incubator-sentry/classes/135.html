@@ -1,0 +1,895 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hdfs.TestHDFSIntegration (17 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(9)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(2)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="18"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('18')" data-toggle="tooltip" title="Is not executed with the test suite"><kbd id="tag-18"class="label-info"style="display: inline-block;font-size:7pt" >IgnoredMethod&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAuthzObjOnPartitionSameTable() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external/p1");
+  miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","tab1_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create table tab1 (s string) partitioned by (month int)");
+  stmt.execute("alter table tab1 add partition (month = 1) location '/tmp/external/p1'");
+  stmt.execute("create role tab1_role");
+  stmt.execute("grant insert on table tab1 to role tab1_role");
+  stmt.execute("grant role tab1_role to group " + StaticUserGroup.USERGROUP1);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/tmp/external/p1",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP1,true);
+  stmt.execute("alter table tab1 add partition (month = 2) location '/tmp/external/p1'");
+  verifyOnPath("/tmp/external/p1",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP1,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Make sure when events such as table creation fail, the path should not be sync to NameNode plugin.
+ */
+@Test public void testTableCreationFailure() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  if (!miniDFS.getFileSystem().exists(tmpHDFSDir)) {
+    miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  }
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwx---"));
+  Path partitionDir=new Path("/tmp/external/p1");
+  if (!miniDFS.getFileSystem().exists(partitionDir)) {
+    miniDFS.getFileSystem().mkdirs(partitionDir);
+  }
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant all on uri 'hdfs:///tmp/external' to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.HIVE);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  try {
+    stmt.execute("create external table tab1(a int) location 'hdfs:///tmp/external/p1'");
+    Assert.fail("Expect table creation to fail");
+  }
+ catch (  Exception ex) {
+    LOGGER.error("Exception when creating table: " + ex.getMessage());
+  }
+  verifyOnAllSubDirs("/tmp/external/p1",null,StaticUserGroup.HIVE,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAuthzObjOnMultipleTables() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external/p1");
+  miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","tab1_role","tab2_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create external table tab1 (s string) partitioned by (month int) location '/tmp/external/p1'");
+  stmt.execute("create role tab1_role");
+  stmt.execute("grant insert on table tab1 to role tab1_role");
+  stmt.execute("grant role tab1_role to group " + StaticUserGroup.USERGROUP1);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/tmp/external/p1",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP1,true);
+  stmt.execute("create table tab2 (s string) partitioned by (month int) location '/tmp/external/p1'");
+  stmt.execute("create role tab2_role");
+  stmt.execute("grant select on table tab2 to role tab2_role");
+  stmt.execute("grant role tab2_role to group " + StaticUserGroup.USERGROUP1);
+  verifyOnPath("/tmp/external/p1",FsAction.ALL,StaticUserGroup.USERGROUP1,true);
+  stmt.execute("DROP TABLE IF EXISTS tab1");
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnPath("/tmp/external/p1",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP1,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testViews() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  try {
+    stmt.execute("create database " + dbName);
+    stmt.execute("create table test(a string)");
+    stmt.execute("create view testView as select * from test");
+    stmt.execute("create or replace view testView as select * from test");
+    stmt.execute("drop view testView");
+  }
+ catch (  Exception s) {
+    throw s;
+  }
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAccessToTableDirectory() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","table_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create table tb1(a string)");
+  stmt.execute("create role table_role");
+  stmt.execute("grant all on table tb1 to role table_role");
+  stmt.execute("grant role table_role to group " + StaticUserGroup.USERGROUP1);
+  Thread.sleep(CACHE_REFRESH);
+  verifyAccessToPath(StaticUserGroup.USER1_1,StaticUserGroup.USERGROUP1,"/user/hive/warehouse/db1.db/tb1",true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void cleanAfterTest() throws Exception {
+  Connection conn;
+  Statement stmt;
+  Preconditions.checkArgument(admin != null && dbNames != null && roles != null && tmpHDFSDir != null,"Test case did not set some of these values required for clean up: admin, dbNames, roles, tmpHDFSDir");
+  conn=hiveServer2.createConnection(admin,admin);
+  stmt=conn.createStatement();
+  for (  String dbName : dbNames) {
+    stmt.execute("drop database if exists " + dbName + " cascade");
+  }
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  for (  String role : roles) {
+    stmt.execute("drop role " + role);
+  }
+  stmt.close();
+  conn.close();
+  miniDFS.getFileSystem().delete(tmpHDFSDir,true);
+  tmpHDFSDir=null;
+  dbNames=null;
+  roles=null;
+  admin=null;
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testEnd2End() throws Throwable {
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{"db1"};
+  roles=new String[]{"admin_role","db_role","tab_role","p1_admin"};
+  admin="hive";
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant role admin_role to group hive");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("create table p1 (s string) partitioned by (month int, day int)");
+  stmt.execute("alter table p1 add partition (month=1, day=1)");
+  stmt.execute("alter table p1 add partition (month=1, day=2)");
+  stmt.execute("alter table p1 add partition (month=2, day=1)");
+  stmt.execute("alter table p1 add partition (month=2, day=2)");
+  stmt.execute("create database db5");
+  stmt.execute("create role db_role");
+  stmt.execute("create role tab_role");
+  stmt.execute("grant role db_role to group hbase");
+  stmt.execute("grant role tab_role to group flume");
+  stmt.execute("create table db5.p2(id int)");
+  stmt.execute("create role p1_admin");
+  stmt.execute("grant role p1_admin to group hbase");
+  verifyOnAllSubDirs("/user/hive/warehouse",null,"hbase",false);
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",null,"hbase",false);
+  stmt.execute("grant all on database db5 to role db_role");
+  stmt.execute("use db5");
+  stmt.execute("grant all on table p2 to role tab_role");
+  stmt.execute("use default");
+  verifyOnAllSubDirs("/user/hive/warehouse/db5.db",FsAction.ALL,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db5.db/p2",FsAction.ALL,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db5.db/p2",FsAction.ALL,"flume",true);
+  verifyOnPath("/user/hive/warehouse/db5.db",FsAction.ALL,"flume",false);
+  loadData(stmt);
+  verifyHDFSandMR(stmt);
+  verifyOnPath("/user/hive/warehouse",null,"hbase",false);
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",FsAction.READ_EXECUTE,"hbase",true);
+  adminUgi.doAs(new PrivilegedExceptionAction<Void>(){
+    @Override public Void run() throws Exception {
+      AclStatus existing=miniDFS.getFileSystem().getAclStatus(new Path("/user/hive/warehouse/p1"));
+      ArrayList<AclEntry> newEntries=new ArrayList<AclEntry>(existing.getEntries());
+      newEntries.add(AclEntry.parseAclEntry("user::---",true));
+      newEntries.add(AclEntry.parseAclEntry("group:bla:rwx",true));
+      newEntries.add(AclEntry.parseAclEntry("other::---",true));
+      miniDFS.getFileSystem().setAcl(new Path("/user/hive/warehouse/p1"),newEntries);
+      return null;
+    }
+  }
+);
+  stmt.execute("revoke select on table p1 from role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",null,"hbase",false);
+  stmt.execute("grant select on database default to role p1_admin");
+  verifyOnPath("/user/hive/warehouse",FsAction.READ_EXECUTE,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",FsAction.READ_EXECUTE,"hbase",true);
+  stmt.execute("revoke select on database default from role p1_admin");
+  verifyOnPath("/user/hive/warehouse",null,"hbase",false);
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",null,"hbase",false);
+  stmt.execute("grant all on table p1 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",FsAction.ALL,"hbase",true);
+  stmt.execute("revoke select on table p1 from role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/p1",FsAction.WRITE_EXECUTE,"hbase",true);
+  stmt.execute("alter table p1 rename to p3");
+  verifyOnAllSubDirs("/user/hive/warehouse/p3",FsAction.WRITE_EXECUTE,"hbase",true);
+  stmt.execute("alter table p3 partition (month=1, day=1) rename to partition (month=1, day=3)");
+  verifyOnAllSubDirs("/user/hive/warehouse/p3",FsAction.WRITE_EXECUTE,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/p3/month=1/day=3",FsAction.WRITE_EXECUTE,"hbase",true);
+  stmt.execute("create database extdb");
+  stmt.execute("grant all on database ExtDb to role p1_admin");
+  writeToPath("/tmp/external/ext100",5,"foo","bar");
+  writeToPath("/tmp/external/ext101",5,"foo","bar");
+  stmt.execute("use extdb");
+  stmt.execute("create table ext100 (s string) location \'/tmp/external/ext100\'");
+  verifyQuery(stmt,"ext100",5);
+  verifyOnAllSubDirs("/tmp/external/ext100",FsAction.ALL,"hbase",true);
+  stmt.execute("use default");
+  stmt.execute("use EXTDB");
+  stmt.execute("create table ext101 (s string) location \'/tmp/external/ext101\'");
+  verifyQuery(stmt,"ext101",5);
+  verifyOnAllSubDirs("/tmp/external/ext101",FsAction.ALL,"hbase",true);
+  stmt.execute("grant all on table exT100 to role tab_role");
+  verifyOnAllSubDirs("/tmp/external/ext100",FsAction.ALL,"flume",true);
+  stmt.execute("use default");
+  if (!testSentryHA) {
+    long beforeStop=System.currentTimeMillis();
+    sentryServer.stopAll();
+    long timeTakenForStopMs=System.currentTimeMillis() - beforeStop;
+    LOGGER.info("Time taken for Sentry server stop: " + timeTakenForStopMs);
+    if (timeTakenForStopMs < STALE_THRESHOLD) {
+      verifyOnAllSubDirs("/user/hive/warehouse/p3",FsAction.WRITE_EXECUTE,"hbase",true);
+      Thread.sleep((STALE_THRESHOLD - timeTakenForStopMs));
+    }
+ else {
+      LOGGER.warn("Sentry server stop took too long");
+    }
+    verifyOnAllSubDirs("/user/hive/warehouse/p3",null,"hbase",false);
+    sentryServer.startAll();
+  }
+  verifyOnAllSubDirs("/user/hive/warehouse/p3",FsAction.WRITE_EXECUTE,"hbase",true);
+  stmt.execute("create table p2 (s string) partitioned by (month int, day int)");
+  stmt.execute("alter table p2 add partition (month=1, day=1)");
+  stmt.execute("alter table p2 add partition (month=1, day=2)");
+  stmt.execute("alter table p2 add partition (month=2, day=1)");
+  stmt.execute("alter table p2 add partition (month=2, day=2)");
+  verifyOnAllSubDirs("/user/hive/warehouse/p2",null,"hbase",false);
+  stmt.execute("grant select on table p2 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/p2",FsAction.READ_EXECUTE,"hbase",true);
+  stmt.execute("grant select on table p2 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/p2",FsAction.READ_EXECUTE,"hbase",true);
+  writeToPath("/tmp/external/ext1",5,"foo","bar");
+  stmt.execute("create table ext1 (s string) location \'/tmp/external/ext1\'");
+  verifyQuery(stmt,"ext1",5);
+  verifyOnAllSubDirs("/tmp/external/ext1",null,"bar",false);
+  verifyOnAllSubDirs("/tmp/external/ext1",null,"hbase",false);
+  stmt.execute("grant all on table ext1 to role p1_admin");
+  verifyOnAllSubDirs("/tmp/external/ext1",FsAction.ALL,"hbase",true);
+  stmt.execute("revoke select on table ext1 from role p1_admin");
+  verifyOnAllSubDirs("/tmp/external/ext1",FsAction.WRITE_EXECUTE,"hbase",true);
+  stmt.execute("create database db1");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db",null,"hbase",false);
+  stmt.execute("create table db1.tbl1 (s string)");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl1",null,"hbase",false);
+  stmt.execute("create table db1.tbl2 (s string)");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl2",null,"hbase",false);
+  stmt.execute("grant all on database default to role p1_admin");
+  verifyOnPath("/user/hive/warehouse",FsAction.ALL,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db",null,"hbase",false);
+  stmt.execute("create table q1 (s string)");
+  verifyOnAllSubDirs("/user/hive/warehouse/q1",FsAction.ALL,"hbase",true);
+  stmt.execute("alter table q1 rename to q2");
+  verifyOnAllSubDirs("/user/hive/warehouse/q2",FsAction.ALL,"hbase",true);
+  stmt.execute("grant select on table q2 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/q2",FsAction.ALL,"hbase",true);
+  stmt.execute("create table q3 (s string)");
+  verifyOnAllSubDirs("/user/hive/warehouse/q3",FsAction.ALL,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/q2",FsAction.ALL,"hbase",true);
+  stmt.execute("grant select on database db1 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl1",FsAction.READ_EXECUTE,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl2",FsAction.READ_EXECUTE,"hbase",true);
+  stmt.execute("revoke all on database default from role p1_admin");
+  verifyOnPath("/user/hive/warehouse",null,"hbase",false);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl1",FsAction.READ_EXECUTE,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl2",FsAction.READ_EXECUTE,"hbase",true);
+  stmt.execute("use db1");
+  stmt.execute("grant all on table tbl1 to role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl1",FsAction.ALL,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl2",FsAction.READ_EXECUTE,"hbase",true);
+  stmt.execute("revoke select on database db1 from role p1_admin");
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl1",FsAction.WRITE_EXECUTE,"hbase",true);
+  verifyOnAllSubDirs("/user/hive/warehouse/db1.db/tbl2",null,"hbase",false);
+  stmt.execute("drop table tbl1");
+  Assert.assertFalse(miniDFS.getFileSystem().exists(new Path("/user/hive/warehouse/db1.db/tbl1")));
+  stmt.execute("drop table tbl2");
+  Assert.assertFalse(miniDFS.getFileSystem().exists(new Path("/user/hive/warehouse/db1.db/tbl2")));
+  stmt.execute("use default");
+  stmt.execute("drop database db1");
+  Assert.assertFalse(miniDFS.getFileSystem().exists(new Path("/user/hive/warehouse/db1.db")));
+  writeToPath("/tmp/external/tables/ext2_before/i=1",5,"foo","bar");
+  writeToPath("/tmp/external/tables/ext2_before/i=2",5,"foo","bar");
+  stmt.execute("create external table ext2 (s string) partitioned by (i int) location \'/tmp/external/tables/ext2_before\'");
+  stmt.execute("alter table ext2 add partition (i=1)");
+  stmt.execute("alter table ext2 add partition (i=2)");
+  verifyQuery(stmt,"ext2",10);
+  verifyOnAllSubDirs("/tmp/external/tables/ext2_before",null,"hbase",false);
+  stmt.execute("grant all on table ext2 to role p1_admin");
+  verifyOnPath("/tmp/external/tables/ext2_before",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1/stuff.txt",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2/stuff.txt",FsAction.ALL,"hbase",true);
+  writeToPath("/tmp/external/tables/ext2_after/i=1",6,"foo","bar");
+  writeToPath("/tmp/external/tables/ext2_after/i=2",6,"foo","bar");
+  stmt.execute("alter table ext2 set location \'hdfs:///tmp/external/tables/ext2_after\'");
+  verifyQuery(stmt,"ext2",10);
+  verifyOnPath("/tmp/external/tables/ext2_before",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1/stuff.txt",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2/stuff.txt",FsAction.ALL,"hbase",true);
+  stmt.execute("alter table ext2 partition (i=1) set location \'hdfs:///tmp/external/tables/ext2_after/i=1\'");
+  stmt.execute("alter table ext2 partition (i=2) set location \'hdfs:///tmp/external/tables/ext2_after/i=2\'");
+  verifyQuery(stmt,"ext2",12);
+  verifyOnPath("/tmp/external/tables/ext2_before",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=1/stuff.txt",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_before/i=2/stuff.txt",null,"hbase",false);
+  verifyOnPath("/tmp/external/tables/ext2_after",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_after/i=1",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_after/i=2",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_after/i=1/stuff.txt",FsAction.ALL,"hbase",true);
+  verifyOnPath("/tmp/external/tables/ext2_after/i=2/stuff.txt",FsAction.ALL,"hbase",true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAllColumn() throws Throwable {
+  String dbName="db2";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","col_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role with grant option");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create table p1 (c1 string, c2 string) partitioned by (month int, day int)");
+  stmt.execute("alter table p1 add partition (month=1, day=1)");
+  loadDataTwoCols(stmt);
+  stmt.execute("create role col_role");
+  stmt.execute("grant select(c1,c2) on p1 to role col_role");
+  stmt.execute("grant role col_role to group " + StaticUserGroup.USERGROUP1);
+  Thread.sleep(100);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/p1",null,StaticUserGroup.USERGROUP1,false);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Make sure when events such as drop table fail, the path should not be sync to NameNode plugin.
+ */
+@Test public void testDropPartitionFailure() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  if (!miniDFS.getFileSystem().exists(tmpHDFSDir)) {
+    miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  }
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwxrwx"));
+  Path partitionDir=new Path("/tmp/external/p1");
+  if (!miniDFS.getFileSystem().exists(partitionDir)) {
+    miniDFS.getFileSystem().mkdirs(partitionDir);
+  }
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("create table tab3 (s string) partitioned by (month int)");
+  stmt.execute("alter table tab3 add partition (month = 1) location '/tmp/external/p1'");
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwx---"));
+  try {
+    stmt.execute("ALTER TABLE tab3 DROP PARTITION (month = 1)");
+    Assert.fail("Expect dropping partition to fail");
+  }
+ catch (  Exception ex) {
+    LOGGER.error("Exception when dropping partition: " + ex.getMessage());
+  }
+  verifyOnAllSubDirs("/tmp/external/p1",FsAction.ALL,StaticUserGroup.HIVE,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 type-18 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Is not executed with the test suite">IgnoredMethod</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+- Is not executed with the test suite
+"></span><br>
+@Ignore("SENTRY-546") @Test public void testExternalTable() throws Throwable {
+  String dbName="db2";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant all on uri 'hdfs:///tmp/external' to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("create external table tab1(a int) location '/tmp/external/tab1_loc'");
+  verifyOnAllSubDirs("/tmp/external/tab1_loc",FsAction.ALL,StaticUserGroup.ADMINGROUP,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * SENTRY-1002:
+ * Ensure the paths with no scheme will not cause NPE during paths update.
+ */
+@Test public void testMissingScheme() throws Throwable {
+  boolean testConfOff=new Boolean(System.getProperty(EXTERNAL_SENTRY_SERVICE,"false"));
+  if (!testConfOff) {
+    PathsUpdate.getConfiguration().set("fs.defaultFS","hdfs:///");
+  }
+  tmpHDFSDir=new Path("/tmp/external");
+  if (!miniDFS.getFileSystem().exists(tmpHDFSDir)) {
+    miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  }
+  Path partitionDir=new Path("/tmp/external/p1");
+  if (!miniDFS.getFileSystem().exists(partitionDir)) {
+    miniDFS.getFileSystem().mkdirs(partitionDir);
+  }
+  String dbName="db1";
+  String tblName="tab1";
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("create external table " + dbName + "."+ tblName+ "(s string) location '/tmp/external/p1'");
+  Table tbCopy=hmsClient.getTable(dbName,tblName);
+  StorageDescriptor sd=hmsClient.getTable(dbName,tblName).getSd();
+  sd.setLocation("/tmp/external");
+  tbCopy.setSd(sd);
+  hmsClient.alter_table(dbName,"tab1",tbCopy);
+  Assert.assertEquals(hmsClient.getTable(dbName,tblName).getSd().getLocation(),"/tmp/external");
+  verifyOnPath("/tmp/external",FsAction.ALL,StaticUserGroup.HIVE,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Make sure when events such as add partition fail, the path should not be sync to NameNode plugin.
+ */
+@Test public void testAddPartitionFailure() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  if (!miniDFS.getFileSystem().exists(tmpHDFSDir)) {
+    miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  }
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwx---"));
+  Path partitionDir=new Path("/tmp/external/p1");
+  if (!miniDFS.getFileSystem().exists(partitionDir)) {
+    miniDFS.getFileSystem().mkdirs(partitionDir);
+  }
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("create external table tab2 (s string) partitioned by (month int)");
+  try {
+    stmt.execute("alter table tab2 add partition (month = 1) location '/tmp/external/p1'");
+    Assert.fail("Expect adding partition to fail");
+  }
+ catch (  Exception ex) {
+    LOGGER.error("Exception when adding partition: " + ex.getMessage());
+  }
+  verifyOnAllSubDirs("/tmp/external/p1",null,StaticUserGroup.HIVE,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Make sure when events such as drop table fail, the path should not be sync to NameNode plugin.
+ */
+@Test public void testDropTableFailure() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  if (!miniDFS.getFileSystem().exists(tmpHDFSDir)) {
+    miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  }
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwxrwx"));
+  Path partitionDir=new Path("/tmp/external/p1");
+  if (!miniDFS.getFileSystem().exists(partitionDir)) {
+    miniDFS.getFileSystem().mkdirs(partitionDir);
+  }
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("create external table tab1(a int) location 'hdfs:///tmp/external/p1'");
+  miniDFS.getFileSystem().setPermission(tmpHDFSDir,FsPermission.valueOf("drwxrwx---"));
+  try {
+    stmt.execute("drop table tab1");
+    Assert.fail("Expect dropping table to fail");
+  }
+ catch (  Exception ex) {
+    LOGGER.error("Exception when creating table: " + ex.getMessage());
+  }
+  verifyOnAllSubDirs("/tmp/external/p1",FsAction.ALL,StaticUserGroup.HIVE,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAuthzObjOnPartitionMultipleTables() throws Throwable {
+  String dbName="db1";
+  tmpHDFSDir=new Path("/tmp/external");
+  miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  Path partitionDir=new Path("/tmp/external/p1");
+  miniDFS.getFileSystem().mkdirs(partitionDir);
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","tab1_role","tab2_role","tab3_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create external table tab1 (s string) partitioned by (month int) location '/tmp/external/p1'");
+  stmt.execute("create role tab1_role");
+  stmt.execute("grant insert on table tab1 to role tab1_role");
+  stmt.execute("grant role tab1_role to group " + StaticUserGroup.USERGROUP1);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/tmp/external/p1",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP1,true);
+  stmt.execute("create external table tab2 (s string) partitioned by (month int)");
+  stmt.execute("alter table tab2 add partition (month = 1) location '/tmp/external'");
+  stmt.execute("create role tab2_role");
+  stmt.execute("grant select on table tab2 to role tab2_role");
+  stmt.execute("grant role tab2_role to group " + StaticUserGroup.USERGROUP2);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/tab2",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP2,true);
+  verifyOnPath("/tmp/external",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP2,true);
+  stmt.execute("create table tab3 (s string) partitioned by (month int)");
+  stmt.execute("alter table tab3 add partition (month = 1) location '/tmp/external'");
+  stmt.execute("create role tab3_role");
+  stmt.execute("grant insert on table tab3 to role tab3_role");
+  stmt.execute("grant role tab3_role to group " + StaticUserGroup.USERGROUP3);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/tab3",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  verifyOnPath("/tmp/external",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP2,true);
+  verifyOnPath("/tmp/external",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  stmt.execute("alter table tab2 rename to tabx");
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnPath("/tmp/external",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP2,true);
+  verifyOnPath("/tmp/external",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  stmt.execute("ALTER TABLE tabx DROP PARTITION (month = 1)");
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/tab3",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  verifyOnPath("/tmp/external",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  stmt.execute("DROP TABLE IF EXISTS tabx");
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/tab3",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  verifyOnPath("/tmp/external",FsAction.WRITE_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  stmt.close();
+  conn.close();
+  miniDFS.getFileSystem().delete(partitionDir,true);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Make sure non HDFS paths are not added to the object - location map.
+ * @throws Throwable
+ */
+@Test public void testNonHDFSLocations() throws Throwable {
+  String dbName="db2";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","user_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role");
+  stmt.execute("grant all on uri 'file:///tmp/external' to role admin_role");
+  stmt.execute("grant all on uri 'hdfs:///tmp/external' to role admin_role");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(admin,admin);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role user_role");
+  stmt.execute("grant all on database " + dbName + " to role user_role");
+  stmt.execute("grant role user_role to group " + StaticUserGroup.USERGROUP1);
+  stmt.close();
+  conn.close();
+  conn=hiveServer2.createConnection(admin,admin);
+  stmt=conn.createStatement();
+  miniDFS.getFileSystem().mkdirs(tmpHDFSDir);
+  miniDFS.getFileSystem().setOwner(tmpHDFSDir,"hive","hive");
+  miniDFS.getFileSystem().mkdirs(new Path("/tmp/external/tab1_loc"));
+  stmt.execute("use " + dbName);
+  stmt.execute("create external table tab1(a int) location 'file:///tmp/external/tab1_loc'");
+  verifyOnAllSubDirs("/tmp/external/tab1_loc",null,StaticUserGroup.USERGROUP1,false);
+  miniDFS.getFileSystem().mkdirs(new Path("/tmp/external/tab2_loc/i=1"));
+  stmt.execute("create external table tab2 (s string) partitioned by (i int) location 'file:///tmp/external/tab2_loc'");
+  verifyOnAllSubDirs("/tmp/external/tab2_loc",null,StaticUserGroup.USERGROUP1,false);
+  stmt.execute("alter table tab2 add partition (i=1)");
+  stmt.execute("alter table tab2 partition (i=1) set location 'file:///tmp/external/tab2_loc/i=1'");
+  verifyOnAllSubDirs("/tmp/external/tab2_loc/i=1",null,StaticUserGroup.USERGROUP1,false);
+  stmt.execute("create external table tab3(a int) location '/tmp/external/tab3_loc'");
+  verifyOnAllSubDirs("/tmp/external/tab3_loc",null,StaticUserGroup.USERGROUP1,true);
+  stmt.execute("alter table tab3 set location 'file:///tmp/external/tab3_loc'");
+  verifyOnAllSubDirs("/tmp/external/tab3_loc",null,StaticUserGroup.USERGROUP1,false);
+  stmt.execute("create table tab4(a int) location 'file:///tmp/external/tab4_loc'");
+  stmt.execute("alter table tab4 set location 'hdfs:///tmp/external/tab4_loc'");
+  miniDFS.getFileSystem().mkdirs(new Path("/tmp/external/tab4_loc"));
+  verifyOnAllSubDirs("/tmp/external/tab4_loc",null,StaticUserGroup.USERGROUP1,true);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@AfterClass public static void cleanUp() throws Exception {
+  try {
+    if (miniDFS != null) {
+      miniDFS.shutdown();
+    }
+  }
+  finally {
+    try {
+      if (hiveServer2 != null) {
+        hiveServer2.shutdown();
+      }
+    }
+  finally {
+      try {
+        if (metastore != null) {
+          metastore.shutdown();
+        }
+      }
+  finally {
+        sentryServer.close();
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testColumnPrivileges() throws Throwable {
+  String dbName="db2";
+  tmpHDFSDir=new Path("/tmp/external");
+  dbNames=new String[]{dbName};
+  roles=new String[]{"admin_role","tab_role","db_role","col_role"};
+  admin=StaticUserGroup.ADMIN1;
+  Connection conn;
+  Statement stmt;
+  conn=hiveServer2.createConnection("hive","hive");
+  stmt=conn.createStatement();
+  stmt.execute("create role admin_role");
+  stmt.execute("grant all on server server1 to role admin_role with grant option");
+  stmt.execute("grant role admin_role to group " + StaticUserGroup.ADMINGROUP);
+  conn=hiveServer2.createConnection(StaticUserGroup.ADMIN1,StaticUserGroup.ADMIN1);
+  stmt=conn.createStatement();
+  stmt.execute("create database " + dbName);
+  stmt.execute("use " + dbName);
+  stmt.execute("create table p1 (s string) partitioned by (month int, day int)");
+  stmt.execute("alter table p1 add partition (month=1, day=1)");
+  stmt.execute("alter table p1 add partition (month=1, day=2)");
+  stmt.execute("alter table p1 add partition (month=2, day=1)");
+  stmt.execute("alter table p1 add partition (month=2, day=2)");
+  loadData(stmt);
+  stmt.execute("create role db_role");
+  stmt.execute("grant select on database " + dbName + " to role db_role");
+  stmt.execute("create role tab_role");
+  stmt.execute("grant select on p1 to role tab_role");
+  stmt.execute("create role col_role");
+  stmt.execute("grant select(s) on p1 to role col_role");
+  stmt.execute("grant role col_role to group " + StaticUserGroup.USERGROUP1);
+  stmt.execute("grant role tab_role to group " + StaticUserGroup.USERGROUP2);
+  stmt.execute("grant role col_role to group " + StaticUserGroup.USERGROUP2);
+  stmt.execute("grant role db_role to group " + StaticUserGroup.USERGROUP3);
+  stmt.execute("grant role col_role to group " + StaticUserGroup.USERGROUP3);
+  stmt.execute("grant role col_role to group " + StaticUserGroup.ADMINGROUP);
+  Thread.sleep(CACHE_REFRESH);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/p1",null,StaticUserGroup.USERGROUP1,false);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/p1",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP2,true);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/p1",FsAction.READ_EXECUTE,StaticUserGroup.USERGROUP3,true);
+  verifyOnAllSubDirs("/user/hive/warehouse/" + dbName + ".db/p1",null,StaticUserGroup.ADMINGROUP,false);
+  stmt.close();
+  conn.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

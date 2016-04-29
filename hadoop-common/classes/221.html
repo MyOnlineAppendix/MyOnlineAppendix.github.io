@@ -1,0 +1,138 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.ha.TestActiveStandbyElectorRealZK (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * the test creates 2 electors which try to become active using a real
+ * zookeeper server. It verifies that 1 becomes active and 1 becomes standby.
+ * Upon becoming active the leader quits election and the test verifies that
+ * the standby now becomes active.
+ */
+@Test(timeout=20000) public void testActiveStandbyTransition() throws Exception {
+  LOG.info("starting test with parentDir:" + PARENT_DIR);
+  assertFalse(electors[0].parentZNodeExists());
+  electors[0].ensureParentZNode();
+  assertTrue(electors[0].parentZNodeExists());
+  electors[0].joinElection(appDatas[0]);
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zkServer,PARENT_DIR,appDatas[0]);
+  Mockito.verify(cbs[0],Mockito.timeout(1000)).becomeActive();
+  checkFatalsAndReset();
+  electors[1].joinElection(appDatas[1]);
+  Mockito.verify(cbs[1],Mockito.timeout(1000)).becomeStandby();
+  checkFatalsAndReset();
+  electors[0].quitElection(true);
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zkServer,PARENT_DIR,appDatas[1]);
+  Mockito.verify(cbs[1],Mockito.timeout(1000)).becomeActive();
+  checkFatalsAndReset();
+  electors[0].joinElection(appDatas[0]);
+  Mockito.verify(cbs[0],Mockito.timeout(1000)).becomeStandby();
+  checkFatalsAndReset();
+  electors[1].preventSessionReestablishmentForTests();
+  try {
+    zkServer.closeSession(electors[1].getZKSessionIdForTests());
+    ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zkServer,PARENT_DIR,appDatas[0]);
+    Mockito.verify(cbs[1],Mockito.timeout(1000)).enterNeutralMode();
+    Mockito.verify(cbs[0],Mockito.timeout(1000)).fenceOldActive(AdditionalMatchers.aryEq(appDatas[1]));
+    Mockito.verify(cbs[0],Mockito.timeout(1000)).becomeActive();
+  }
+  finally {
+    electors[1].allowSessionReestablishmentForTests();
+  }
+  Mockito.verify(cbs[1],Mockito.timeout(5000)).becomeStandby();
+  checkFatalsAndReset();
+  electors[0].preventSessionReestablishmentForTests();
+  try {
+    zkServer.closeSession(electors[0].getZKSessionIdForTests());
+    ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zkServer,PARENT_DIR,appDatas[1]);
+    Mockito.verify(cbs[0],Mockito.timeout(1000)).enterNeutralMode();
+    Mockito.verify(cbs[1],Mockito.timeout(1000)).fenceOldActive(AdditionalMatchers.aryEq(appDatas[0]));
+    Mockito.verify(cbs[1],Mockito.timeout(1000)).becomeActive();
+  }
+  finally {
+    electors[0].allowSessionReestablishmentForTests();
+  }
+  checkFatalsAndReset();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=15000) public void testHandleSessionExpiration() throws Exception {
+  ActiveStandbyElectorCallback cb=cbs[0];
+  byte[] appData=appDatas[0];
+  ActiveStandbyElector elector=electors[0];
+  elector.ensureParentZNode();
+  elector.joinElection(appData);
+  ZooKeeperServer zks=getServer(serverFactory);
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,appData);
+  Mockito.verify(cb,Mockito.timeout(1000)).becomeActive();
+  checkFatalsAndReset();
+  LOG.info("========================== Expiring session");
+  zks.closeSession(elector.getZKSessionIdForTests());
+  Mockito.verify(cb,Mockito.timeout(1000)).enterNeutralMode();
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,appData);
+  Mockito.verify(cb,Mockito.timeout(1000)).becomeActive();
+  checkFatalsAndReset();
+  LOG.info("========================== Quitting election");
+  elector.quitElection(false);
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,null);
+  Thread.sleep(1000);
+  Mockito.verify(cb,Mockito.never()).becomeActive();
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,null);
+  checkFatalsAndReset();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=15000) public void testDontJoinElectionOnDisconnectAndReconnect() throws Exception {
+  electors[0].ensureParentZNode();
+  stopServer();
+  ActiveStandbyElectorTestUtil.waitForElectorState(null,electors[0],State.NEUTRAL);
+  startServer();
+  waitForServerUp(hostPort,CONNECTION_TIMEOUT);
+  Thread.sleep(2000);
+  Mockito.verify(cbs[0],Mockito.never()).becomeActive();
+  Mockito.verify(cbs[1],Mockito.never()).becomeActive();
+  checkFatalsAndReset();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=15000) public void testHandleSessionExpirationOfStandby() throws Exception {
+  electors[0].ensureParentZNode();
+  electors[0].joinElection(appDatas[0]);
+  ZooKeeperServer zks=getServer(serverFactory);
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,appDatas[0]);
+  Mockito.verify(cbs[0],Mockito.timeout(1000)).becomeActive();
+  checkFatalsAndReset();
+  electors[1].joinElection(appDatas[1]);
+  ActiveStandbyElectorTestUtil.waitForElectorState(null,electors[1],State.STANDBY);
+  LOG.info("========================== Expiring standby's session");
+  zks.closeSession(electors[1].getZKSessionIdForTests());
+  Mockito.verify(cbs[1],Mockito.timeout(1000)).enterNeutralMode();
+  ActiveStandbyElectorTestUtil.waitForElectorState(null,electors[1],State.STANDBY);
+  checkFatalsAndReset();
+  LOG.info("========================== Quitting election");
+  electors[1].quitElection(false);
+  electors[0].quitElection(false);
+  Thread.sleep(1000);
+  Mockito.verify(cbs[1],Mockito.never()).becomeActive();
+  ActiveStandbyElectorTestUtil.waitForActiveLockData(null,zks,PARENT_DIR,null);
+  checkFatalsAndReset();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

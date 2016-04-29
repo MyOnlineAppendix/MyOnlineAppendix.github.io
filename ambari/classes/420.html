@@ -1,0 +1,117 @@
+<h3 style="margin:0px">Class: org.apache.ambari.server.serveraction.upgrades.ComponentVersionCheckActionTest (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="11"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('11')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-11"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  m_injector=Guice.createInjector(new InMemoryDefaultTestModule());
+  m_injector.getInstance(GuiceJpaInitializer.class);
+  m_injector.injectMembers(this);
+  m_injector.getInstance(UnitOfWork.class).begin();
+}
+
+</code></pre>
+
+<pre class="type-2 type-5 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMixedComponentVersions() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_22_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_2_1_0;
+  makeCrossStackUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  Clusters clusters=m_injector.getInstance(Clusters.class);
+  Cluster cluster=clusters.getCluster("c1");
+  Service service=installService(cluster,"HDFS");
+  addServiceComponent(cluster,service,"NAMENODE");
+  addServiceComponent(cluster,service,"DATANODE");
+  createNewServiceComponentHost(cluster,"HDFS","NAMENODE","h1");
+  createNewServiceComponentHost(cluster,"HDFS","DATANODE","h1");
+  createConfigs(cluster);
+  cluster.setCurrentStackVersion(sourceStack);
+  cluster.setDesiredStackVersion(targetStack);
+  cluster.getServiceComponentHosts("HDFS","NAMENODE").get(0).setVersion(targetRepo);
+  ClusterVersionEntity upgradingClusterVersion=clusterVersionDAO.findByClusterAndStackAndVersion("c1",HDP_22_STACK,targetRepo);
+  upgradingClusterVersion.setState(RepositoryVersionState.UPGRADING);
+  upgradingClusterVersion=clusterVersionDAO.merge(upgradingClusterVersion);
+  upgradingClusterVersion=clusterVersionDAO.findByClusterAndStackAndVersion("c1",HDP_22_STACK,targetRepo);
+  List<HostVersionEntity> hostVersions=hostVersionDAO.findByClusterStackAndVersion("c1",HDP_22_STACK,targetRepo);
+  assertEquals(RepositoryVersionState.UPGRADING,upgradingClusterVersion.getState());
+  assertTrue(hostVersions.size() > 0);
+  for (  HostVersionEntity hostVersion : hostVersions) {
+    assertEquals(RepositoryVersionState.UPGRADED,hostVersion.getState());
+  }
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  commandParams.put(FinalizeUpgradeAction.ORIGINAL_STACK_KEY,sourceStack.getStackId());
+  commandParams.put(FinalizeUpgradeAction.TARGET_STACK_KEY,targetStack.getStackId());
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName("c1");
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  ComponentVersionCheckAction action=m_injector.getInstance(ComponentVersionCheckAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.FAILED.name(),report.getStatus());
+  assertEquals(-1,report.getExitCode());
+}
+
+</code></pre>
+
+<pre class="type-2 type-1 type-11 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMatchingVersions() throws Exception {
+  StackId sourceStack=HDP_21_STACK;
+  StackId targetStack=HDP_21_STACK;
+  String sourceRepo=HDP_2_1_1_0;
+  String targetRepo=HDP_2_1_1_1;
+  makeUpgradeCluster(sourceStack,sourceRepo,targetStack,targetRepo);
+  AmbariMetaInfo metaInfo=m_injector.getInstance(AmbariMetaInfo.class);
+  RepositoryInfo repo=metaInfo.getRepository(sourceStack.getStackName(),sourceStack.getStackVersion(),"redhat6",sourceStack.getStackId());
+  assertEquals(HDP_211_CENTOS6_REPO_URL,repo.getBaseUrl());
+  Map<String,String> commandParams=new HashMap<String,String>();
+  commandParams.put(FinalizeUpgradeAction.UPGRADE_DIRECTION_KEY,"upgrade");
+  commandParams.put(FinalizeUpgradeAction.VERSION_KEY,targetRepo);
+  ExecutionCommand executionCommand=new ExecutionCommand();
+  executionCommand.setCommandParams(commandParams);
+  executionCommand.setClusterName("c1");
+  HostRoleCommand hostRoleCommand=hostRoleCommandFactory.create(null,null,null,null);
+  hostRoleCommand.setExecutionCommandWrapper(new ExecutionCommandWrapper(executionCommand));
+  ComponentVersionCheckAction action=m_injector.getInstance(ComponentVersionCheckAction.class);
+  action.setExecutionCommand(executionCommand);
+  action.setHostRoleCommand(hostRoleCommand);
+  CommandReport report=action.execute(null);
+  assertNotNull(report);
+  assertEquals(HostRoleStatus.COMPLETED.name(),report.getStatus());
+  assertEquals(0,report.getExitCode());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown() throws Exception {
+  m_injector.getInstance(UnitOfWork.class).end();
+  m_injector.getInstance(PersistService.class).stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

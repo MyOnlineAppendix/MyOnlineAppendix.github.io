@@ -1,0 +1,173 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestWALLockup (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Reproduce locking up that happens when we get an inopportune sync during setup for
+ * zigzaglatch wait. See HBASE-14317. If below is broken, we will see this test timeout because
+ * it is locked up.
+ * <p>First I need to set up some mocks for Server and RegionServerServices. I also need to
+ * set up a dodgy WAL that will throw an exception when we go to append to it.
+ */
+@Test(timeout=20000) public void testLockupWhenSyncInMiddleOfZigZagSetup() throws IOException {
+class DodgyFSLog extends FSHLog {
+    volatile boolean throwException=false;
+    CountDownLatch latch=new CountDownLatch(1);
+    public DodgyFSLog(    FileSystem fs,    Path root,    String logDir,    Configuration conf) throws IOException {
+      super(fs,root,logDir,conf);
+    }
+    @Override protected void afterCreatingZigZagLatch(){
+      if (throwException) {
+        try {
+          LOG.info("LATCHED");
+          if (!this.latch.await(5,TimeUnit.SECONDS)) {
+            LOG.warn("GIVE UP! Failed waiting on latch...Test is ABORTED!");
+          }
+        }
+ catch (        InterruptedException e) {
+          e.printStackTrace();
+        }
+      }
+    }
+    @Override protected void beforeWaitOnSafePoint(){
+      if (throwException) {
+        LOG.info("COUNTDOWN");
+        while (this.latch.getCount() <= 0)         Threads.sleep(1);
+        this.latch.countDown();
+      }
+    }
+    @Override protected Writer createWriterInstance(    Path path) throws IOException {
+      final Writer w=super.createWriterInstance(path);
+      return new Writer(){
+        @Override public void close() throws IOException {
+          w.close();
+        }
+        @Override public void sync() throws IOException {
+          if (throwException) {
+            throw new IOException("FAKE! Failed to replace a bad datanode...SYNC");
+          }
+          w.sync();
+        }
+        @Override public void append(        Entry entry) throws IOException {
+          if (throwException) {
+            throw new IOException("FAKE! Failed to replace a bad datanode...APPEND");
+          }
+          w.append(entry);
+        }
+        @Override public long getLength() throws IOException {
+          return w.getLength();
+        }
+      }
+;
+    }
+  }
+  Server server=Mockito.mock(Server.class);
+  Mockito.when(server.getConfiguration()).thenReturn(CONF);
+  Mockito.when(server.isStopped()).thenReturn(false);
+  Mockito.when(server.isAborted()).thenReturn(false);
+  RegionServerServices services=Mockito.mock(RegionServerServices.class);
+  FileSystem fs=FileSystem.get(CONF);
+  Path rootDir=new Path(dir + getName());
+  DodgyFSLog dodgyWAL=new DodgyFSLog(fs,rootDir,getName(),CONF);
+  Path originalWAL=dodgyWAL.getCurrentFileName();
+  LogRoller logRoller=new LogRoller(server,services);
+  logRoller.addWAL(dodgyWAL);
+  logRoller.start();
+  HTableDescriptor htd=new HTableDescriptor(TableName.META_TABLE_NAME);
+  final HRegion region=initHRegion(tableName,null,null,dodgyWAL);
+  byte[] bytes=Bytes.toBytes(getName());
+  try {
+    Put put=new Put(bytes);
+    put.addColumn(COLUMN_FAMILY_BYTES,Bytes.toBytes("1"),bytes);
+    WALKey key=new WALKey(region.getRegionInfo().getEncodedNameAsBytes(),htd.getTableName());
+    WALEdit edit=new WALEdit();
+    CellScanner CellScanner=put.cellScanner();
+    assertTrue(CellScanner.advance());
+    edit.add(CellScanner.current());
+    for (int i=0; i < 1000; i++) {
+      region.put(put);
+    }
+    LOG.info("SET throwing of exception on append");
+    dodgyWAL.throwException=true;
+    dodgyWAL.append(htd,region.getRegionInfo(),key,edit,true);
+    boolean exception=false;
+    try {
+      dodgyWAL.sync();
+    }
+ catch (    Exception e) {
+      exception=true;
+    }
+    assertTrue("Did not get sync exception",exception);
+    Thread t=new Thread("Flusher"){
+      public void run(){
+        try {
+          if (region.getMemstoreSize() <= 0) {
+            throw new IOException("memstore size=" + region.getMemstoreSize());
+          }
+          region.flush(false);
+        }
+ catch (        IOException e) {
+          LOG.info("In flush",e);
+        }
+        LOG.info("Exiting");
+      }
+    }
+;
+    t.setDaemon(true);
+    t.start();
+    while (dodgyWAL.latch.getCount() > 0)     Threads.sleep(1);
+    assertTrue(originalWAL != dodgyWAL.getCurrentFileName());
+    dodgyWAL.throwException=false;
+    try {
+      region.put(put);
+    }
+ catch (    Exception e) {
+      LOG.info("In the put",e);
+    }
+  }
+  finally {
+    Mockito.when(server.isStopped()).thenReturn(true);
+    if (logRoller != null)     logRoller.interrupt();
+    try {
+      if (region != null)       region.close();
+      if (dodgyWAL != null)       dodgyWAL.close();
+    }
+ catch (    Exception e) {
+      LOG.info("On way out",e);
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  EnvironmentEdgeManagerTestHelper.reset();
+  LOG.info("Cleaning test directory: " + TEST_UTIL.getDataTestDir());
+  TEST_UTIL.cleanupTestDir();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws IOException {
+  TEST_UTIL=HBaseTestingUtility.createLocalHTU();
+  CONF=TEST_UTIL.getConfiguration();
+  CONF.setFloat(HConstants.HFILE_BLOCK_CACHE_SIZE_KEY,0f);
+  dir=TEST_UTIL.getDataTestDir("TestHRegion").toString();
+  tableName=TableName.valueOf(name.getMethodName());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

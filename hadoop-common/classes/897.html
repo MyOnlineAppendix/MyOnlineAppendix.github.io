@@ -1,0 +1,577 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.mapreduce.v2.app.job.impl.TestJobImpl (17 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(8)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=20000) public void testRebootedDuringCommit() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  conf.setInt(MRJobConfig.MR_AM_MAX_ATTEMPTS,2);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  CyclicBarrier syncBarrier=new CyclicBarrier(2);
+  OutputCommitter committer=new WaitingOutputCommitter(syncBarrier,true);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  AppContext mockContext=mock(AppContext.class);
+  when(mockContext.isLastAMRetry()).thenReturn(true);
+  when(mockContext.hasSuccessfullyUnregistered()).thenReturn(false);
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,2,mockContext);
+  completeJobTasks(job);
+  assertJobState(job,JobStateInternal.COMMITTING);
+  syncBarrier.await();
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_AM_REBOOT));
+  assertJobState(job,JobStateInternal.REBOOT);
+  Assert.assertEquals(JobState.RUNNING,job.getState());
+  when(mockContext.hasSuccessfullyUnregistered()).thenReturn(true);
+  Assert.assertEquals(JobState.ERROR,job.getState());
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCheckJobCompleteSuccess() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  CyclicBarrier syncBarrier=new CyclicBarrier(2);
+  OutputCommitter committer=new TestingOutputCommitter(syncBarrier,true);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,2,null);
+  completeJobTasks(job);
+  assertJobState(job,JobStateInternal.COMMITTING);
+  syncBarrier.await();
+  assertJobState(job,JobStateInternal.SUCCEEDED);
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_TASK_ATTEMPT_COMPLETED));
+  assertJobState(job,JobStateInternal.SUCCEEDED);
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_MAP_TASK_RESCHEDULED));
+  assertJobState(job,JobStateInternal.SUCCEEDED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testAbortJobCalledAfterKillingTasks() throws IOException {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  conf.set(MRJobConfig.MR_AM_COMMITTER_CANCEL_TIMEOUT_MS,"1000");
+  InlineDispatcher dispatcher=new InlineDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=Mockito.mock(OutputCommitter.class);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,2,null);
+  job.handle(new JobTaskEvent(MRBuilderUtils.newTaskId(job.getID(),1,TaskType.MAP),TaskState.FAILED));
+  Mockito.verify(committer,Mockito.never()).abortJob((JobContext)Mockito.any(),(State)Mockito.any());
+  assertJobState(job,JobStateInternal.FAIL_WAIT);
+  Mockito.verify(committer,Mockito.timeout(2000).times(1)).abortJob((JobContext)Mockito.any(),(State)Mockito.any());
+  assertJobState(job,JobStateInternal.FAILED);
+  dispatcher.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=20000) public void testRebootedDuringSetup() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=new StubbedOutputCommitter(){
+    @Override public synchronized void setupJob(    JobContext jobContext) throws IOException {
+      while (!Thread.interrupted()) {
+        try {
+          wait();
+        }
+ catch (        InterruptedException e) {
+        }
+      }
+    }
+  }
+;
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  AppContext mockContext=mock(AppContext.class);
+  when(mockContext.isLastAMRetry()).thenReturn(false);
+  JobImpl job=createStubbedJob(conf,dispatcher,2,mockContext);
+  JobId jobId=job.getID();
+  job.handle(new JobEvent(jobId,JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(jobId));
+  assertJobState(job,JobStateInternal.SETUP);
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_AM_REBOOT));
+  assertJobState(job,JobStateInternal.REBOOT);
+  Assert.assertEquals(JobState.RUNNING,job.getState());
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testMetaInfoSizeOverMax() throws Exception {
+  Configuration conf=new Configuration();
+  JobID jobID=JobID.forName("job_1234567890000_0001");
+  JobId jobId=TypeConverter.toYarn(jobID);
+  MRAppMetrics mrAppMetrics=MRAppMetrics.create();
+  JobImpl job=new JobImpl(jobId,ApplicationAttemptId.newInstance(ApplicationId.newInstance(0,0),0),conf,mock(EventHandler.class),null,new JobTokenSecretManager(),new Credentials(),null,null,mrAppMetrics,null,true,null,0,null,null,null,null);
+  InitTransition initTransition=new InitTransition(){
+    @Override protected TaskSplitMetaInfo[] createSplits(    JobImpl job,    JobId jobId){
+      throw new YarnRuntimeException(EXCEPTIONMSG);
+    }
+  }
+;
+  JobEvent mockJobEvent=mock(JobEvent.class);
+  JobStateInternal jobSI=initTransition.transition(job,mockJobEvent);
+  Assert.assertTrue("When init fails, return value from InitTransition.transition should equal NEW.",jobSI.equals(JobStateInternal.NEW));
+  Assert.assertTrue("Job diagnostics should contain YarnRuntimeException",job.getDiagnostics().toString().contains("YarnRuntimeException"));
+  Assert.assertTrue("Job diagnostics should contain " + EXCEPTIONMSG,job.getDiagnostics().toString().contains(EXCEPTIONMSG));
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testTransitionsAtFailed() throws IOException {
+  Configuration conf=new Configuration();
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=mock(OutputCommitter.class);
+  doThrow(new IOException("forcefail")).when(committer).setupJob(any(JobContext.class));
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  AppContext mockContext=mock(AppContext.class);
+  when(mockContext.hasSuccessfullyUnregistered()).thenReturn(false);
+  JobImpl job=createStubbedJob(conf,dispatcher,2,mockContext);
+  JobId jobId=job.getID();
+  job.handle(new JobEvent(jobId,JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(jobId));
+  assertJobState(job,JobStateInternal.FAILED);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_TASK_COMPLETED));
+  assertJobState(job,JobStateInternal.FAILED);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_TASK_ATTEMPT_COMPLETED));
+  assertJobState(job,JobStateInternal.FAILED);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_MAP_TASK_RESCHEDULED));
+  assertJobState(job,JobStateInternal.FAILED);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_TASK_ATTEMPT_FETCH_FAILURE));
+  assertJobState(job,JobStateInternal.FAILED);
+  Assert.assertEquals(JobState.RUNNING,job.getState());
+  when(mockContext.hasSuccessfullyUnregistered()).thenReturn(true);
+  Assert.assertEquals(JobState.FAILED,job.getState());
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testUberDecision() throws Exception {
+  Configuration conf=new Configuration();
+  boolean isUber=testUberDecision(conf);
+  Assert.assertFalse(isUber);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,true);
+  isUber=testUberDecision(conf);
+  Assert.assertTrue(isUber);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,true);
+  conf.setInt(MRJobConfig.JOB_UBERTASK_MAXREDUCES,0);
+  conf.setInt(MRJobConfig.NUM_REDUCES,1);
+  isUber=testUberDecision(conf);
+  Assert.assertFalse(isUber);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,true);
+  conf.setInt(MRJobConfig.JOB_UBERTASK_MAXREDUCES,1);
+  conf.setInt(MRJobConfig.NUM_REDUCES,1);
+  isUber=testUberDecision(conf);
+  Assert.assertTrue(isUber);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,true);
+  conf.setInt(MRJobConfig.JOB_UBERTASK_MAXMAPS,1);
+  isUber=testUberDecision(conf);
+  Assert.assertFalse(isUber);
+  conf=new Configuration();
+  conf.setBoolean(MRJobConfig.JOB_UBERTASK_ENABLE,true);
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.setInt(MRJobConfig.REDUCE_MEMORY_MB,2048);
+  conf.setInt(MRJobConfig.REDUCE_CPU_VCORES,10);
+  isUber=testUberDecision(conf);
+  Assert.assertTrue(isUber);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testKilledDuringKillAbort() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=new StubbedOutputCommitter(){
+    @Override public synchronized void abortJob(    JobContext jobContext,    State state) throws IOException {
+      while (!Thread.interrupted()) {
+        try {
+          wait();
+        }
+ catch (        InterruptedException e) {
+        }
+      }
+    }
+  }
+;
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createStubbedJob(conf,dispatcher,2,null);
+  JobId jobId=job.getID();
+  job.handle(new JobEvent(jobId,JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(jobId));
+  assertJobState(job,JobStateInternal.SETUP);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_KILL));
+  assertJobState(job,JobStateInternal.KILL_ABORT);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_KILL));
+  assertJobState(job,JobStateInternal.KILLED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testCommitJobFailsJob() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  CyclicBarrier syncBarrier=new CyclicBarrier(2);
+  OutputCommitter committer=new TestingOutputCommitter(syncBarrier,false);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,2,null);
+  completeJobTasks(job);
+  assertJobState(job,JobStateInternal.COMMITTING);
+  syncBarrier.await();
+  assertJobState(job,JobStateInternal.FAILED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-2 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJobNoTasks(){
+  Configuration conf=new Configuration();
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  conf.set(MRJobConfig.WORKFLOW_ID,"testId");
+  conf.set(MRJobConfig.WORKFLOW_NAME,"testName");
+  conf.set(MRJobConfig.WORKFLOW_NODE_NAME,"testNodeName");
+  conf.set(MRJobConfig.WORKFLOW_ADJACENCY_PREFIX_STRING + "key1","value1");
+  conf.set(MRJobConfig.WORKFLOW_ADJACENCY_PREFIX_STRING + "key2","value2");
+  conf.set(MRJobConfig.WORKFLOW_TAGS,"tag1,tag2");
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=mock(OutputCommitter.class);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobSubmittedEventHandler jseHandler=new JobSubmittedEventHandler("testId","testName","testNodeName","\"key2\"=\"value2\" \"key1\"=\"value1\" ","tag1,tag2");
+  dispatcher.register(EventType.class,jseHandler);
+  JobImpl job=createStubbedJob(conf,dispatcher,0,null);
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(job.getID()));
+  assertJobState(job,JobStateInternal.SUCCEEDED);
+  dispatcher.stop();
+  commitHandler.stop();
+  try {
+    Assert.assertTrue(jseHandler.getAssertValue());
+  }
+ catch (  InterruptedException e) {
+    Assert.fail("Workflow related attributes are not tested properly");
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-1 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testReportDiagnostics() throws Exception {
+  JobID jobID=JobID.forName("job_1234567890000_0001");
+  JobId jobId=TypeConverter.toYarn(jobID);
+  final String diagMsg="some diagnostic message";
+  final JobDiagnosticsUpdateEvent diagUpdateEvent=new JobDiagnosticsUpdateEvent(jobId,diagMsg);
+  MRAppMetrics mrAppMetrics=MRAppMetrics.create();
+  AppContext mockContext=mock(AppContext.class);
+  when(mockContext.hasSuccessfullyUnregistered()).thenReturn(true);
+  JobImpl job=new JobImpl(jobId,Records.newRecord(ApplicationAttemptId.class),new Configuration(),mock(EventHandler.class),null,mock(JobTokenSecretManager.class),null,new SystemClock(),null,mrAppMetrics,null,true,null,0,null,mockContext,null,null);
+  job.handle(diagUpdateEvent);
+  String diagnostics=job.getReport().getDiagnostics();
+  Assert.assertNotNull(diagnostics);
+  Assert.assertTrue(diagnostics.contains(diagMsg));
+  job=new JobImpl(jobId,Records.newRecord(ApplicationAttemptId.class),new Configuration(),mock(EventHandler.class),null,mock(JobTokenSecretManager.class),null,new SystemClock(),null,mrAppMetrics,null,true,null,0,null,mockContext,null,null);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_KILL));
+  job.handle(diagUpdateEvent);
+  diagnostics=job.getReport().getDiagnostics();
+  Assert.assertNotNull(diagnostics);
+  Assert.assertTrue(diagnostics.contains(diagMsg));
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testKilledDuringSetup() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=new StubbedOutputCommitter(){
+    @Override public synchronized void setupJob(    JobContext jobContext) throws IOException {
+      while (!Thread.interrupted()) {
+        try {
+          wait();
+        }
+ catch (        InterruptedException e) {
+        }
+      }
+    }
+  }
+;
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createStubbedJob(conf,dispatcher,2,null);
+  JobId jobId=job.getID();
+  job.handle(new JobEvent(jobId,JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(jobId));
+  assertJobState(job,JobStateInternal.SETUP);
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_KILL));
+  assertJobState(job,JobStateInternal.KILLED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testKilledDuringFailAbort() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=new StubbedOutputCommitter(){
+    @Override public void setupJob(    JobContext jobContext) throws IOException {
+      throw new IOException("forced failure");
+    }
+    @Override public synchronized void abortJob(    JobContext jobContext,    State state) throws IOException {
+      while (!Thread.interrupted()) {
+        try {
+          wait();
+        }
+ catch (        InterruptedException e) {
+        }
+      }
+    }
+  }
+;
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createStubbedJob(conf,dispatcher,2,null);
+  JobId jobId=job.getID();
+  job.handle(new JobEvent(jobId,JobEventType.JOB_INIT));
+  assertJobState(job,JobStateInternal.INITED);
+  job.handle(new JobStartEvent(jobId));
+  assertJobState(job,JobStateInternal.FAIL_ABORT);
+  job.handle(new JobEvent(jobId,JobEventType.JOB_KILL));
+  assertJobState(job,JobStateInternal.KILLED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=10000) public void testFailAbortDoesntHang() throws IOException {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  conf.set(MRJobConfig.MR_AM_COMMITTER_CANCEL_TIMEOUT_MS,"1000");
+  DrainDispatcher dispatcher=new DrainDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  OutputCommitter committer=Mockito.mock(OutputCommitter.class);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  conf.setInt(MRJobConfig.NUM_REDUCES,0);
+  conf.setInt(MRJobConfig.MAP_MAX_ATTEMPTS,1);
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,1,null);
+  for (  Task t : job.tasks.values()) {
+    TaskImpl task=(TaskImpl)t;
+    task.handle(new TaskEvent(task.getID(),TaskEventType.T_SCHEDULE));
+    for (    TaskAttempt ta : task.getAttempts().values()) {
+      task.handle(new TaskTAttemptEvent(ta.getID(),TaskEventType.T_ATTEMPT_FAILED));
+    }
+  }
+  dispatcher.await();
+  Mockito.verify(committer,Mockito.timeout(2000).times(1)).abortJob((JobContext)Mockito.any(),(State)Mockito.any());
+  assertJobState(job,JobStateInternal.FAILED);
+  dispatcher.stop();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testCheckAccess(){
+  String user1=System.getProperty("user.name");
+  String user2=user1 + "1234";
+  UserGroupInformation ugi1=UserGroupInformation.createRemoteUser(user1);
+  UserGroupInformation ugi2=UserGroupInformation.createRemoteUser(user2);
+  JobID jobID=JobID.forName("job_1234567890000_0001");
+  JobId jobId=TypeConverter.toYarn(jobID);
+  Configuration conf1=new Configuration();
+  conf1.setBoolean(MRConfig.MR_ACLS_ENABLED,true);
+  conf1.set(MRJobConfig.JOB_ACL_VIEW_JOB,"");
+  JobImpl job1=new JobImpl(jobId,null,conf1,null,null,null,null,null,null,null,null,true,user1,0,null,null,null,null);
+  Assert.assertTrue(job1.checkAccess(ugi1,JobACL.VIEW_JOB));
+  Assert.assertFalse(job1.checkAccess(ugi2,JobACL.VIEW_JOB));
+  Configuration conf2=new Configuration();
+  conf2.setBoolean(MRConfig.MR_ACLS_ENABLED,true);
+  conf2.set(MRJobConfig.JOB_ACL_VIEW_JOB,user2);
+  JobImpl job2=new JobImpl(jobId,null,conf2,null,null,null,null,null,null,null,null,true,user1,0,null,null,null,null);
+  Assert.assertTrue(job2.checkAccess(ugi1,JobACL.VIEW_JOB));
+  Assert.assertTrue(job2.checkAccess(ugi2,JobACL.VIEW_JOB));
+  Configuration conf3=new Configuration();
+  conf3.setBoolean(MRConfig.MR_ACLS_ENABLED,true);
+  conf3.set(MRJobConfig.JOB_ACL_VIEW_JOB,"*");
+  JobImpl job3=new JobImpl(jobId,null,conf3,null,null,null,null,null,null,null,null,true,user1,0,null,null,null,null);
+  Assert.assertTrue(job3.checkAccess(ugi1,JobACL.VIEW_JOB));
+  Assert.assertTrue(job3.checkAccess(ugi2,JobACL.VIEW_JOB));
+  Configuration conf4=new Configuration();
+  conf4.setBoolean(MRConfig.MR_ACLS_ENABLED,false);
+  conf4.set(MRJobConfig.JOB_ACL_VIEW_JOB,"");
+  JobImpl job4=new JobImpl(jobId,null,conf4,null,null,null,null,null,null,null,null,true,user1,0,null,null,null,null);
+  Assert.assertTrue(job4.checkAccess(ugi1,JobACL.VIEW_JOB));
+  Assert.assertTrue(job4.checkAccess(ugi2,JobACL.VIEW_JOB));
+  Configuration conf5=new Configuration();
+  conf5.setBoolean(MRConfig.MR_ACLS_ENABLED,true);
+  conf5.set(MRJobConfig.JOB_ACL_VIEW_JOB,"");
+  JobImpl job5=new JobImpl(jobId,null,conf5,null,null,null,null,null,null,null,null,true,user1,0,null,null,null,null);
+  Assert.assertTrue(job5.checkAccess(ugi1,null));
+  Assert.assertTrue(job5.checkAccess(ugi2,null));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void cleanup() throws IOException {
+  File dir=new File(stagingDir);
+  if (dir.exists()) {
+    FileUtils.deleteDirectory(dir);
+  }
+  dir.mkdirs();
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=20000) public void testKilledDuringCommit() throws Exception {
+  Configuration conf=new Configuration();
+  conf.set(MRJobConfig.MR_AM_STAGING_DIR,stagingDir);
+  AsyncDispatcher dispatcher=new AsyncDispatcher();
+  dispatcher.init(conf);
+  dispatcher.start();
+  CyclicBarrier syncBarrier=new CyclicBarrier(2);
+  OutputCommitter committer=new WaitingOutputCommitter(syncBarrier,true);
+  CommitterEventHandler commitHandler=createCommitterEventHandler(dispatcher,committer);
+  commitHandler.init(conf);
+  commitHandler.start();
+  JobImpl job=createRunningStubbedJob(conf,dispatcher,2,null);
+  completeJobTasks(job);
+  assertJobState(job,JobStateInternal.COMMITTING);
+  syncBarrier.await();
+  job.handle(new JobEvent(job.getID(),JobEventType.JOB_KILL));
+  assertJobState(job,JobStateInternal.KILLED);
+  dispatcher.stop();
+  commitHandler.stop();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

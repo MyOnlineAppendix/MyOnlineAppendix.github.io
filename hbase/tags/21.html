@@ -1,0 +1,135 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspAssumptionSetter</h3><kbd>Sets implicit assumptions </kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.hbase.mapreduce.IntegrationTestTableMapReduceUtil </h4><pre class="type-2 type-21 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Before public void skipMiniCluster(){
+  assumeTrue("test requires a distributed cluster.",util.isDistributedCluster());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestFSErrorsExposed </h4><pre class="type-11 type-8 type-21 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Cluster test which starts a region server with a region, then
+ * removes the data from HDFS underneath it, and ensures that
+ * errors are bubbled to the client.
+ */
+@Test(timeout=5 * 60 * 1000) public void testFullSystemBubblesFSErrors() throws Exception {
+  Assume.assumeTrue(!util.isReadShortCircuitOn());
+  try {
+    util.getConfiguration().setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER,1);
+    util.startMiniCluster(1);
+    TableName tableName=TableName.valueOf("table");
+    byte[] fam=Bytes.toBytes("fam");
+    Admin admin=util.getHBaseAdmin();
+    HTableDescriptor desc=new HTableDescriptor(tableName);
+    desc.addFamily(new HColumnDescriptor(fam).setMaxVersions(1).setBlockCacheEnabled(false));
+    admin.createTable(desc);
+    try (Table table=util.getConnection().getTable(tableName)){
+      util.loadTable(table,fam,false);
+      util.flush();
+      util.countRows(table);
+      util.getDFSCluster().shutdownDataNodes();
+      try {
+        util.countRows(table);
+        fail("Did not fail to count after removing data");
+      }
+ catch (      Exception e) {
+        LOG.info("Got expected error",e);
+        assertTrue(e.getMessage().contains("Could not seek"));
+      }
+    }
+     util.getDFSCluster().restartDataNodes();
+  }
+  finally {
+    MiniHBaseCluster cluster=util.getMiniHBaseCluster();
+    if (cluster != null)     cluster.killAll();
+    util.shutdownMiniCluster();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.hbase.regionserver.TestRegionFavoredNodes </h4><pre class="type-9 type-11 type-21 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Sets implicit assumptions ">AssumptionSetter</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Sets implicit assumptions 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testFavoredNodes() throws Exception {
+  Assume.assumeTrue(createWithFavoredNode != null);
+  InetSocketAddress[] nodes=new InetSocketAddress[REGION_SERVERS];
+  List<DataNode> datanodes=TEST_UTIL.getDFSCluster().getDataNodes();
+  Method selfAddress;
+  try {
+    selfAddress=DataNode.class.getMethod("getSelfAddr");
+  }
+ catch (  NoSuchMethodException ne) {
+    selfAddress=DataNode.class.getMethod("getXferAddress");
+  }
+  for (int i=0; i < REGION_SERVERS; i++) {
+    nodes[i]=(InetSocketAddress)selfAddress.invoke(datanodes.get(i));
+  }
+  String[] nodeNames=new String[REGION_SERVERS];
+  for (int i=0; i < REGION_SERVERS; i++) {
+    nodeNames[i]=nodes[i].getAddress().getHostAddress() + ":" + nodes[i].getPort();
+  }
+  for (int i=0; i < REGION_SERVERS; i++) {
+    HRegionServer server=TEST_UTIL.getHBaseCluster().getRegionServer(i);
+    List<Region> regions=server.getOnlineRegions(TABLE_NAME);
+    for (    Region region : regions) {
+      List<org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.ServerName> favoredNodes=new ArrayList<org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.ServerName>(3);
+      String encodedRegionName=region.getRegionInfo().getEncodedName();
+      for (int j=0; j < FAVORED_NODES_NUM; j++) {
+        org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.ServerName.Builder b=org.apache.hadoop.hbase.protobuf.generated.HBaseProtos.ServerName.newBuilder();
+        b.setHostName(nodes[(i + j) % REGION_SERVERS].getAddress().getHostAddress());
+        b.setPort(nodes[(i + j) % REGION_SERVERS].getPort());
+        b.setStartCode(-1);
+        favoredNodes.add(b.build());
+      }
+      server.updateRegionFavoredNodesMapping(encodedRegionName,favoredNodes);
+    }
+  }
+  for (int i=0; i < FLUSHES; i++) {
+    TEST_UTIL.loadTable(table,COLUMN_FAMILY,false);
+    TEST_UTIL.flush();
+  }
+  for (int i=0; i < REGION_SERVERS; i++) {
+    HRegionServer server=TEST_UTIL.getHBaseCluster().getRegionServer(i);
+    List<Region> regions=server.getOnlineRegions(TABLE_NAME);
+    for (    Region region : regions) {
+      List<String> files=region.getStoreFileList(new byte[][]{COLUMN_FAMILY});
+      for (      String file : files) {
+        FileStatus status=TEST_UTIL.getDFSCluster().getFileSystem().getFileStatus(new Path(new URI(file).getPath()));
+        BlockLocation[] lbks=((DistributedFileSystem)TEST_UTIL.getDFSCluster().getFileSystem()).getFileBlockLocations(status,0,Long.MAX_VALUE);
+        for (        BlockLocation lbk : lbks) {
+          locations:           for (          String info : lbk.getNames()) {
+            for (int j=0; j < FAVORED_NODES_NUM; j++) {
+              if (info.equals(nodeNames[(i + j) % REGION_SERVERS])) {
+                continue locations;
+              }
+            }
+            fail("Block location " + info + " not a favored node");
+          }
+        }
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

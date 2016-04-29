@@ -1,0 +1,2244 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspBranchVerifier</h3><kbd>Verifies assertions inside branch conditions</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.zookeeper.ZooKeeperTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testCliCommandsNotEchoingUsage() throws Exception {
+  final PrintStream systemErr=System.err;
+  final ByteArrayOutputStream errContent=new ByteArrayOutputStream();
+  System.setErr(new PrintStream(errContent));
+  final ZooKeeper zk=createClient();
+  ZooKeeperMain zkMain=new ZooKeeperMain(zk);
+  String cmd1="printwatches";
+  zkMain.executeLine(cmd1);
+  String cmd2="history";
+  zkMain.executeLine(cmd2);
+  String cmd3="redo";
+  zkMain.executeLine(cmd3);
+  System.setErr(systemErr);
+  if (errContent.toString().contains("ZooKeeper -server host:port cmd args")) {
+    fail("CLI commands (history, redo, connect, printwatches) display usage info!");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.DataTreeTest </h4><pre class="type-5 type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=60000) public void testSerializeDoesntLockDataNodeWhileWriting() throws Exception {
+  DataTree tree=new DataTree();
+  tree.createNode("/marker",new byte[]{42},null,-1,1,1,1);
+  final DataNode markerNode=tree.getNode("/marker");
+  final AtomicBoolean ranTestCase=new AtomicBoolean();
+  DataOutputStream out=new DataOutputStream(new ByteArrayOutputStream());
+  BinaryOutputArchive oa=new BinaryOutputArchive(out){
+    @Override public void writeRecord(    Record r,    String tag) throws IOException {
+      DataNode node=(DataNode)r;
+      if (node.data.length == 1 && node.data[0] == 42) {
+        final Semaphore semaphore=new Semaphore(0);
+        new Thread(new Runnable(){
+          @Override public void run(){
+synchronized (markerNode) {
+              semaphore.release();
+            }
+          }
+        }
+).start();
+        try {
+          boolean acquired=semaphore.tryAcquire(30,TimeUnit.SECONDS);
+          Assert.assertTrue("Couldn't acquire a lock on the DataNode while we were calling tree.serialize",acquired);
+        }
+ catch (        InterruptedException e1) {
+          throw new RuntimeException(e1);
+        }
+        ranTestCase.set(true);
+      }
+      super.writeRecord(r,tag);
+    }
+  }
+;
+  tree.serialize(oa,"test");
+  Assert.assertTrue("Didn't find the expected node",ranTestCase.get());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.NettyServerCnxnTest </h4><pre class="type-9 type-10 type-3 type-2 type-6 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test verifies the channel closure - while closing the channel
+ * servercnxnfactory should remove all channel references to avoid
+ * duplicate channel closure. Duplicate closure may result in indefinite
+ * hanging due to netty open issue.
+ * @see <a href="https://issues.jboss.org/browse/NETTY-412">NETTY-412</a>
+ */
+@Test(timeout=40000) public void testSendCloseSession() throws Exception {
+  Assert.assertTrue("Didn't instantiate ServerCnxnFactory with NettyServerCnxnFactory!",serverFactory instanceof NettyServerCnxnFactory);
+  final ZooKeeper zk=createClient();
+  final String path="/a";
+  try {
+    zk.create(path,"test".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    Assert.assertNotNull("Didn't create znode:" + path,zk.exists(path,false));
+    Iterable<ServerCnxn> connections=serverFactory.getConnections();
+    Assert.assertEquals("Mismatch in number of live connections!",1,serverFactory.getNumAliveConnections());
+    for (    ServerCnxn serverCnxn : connections) {
+      serverCnxn.sendCloseSession();
+    }
+    LOG.info("Waiting for the channel disconnected event");
+    int timeout=0;
+    while (serverFactory.getNumAliveConnections() != 0) {
+      Thread.sleep(1000);
+      timeout+=1000;
+      if (timeout > CONNECTION_TIMEOUT) {
+        Assert.fail("The number of live connections should be 0");
+      }
+    }
+  }
+  finally {
+    zk.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.jersey.CreateTest </h4><pre class="type-5 type-10 type-2 type-6 type-4 type-14 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCreate() throws Exception {
+  WebResource wr=znodesr.path(path).queryParam("dataformat",encoding).queryParam("name",name);
+  if (data == null) {
+    wr=wr.queryParam("null","true");
+  }
+  if (sequence) {
+    wr=wr.queryParam("sequence","true");
+  }
+  Builder builder=wr.accept(accept);
+  ClientResponse cr;
+  if (data == null) {
+    cr=builder.post(ClientResponse.class);
+  }
+ else {
+    cr=builder.post(ClientResponse.class,data);
+  }
+  Assert.assertEquals(expectedStatus,cr.getClientResponseStatus());
+  if (expectedPath == null) {
+    return;
+  }
+  ZPath zpath=cr.getEntity(ZPath.class);
+  if (sequence) {
+    Assert.assertTrue(zpath.path.startsWith(expectedPath.path));
+    Assert.assertTrue(zpath.uri.startsWith(znodesr.path(path).toString()));
+  }
+ else {
+    Assert.assertEquals(expectedPath,zpath);
+    Assert.assertEquals(znodesr.path(path).toString(),zpath.uri);
+  }
+  byte[] data=zk.getData(zpath.path,false,new Stat());
+  if (data == null && this.data == null) {
+    return;
+  }
+ else   if (data == null || this.data == null) {
+    Assert.assertEquals(data,this.data);
+  }
+ else {
+    Assert.assertTrue(new String(data) + " == " + new String(this.data),Arrays.equals(data,this.data));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.jersey.GetChildrenTest </h4><pre class="type-5 type-10 type-3 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetChildren() throws Exception {
+  if (expectedChildren != null) {
+    for (    String child : expectedChildren) {
+      zk.create(expectedPath + "/" + child,null,Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    }
+  }
+  ClientResponse cr=znodesr.path(path).queryParam("view","children").accept(accept).get(ClientResponse.class);
+  Assert.assertEquals(expectedStatus,cr.getClientResponseStatus());
+  if (expectedChildren == null) {
+    return;
+  }
+  if (accept.equals(MediaType.APPLICATION_JSON)) {
+    ZChildrenJSON zchildren=cr.getEntity(ZChildrenJSON.class);
+    Collections.sort(expectedChildren);
+    Collections.sort(zchildren.children);
+    Assert.assertEquals(expectedChildren,zchildren.children);
+    Assert.assertEquals(znodesr.path(path).toString(),zchildren.uri);
+    Assert.assertEquals(znodesr.path(path).toString() + "/{child}",zchildren.child_uri_template);
+  }
+ else   if (accept.equals(MediaType.APPLICATION_XML)) {
+    ZChildren zchildren=cr.getEntity(ZChildren.class);
+    Collections.sort(expectedChildren);
+    Collections.sort(zchildren.children);
+    Assert.assertEquals(expectedChildren,zchildren.children);
+    Assert.assertEquals(znodesr.path(path).toString(),zchildren.uri);
+    Assert.assertEquals(znodesr.path(path).toString() + "/{child}",zchildren.child_uri_template);
+  }
+ else {
+    Assert.fail("unknown accept type");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.jersey.SetTest </h4><pre class="type-5 type-10 type-3 type-2 type-6 type-4 type-14 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSet() throws Exception {
+  if (expectedStat != null) {
+    zk.create(expectedStat.path,"initial".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  }
+  WebResource wr=znodesr.path(path).queryParam("dataformat",encoding);
+  if (data == null) {
+    wr=wr.queryParam("null","true");
+  }
+  Builder builder=wr.accept(accept).type(MediaType.APPLICATION_OCTET_STREAM);
+  ClientResponse cr;
+  if (data == null) {
+    cr=builder.put(ClientResponse.class);
+  }
+ else {
+    cr=builder.put(ClientResponse.class,new String(data));
+  }
+  Assert.assertEquals(expectedStatus,cr.getClientResponseStatus());
+  if (expectedStat == null) {
+    return;
+  }
+  ZStat zstat=cr.getEntity(ZStat.class);
+  Assert.assertEquals(expectedStat,zstat);
+  byte[] data=zk.getData(zstat.path,false,new Stat());
+  if (data == null && this.data == null) {
+    return;
+  }
+ else   if (data == null || this.data == null) {
+    Assert.fail((data == null ? null : new String(data)) + " == " + (this.data == null ? null : new String(this.data)));
+  }
+ else {
+    Assert.assertTrue(new String(data) + " == " + new String(this.data),Arrays.equals(data,this.data));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.CommitProcessorTest </h4><pre class="type-12 type-10 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@After public void tearDown() throws Exception {
+  LOG.info("tearDown starting");
+  for (  TestClientThread client : testClients) {
+    client.interrupt();
+    client.join();
+  }
+  zks.shutdown();
+  if (tmpDir != null) {
+    Assert.assertTrue("delete " + tmpDir.toString(),ClientBase.recursiveDelete(tmpDir));
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.FLEBackwardElectionRoundTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * This test is checking the following case. A server S is
+ * currently LOOKING and it receives notifications from
+ * a quorum indicating they are following S. The election
+ * round E of S is higher than the election round E' in the
+ * notification messages, so S becomes the leader and sets
+ * its epoch back to E'. In the meanwhile, one or more
+ * followers turn to LOOKING and elect S in election round E.
+ * Having leader and followers with different election rounds
+ * might prevent other servers from electing a leader because
+ * they can't get a consistent set of notifications from a
+ * quorum.{@link https://issues.apache.org/jira/browse/ZOOKEEPER-1514}
+ * @throws Exception
+ */
+@Test public void testBackwardElectionRound() throws Exception {
+  LOG.info("TestLE: {}, {}",getTestName(),count);
+  for (int i=0; i < count; i++) {
+    int clientport=PortAssignment.unique();
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress(clientport),new InetSocketAddress(PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=clientport;
+  }
+  ByteBuffer initialMsg=FLETestUtils.createMsg(ServerState.FOLLOWING.ordinal(),0,0,1);
+  QuorumPeer peer=new QuorumPeer(peers,tmpdir[0],tmpdir[0],port[0],3,0,1000,2,2);
+  peer.startLeaderElection();
+  FLETestUtils.LEThread thread=new FLETestUtils.LEThread(peer,0);
+  thread.start();
+  QuorumPeer mockPeer=new QuorumPeer(peers,tmpdir[1],tmpdir[1],port[1],3,1,1000,2,2);
+  cnxManagers[0]=new QuorumCnxManager(mockPeer);
+  cnxManagers[0].listener.start();
+  cnxManagers[0].toSend(0l,initialMsg);
+  mockPeer=new QuorumPeer(peers,tmpdir[2],tmpdir[2],port[2],3,2,1000,2,2);
+  cnxManagers[1]=new QuorumCnxManager(mockPeer);
+  cnxManagers[1].listener.start();
+  cnxManagers[1].toSend(0l,initialMsg);
+  thread.join(5000);
+  thread=new FLETestUtils.LEThread(peer,0);
+  thread.start();
+  cnxManagers[0].toSend(0l,initialMsg);
+  cnxManagers[1].toSend(0l,initialMsg);
+  thread.join(5000);
+  if (!thread.isAlive()) {
+    Assert.fail("Should not have joined");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.FLELostMessageTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testLostMessage() throws Exception {
+  LOG.info("TestLE: {}, {}",getTestName(),count);
+  for (int i=0; i < count; i++) {
+    int clientport=PortAssignment.unique();
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress(clientport),new InetSocketAddress(PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=clientport;
+  }
+  QuorumPeer peer=new QuorumPeer(peers,tmpdir[1],tmpdir[1],port[1],3,1,1000,2,2);
+  peer.startLeaderElection();
+  FLETestUtils.LEThread thread=new FLETestUtils.LEThread(peer,1);
+  thread.start();
+  mockServer();
+  thread.join(5000);
+  if (thread.isAlive()) {
+    Assert.fail("Threads didn't join");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.QuorumPeerMainTest </h4><pre class="type-9 type-10 type-3 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test early leader abandonment.
+ */
+@Test public void testEarlyLeaderAbandonment() throws Exception {
+  ClientBase.setupTestEnv();
+  final int SERVER_COUNT=3;
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    sb.append("server." + i + "=127.0.0.1:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ";"+ clientPorts[i]+ "\n");
+  }
+  String quorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection);
+    mt[i].start();
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+  }
+  waitForAll(zk,States.CONNECTED);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+  waitForAll(zk,States.CONNECTING);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].start();
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+  }
+  waitForAll(zk,States.CONNECTED);
+  int leader=-1;
+  Map<Long,Proposal> outstanding=null;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    if (mt[i].main.quorumPeer.leader == null) {
+      mt[i].shutdown();
+    }
+ else {
+      leader=i;
+      outstanding=mt[leader].main.quorumPeer.leader.outstandingProposals;
+    }
+  }
+  try {
+    zk[leader].create("/zk" + leader,"zk".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    Assert.fail("create /zk" + leader + " should have failed");
+  }
+ catch (  KeeperException e) {
+  }
+  Assert.assertTrue(outstanding.size() == 1);
+  Assert.assertTrue(((Proposal)outstanding.values().iterator().next()).request.getHdr().getType() == OpCode.create);
+  Thread.sleep(1000);
+  mt[leader].shutdown();
+  waitForAll(zk,States.CONNECTING);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    if (i != leader) {
+      mt[i].start();
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    if (i != leader) {
+      zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+      waitForOne(zk[i],States.CONNECTED);
+      zk[i].create("/zk" + i,"zk".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    }
+  }
+  mt[leader].start();
+  waitForAll(zk,States.CONNECTED);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    for (int j=0; j < SERVER_COUNT; j++) {
+      if (i == leader) {
+        Assert.assertTrue((j == leader ? ("Leader (" + leader + ")") : ("Follower " + j)) + " should not have /zk" + i,zk[j].exists("/zk" + i,false) == null);
+      }
+ else {
+        Assert.assertTrue((j == leader ? ("Leader (" + leader + ")") : ("Follower " + j)) + " does not have /zk" + i,zk[j].exists("/zk" + i,false) != null);
+      }
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    zk[i].close();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Verifies that QuorumPeer exits immediately
+ */
+@Test public void testQuorumPeerExitTime() throws Exception {
+  long maxwait=3000;
+  final int CLIENT_PORT_QP1=PortAssignment.unique();
+  String quorumCfgSection="server.1=127.0.0.1:" + PortAssignment.unique() + ":"+ PortAssignment.unique()+ ";"+ CLIENT_PORT_QP1+ "\nserver.2=127.0.0.1:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ";"+ PortAssignment.unique();
+  MainThread q1=new MainThread(1,CLIENT_PORT_QP1,quorumCfgSection);
+  q1.start();
+  Thread.sleep(30000);
+  long start=Time.currentElapsedTime();
+  q1.shutdown();
+  long end=Time.currentElapsedTime();
+  if ((end - start) > maxwait) {
+    Assert.fail("QuorumPeer took " + (end - start) + " to shutdown, expected "+ maxwait);
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.ReconfigBackupTest </h4><pre class="type-9 type-5 type-10 type-2 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that if a version is appended to dynamic file,
+ * then peer should use that version as quorum config version.
+ * <p/>
+ * The scenario: one server has an older version of 3 servers, and
+ * four others have newer version of 5 servers. Finally, the lag-off one
+ * should have server config of 5 servers.
+ */
+@Test public void testVersionOfDynamicFilename() throws Exception {
+  final int SERVER_COUNT=5;
+  final int oldServerCount=3;
+  final int lagOffServerId=0;
+  final int clientPorts[]=new int[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  String server;
+  StringBuilder oldSb=new StringBuilder();
+  ArrayList<String> allServers=new ArrayList<String>();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    server="server." + i + "=localhost:"+ PortAssignment.unique()+ ":"+ PortAssignment.unique()+ ":participant;localhost:"+ clientPorts[i];
+    sb.append(server + "\n");
+    allServers.add(server);
+    if (i < oldServerCount) {
+      oldSb.append(server + "\n");
+    }
+  }
+  String currentQuorumCfgSection=sb.toString();
+  String oldQuorumCfg=oldSb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    if (i == lagOffServerId) {
+      mt[i]=new MainThread(i,clientPorts[i],oldQuorumCfg,true,"100000000");
+    }
+ else {
+      mt[i]=new MainThread(i,clientPorts[i],currentQuorumCfgSection,true,"200000000");
+    }
+    if (i == lagOffServerId) {
+      Assert.assertNotNull(mt[i].getFileByName("zoo.cfg.dynamic.100000000"));
+      Assert.assertNull(mt[i].getFileByName("zoo.cfg.dynamic.200000000"));
+      Assert.assertTrue(mt[i].getPropFromStaticFile("dynamicConfigFile").endsWith(".100000000"));
+    }
+ else {
+      Assert.assertNotNull(mt[i].getFileByName("zoo.cfg.dynamic.200000000"));
+      Assert.assertTrue(mt[i].getPropFromStaticFile("dynamicConfigFile").endsWith(".200000000"));
+    }
+    mt[i].start();
+  }
+  String dynamicFileContent=null;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    ZooKeeper zk=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    String configStr=ReconfigTest.testServerHasConfig(zk,allServers,null);
+    Assert.assertEquals("200000000",getVersionFromConfigStr(configStr));
+    List<String> configLines=Arrays.asList(configStr.split("\n"));
+    Collections.sort(configLines);
+    String sortedConfigStr=StringUtils.joinStrings(configLines,"\n");
+    File dynamicConfigFile=mt[i].getFileByName("zoo.cfg.dynamic.200000000");
+    Assert.assertNotNull(dynamicConfigFile);
+    if (i == 0) {
+      dynamicFileContent=getFileContent(dynamicConfigFile);
+      Assert.assertEquals(sortedConfigStr,dynamicFileContent + "version=200000000");
+    }
+ else {
+      String otherDynamicFileContent=getFileContent(dynamicConfigFile);
+      Assert.assertEquals(dynamicFileContent,otherDynamicFileContent);
+    }
+    zk.close();
+  }
+  Assert.assertTrue(mt[lagOffServerId].getPropFromStaticFile("dynamicConfigFile").endsWith(".200000000"));
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-5 type-10 type-2 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that on reconfig, a new dynamic file will be created with
+ * current version appended to file name. Meanwhile, the dynamic file pointer
+ * in static config file should also be changed.
+ */
+@Test public void testReconfigCreateNewVersionFile() throws Exception {
+  final int SERVER_COUNT=3;
+  final int NEW_SERVER_COUNT=5;
+  final int clientPorts[]=new int[NEW_SERVER_COUNT];
+  final int quorumPorts[]=new int[NEW_SERVER_COUNT];
+  final int electionPorts[]=new int[NEW_SERVER_COUNT];
+  final String servers[]=new String[NEW_SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  ArrayList<String> oldServers=new ArrayList<String>();
+  ArrayList<String> newServers=new ArrayList<String>();
+  for (int i=0; i < NEW_SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    quorumPorts[i]=PortAssignment.unique();
+    electionPorts[i]=PortAssignment.unique();
+    servers[i]="server." + i + "=localhost:"+ quorumPorts[i]+ ":"+ electionPorts[i]+ ":participant;localhost:"+ clientPorts[i];
+    newServers.add(servers[i]);
+    if (i >= SERVER_COUNT) {
+      continue;
+    }
+    oldServers.add(servers[i]);
+    sb.append(servers[i] + "\n");
+  }
+  String quorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[NEW_SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[NEW_SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection);
+    mt[i].start();
+  }
+  String firstVersion=null, secondVersion=null;
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    Properties cfg=ReconfigLegacyTest.readPropertiesFromFile(mt[i].confFile);
+    String filename=cfg.getProperty("dynamicConfigFile","");
+    String version=QuorumPeerConfig.getVersionFromFilename(filename);
+    Assert.assertNotNull(version);
+    String configStr=ReconfigTest.testServerHasConfig(zk[i],oldServers,null);
+    String configVersion=getVersionFromConfigStr(configStr);
+    Assert.assertEquals(version,configVersion);
+    if (i == 0) {
+      firstVersion=version;
+    }
+ else {
+      Assert.assertEquals(firstVersion,version);
+    }
+  }
+  ReconfigTest.reconfig(zk[1],null,null,newServers,-1);
+  for (int i=SERVER_COUNT; i < NEW_SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection + servers[i]);
+    mt[i].start();
+  }
+  for (int i=SERVER_COUNT; i < NEW_SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+  }
+  for (int i=0; i < NEW_SERVER_COUNT; i++) {
+    Properties cfg=ReconfigLegacyTest.readPropertiesFromFile(mt[i].confFile);
+    String filename=cfg.getProperty("dynamicConfigFile","");
+    String version=QuorumPeerConfig.getVersionFromFilename(filename);
+    Assert.assertNotNull(version);
+    String configStr=ReconfigTest.testServerHasConfig(zk[i],newServers,null);
+    String quorumVersion=getVersionFromConfigStr(configStr);
+    Assert.assertEquals(version,quorumVersion);
+    if (i == 0) {
+      secondVersion=version;
+      Assert.assertTrue(Long.parseLong(secondVersion,16) > Long.parseLong(firstVersion,16));
+    }
+ else {
+      Assert.assertEquals(secondVersion,version);
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+    zk[i].close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.ReconfigLegacyTest </h4><pre class="type-9 type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * {@link https://issues.apache.org/jira/browse/ZOOKEEPER-1992}1. When a server starts from old style static config, without a client port in the server
+ * specification, it should keep the client port in static config file.
+ * 2. After port reconfig, the old port should be removed from static file
+ * and new port added to dynamic file.
+ * @throws Exception
+ */
+@Test public void testReconfigRemoveClientFromStatic() throws Exception {
+  final int clientPorts[]=new int[SERVER_COUNT];
+  final int quorumPorts[]=new int[SERVER_COUNT];
+  final int electionPorts[]=new int[SERVER_COUNT];
+  final int changedServerId=0;
+  final int newClientPort=PortAssignment.unique();
+  StringBuilder sb=new StringBuilder();
+  ArrayList<String> allServers=new ArrayList<String>();
+  ArrayList<String> newServers=new ArrayList<String>();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    quorumPorts[i]=PortAssignment.unique();
+    electionPorts[i]=PortAssignment.unique();
+    String server="server." + i + "=localhost:"+ quorumPorts[i]+ ":"+ electionPorts[i]+ ":participant";
+    allServers.add(server);
+    sb.append(server + "\n");
+    if (i == changedServerId) {
+      newServers.add(server + ";0.0.0.0:" + newClientPort);
+    }
+ else {
+      newServers.add(server);
+    }
+  }
+  String quorumCfgSection=sb.toString();
+  MainThread mt[]=new MainThread[SERVER_COUNT];
+  ZooKeeper zk[]=new ZooKeeper[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,clientPorts[i],quorumCfgSection,false);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],CONNECTION_TIMEOUT));
+    zk[i]=new ZooKeeper("127.0.0.1:" + clientPorts[i],ClientBase.CONNECTION_TIMEOUT,this);
+    ReconfigTest.testServerHasConfig(zk[i],allServers,null);
+    Properties cfg=readPropertiesFromFile(mt[i].confFile);
+    Assert.assertTrue(cfg.containsKey("dynamicConfigFile"));
+    Assert.assertTrue(cfg.containsKey("clientPort"));
+  }
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  ReconfigTest.reconfig(zk[1],null,null,newServers,-1);
+  ReconfigTest.testNormalOperation(zk[0],zk[1]);
+  Thread.sleep(1000);
+  for (int i=0; i < SERVER_COUNT; i++) {
+    ReconfigTest.testServerHasConfig(zk[i],newServers,null);
+    Properties staticCfg=readPropertiesFromFile(mt[i].confFile);
+    if (i == changedServerId) {
+      Assert.assertFalse(staticCfg.containsKey("clientPort"));
+    }
+ else {
+      Assert.assertTrue(staticCfg.containsKey("clientPort"));
+    }
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i].shutdown();
+    zk[i].close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.server.quorum.WatchLeakTest </h4><pre class="type-10 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Check that if session has expired then no watch can be set
+ */
+@Test public void testWatchesLeak() throws Exception {
+  NIOServerCnxnFactory serverCnxnFactory=mock(NIOServerCnxnFactory.class);
+  final SelectionKey sk=new FakeSK();
+  MockSelectorThread selectorThread=mock(MockSelectorThread.class);
+  when(selectorThread.addInterestOpsUpdateRequest(any(SelectionKey.class))).thenAnswer(new Answer<Boolean>(){
+    @Override public Boolean answer(    InvocationOnMock invocation) throws Throwable {
+      SelectionKey sk=(SelectionKey)invocation.getArguments()[0];
+      NIOServerCnxn nioSrvCnx=(NIOServerCnxn)sk.attachment();
+      sk.interestOps(nioSrvCnx.getInterestOps());
+      return true;
+    }
+  }
+);
+  ZKDatabase database=new ZKDatabase(null);
+  database.setlastProcessedZxid(2L);
+  QuorumPeer quorumPeer=mock(QuorumPeer.class);
+  FileTxnSnapLog logfactory=mock(FileTxnSnapLog.class);
+  when(logfactory.getDataDir()).thenReturn(new File(""));
+  when(logfactory.getSnapDir()).thenReturn(new File(""));
+  FollowerZooKeeperServer fzks=null;
+  try {
+    fzks=new FollowerZooKeeperServer(logfactory,quorumPeer,database);
+    fzks.startup();
+    fzks.setServerCnxnFactory(serverCnxnFactory);
+    quorumPeer.follower=new MyFollower(quorumPeer,fzks);
+    LOG.info("Follower created");
+    final SocketChannel socketChannel=createClientSocketChannel();
+    final MockNIOServerCnxn nioCnxn=new MockNIOServerCnxn(fzks,socketChannel,sk,serverCnxnFactory,selectorThread);
+    sk.attach(nioCnxn);
+    nioCnxn.doIO(sk);
+    LOG.info("Client connection sent");
+    QuorumPacket qp=createValidateSessionPacketResponse(!sessionTimedout);
+    quorumPeer.follower.processPacket(qp);
+    LOG.info("Session validation sent");
+    nioCnxn.doIO(sk);
+    Thread.sleep(1000L);
+    LOG.info("Watches processed");
+    int watchCount=database.getDataTree().getWatchCount();
+    if (sessionTimedout) {
+      LOG.info("session is not valid, watches = {}",watchCount);
+      assertEquals("Session is not valid so there should be no watches",0,watchCount);
+    }
+ else {
+      LOG.info("session is valid, watches = {}",watchCount);
+      assertEquals("Session is valid so the watch should be there",1,watchCount);
+    }
+  }
+  finally {
+    if (fzks != null) {
+      fzks.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.AuthTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testBadAuthThenSendOtherCommands() throws Exception {
+  ZooKeeper zk=createClient();
+  try {
+    zk.addAuthInfo("INVALID","BAR".getBytes());
+    zk.exists("/foobar",false);
+    zk.getData("/path1",false,null);
+    Assert.fail("Should get auth state error");
+  }
+ catch (  KeeperException.AuthFailedException e) {
+    if (!authFailed.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS)) {
+      Assert.fail("Should have called my watcher");
+    }
+  }
+ finally {
+    zk.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testBadAuthNotifiesWatch() throws Exception {
+  ZooKeeper zk=createClient();
+  try {
+    zk.addAuthInfo("FOO","BAR".getBytes());
+    zk.getData("/path1",false,null);
+    Assert.fail("Should get auth state error");
+  }
+ catch (  KeeperException.AuthFailedException e) {
+    if (!authFailed.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS)) {
+      Assert.fail("Should have called my watcher");
+    }
+  }
+ finally {
+    zk.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.ClientBase </h4><pre class="type-12 type-10 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@After public void tearDown() throws Exception {
+  LOG.info("tearDown starting");
+  tearDownAll();
+  stopServer();
+  if (tmpDir != null) {
+    Assert.assertTrue("delete " + tmpDir.toString(),recursiveDelete(tmpDir));
+  }
+  serverFactory=null;
+  JMXEnv.tearDown();
+  OSMXBean osMbean=new OSMXBean();
+  if (osMbean.getUnix() == true) {
+    long fdCount=osMbean.getOpenFileDescriptorCount();
+    String message="fdcount after test is: " + fdCount + " at start it was "+ initialFdCount;
+    LOG.info(message);
+    if (fdCount > initialFdCount) {
+      LOG.info("sleeping for 20 secs");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.ClientTest </h4><pre class="type-10 type-3 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testACLs() throws Exception {
+  ZooKeeper zk=null;
+  try {
+    zk=createClient();
+    try {
+      zk.create("/acltest",new byte[0],Ids.CREATOR_ALL_ACL,CreateMode.PERSISTENT);
+      Assert.fail("Should have received an invalid acl error");
+    }
+ catch (    InvalidACLException e) {
+      LOG.info("Test successful, invalid acl received : " + e.getMessage());
+    }
+    try {
+      ArrayList<ACL> testACL=new ArrayList<ACL>();
+      testACL.add(new ACL(Perms.ALL | Perms.ADMIN,Ids.AUTH_IDS));
+      testACL.add(new ACL(Perms.ALL | Perms.ADMIN,new Id("ip","127.0.0.1/8")));
+      zk.create("/acltest",new byte[0],testACL,CreateMode.PERSISTENT);
+      Assert.fail("Should have received an invalid acl error");
+    }
+ catch (    InvalidACLException e) {
+      LOG.info("Test successful, invalid acl received : " + e.getMessage());
+    }
+    try {
+      ArrayList<ACL> testACL=new ArrayList<ACL>();
+      testACL.add(new ACL(Perms.ALL | Perms.ADMIN,new Id()));
+      zk.create("/nullidtest",new byte[0],testACL,CreateMode.PERSISTENT);
+      Assert.fail("Should have received an invalid acl error");
+    }
+ catch (    InvalidACLException e) {
+      LOG.info("Test successful, invalid acl received : " + e.getMessage());
+    }
+    zk.addAuthInfo("digest","ben:passwd".getBytes());
+    ArrayList<ACL> testACL=new ArrayList<ACL>();
+    testACL.add(new ACL(Perms.ALL,new Id("auth","")));
+    testACL.add(new ACL(Perms.WRITE,new Id("ip","127.0.0.1")));
+    zk.create("/acltest",new byte[0],testACL,CreateMode.PERSISTENT);
+    zk.close();
+    zk=createClient();
+    zk.addAuthInfo("digest","ben:passwd2".getBytes());
+    if (skipACL) {
+      try {
+        zk.getData("/acltest",false,null);
+      }
+ catch (      KeeperException e) {
+        Assert.fail("Badauth reads should succeed with skipACL.");
+      }
+    }
+ else {
+      try {
+        zk.getData("/acltest",false,null);
+        Assert.fail("Should have received a permission error");
+      }
+ catch (      KeeperException e) {
+        Assert.assertEquals(Code.NOAUTH,e.code());
+      }
+    }
+    zk.addAuthInfo("digest","ben:passwd".getBytes());
+    zk.getData("/acltest",false,null);
+    zk.setACL("/acltest",Ids.OPEN_ACL_UNSAFE,-1);
+    zk.close();
+    zk=createClient();
+    zk.getData("/acltest",false,null);
+    List<ACL> acls=zk.getACL("/acltest",new Stat());
+    Assert.assertEquals(1,acls.size());
+    Assert.assertEquals(Ids.OPEN_ACL_UNSAFE,acls);
+    acls=zk.getACL("/acltest",null);
+    Assert.assertEquals(1,acls.size());
+    Assert.assertEquals(Ids.OPEN_ACL_UNSAFE,acls);
+    zk.close();
+  }
+  finally {
+    if (zk != null) {
+      zk.close();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-3 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testNullAuthId() throws Exception {
+  ZooKeeper zk=null;
+  try {
+    zk=createClient();
+    zk.addAuthInfo("digest","ben:passwd".getBytes());
+    ArrayList<ACL> testACL=new ArrayList<ACL>();
+    testACL.add(new ACL(Perms.ALL,new Id("auth",null)));
+    zk.create("/acltest",new byte[0],testACL,CreateMode.PERSISTENT);
+    zk.close();
+    zk=createClient();
+    zk.addAuthInfo("digest","ben:passwd2".getBytes());
+    if (skipACL) {
+      try {
+        zk.getData("/acltest",false,null);
+      }
+ catch (      KeeperException e) {
+        Assert.fail("Badauth reads should succeed with skipACL.");
+      }
+    }
+ else {
+      try {
+        zk.getData("/acltest",false,null);
+        Assert.fail("Should have received a permission error");
+      }
+ catch (      KeeperException e) {
+        Assert.assertEquals(Code.NOAUTH,e.code());
+      }
+    }
+    zk.addAuthInfo("digest","ben:passwd".getBytes());
+    zk.getData("/acltest",false,null);
+    zk.setACL("/acltest",Ids.OPEN_ACL_UNSAFE,-1);
+    zk.close();
+    zk=createClient();
+    zk.getData("/acltest",false,null);
+    List<ACL> acls=zk.getACL("/acltest",new Stat());
+    Assert.assertEquals(1,acls.size());
+    Assert.assertEquals(Ids.OPEN_ACL_UNSAFE,acls);
+  }
+  finally {
+    if (zk != null) {
+      zk.close();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.CnxManagerTest </h4><pre class="type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSocketTimeout() throws Exception {
+  QuorumPeer peer=new QuorumPeer(peers,peerTmpdir[1],peerTmpdir[1],peerClientPort[1],3,1,2000,2,2);
+  QuorumCnxManager cnxManager=new QuorumCnxManager(peer);
+  QuorumCnxManager.Listener listener=cnxManager.listener;
+  if (listener != null) {
+    listener.start();
+  }
+ else {
+    LOG.error("Null listener when initializing cnx manager");
+  }
+  int port=peers.get(peer.getId()).electionAddr.getPort();
+  LOG.info("Election port: " + port);
+  Thread.sleep(1000);
+  Socket sock=new Socket();
+  sock.connect(peers.get(1L).electionAddr,5000);
+  long begin=Time.currentElapsedTime();
+  cnxManager.receiveConnection(sock);
+  long end=Time.currentElapsedTime();
+  if ((end - begin) > ((peer.getSyncLimit() * peer.getTickTime()) + 500))   Assert.fail("Waited more than necessary");
+  cnxManager.halt();
+  Assert.assertFalse(cnxManager.listener.isAlive());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCnxManager() throws Exception {
+  CnxManagerThread thread=new CnxManagerThread();
+  thread.start();
+  QuorumPeer peer=new QuorumPeer(peers,peerTmpdir[1],peerTmpdir[1],peerClientPort[1],3,1,1000,2,2);
+  QuorumCnxManager cnxManager=new QuorumCnxManager(peer);
+  QuorumCnxManager.Listener listener=cnxManager.listener;
+  if (listener != null) {
+    listener.start();
+  }
+ else {
+    LOG.error("Null listener when initializing cnx manager");
+  }
+  cnxManager.toSend(0L,createMsg(ServerState.LOOKING.ordinal(),1,-1,1));
+  Message m=null;
+  int numRetries=1;
+  while ((m == null) && (numRetries++ <= THRESHOLD)) {
+    m=cnxManager.pollRecvQueue(3000,TimeUnit.MILLISECONDS);
+    if (m == null)     cnxManager.connectAll();
+  }
+  Assert.assertTrue("Exceeded number of retries",numRetries <= THRESHOLD);
+  thread.join(5000);
+  if (thread.isAlive()) {
+    Assert.fail("Thread didn't join");
+  }
+ else {
+    if (thread.failed)     Assert.fail("Did not receive expected message");
+  }
+  cnxManager.halt();
+  Assert.assertFalse(cnxManager.listener.isAlive());
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCnxManagerTimeout() throws Exception {
+  Random rand=new Random();
+  byte b=(byte)rand.nextInt();
+  int deadPort=PortAssignment.unique();
+  String deadAddress="10.1.1." + b;
+  LOG.info("This is the dead address I'm trying: " + deadAddress);
+  peers.put(Long.valueOf(2),new QuorumServer(2,new InetSocketAddress(deadAddress,deadPort),new InetSocketAddress(deadAddress,PortAssignment.unique()),new InetSocketAddress(deadAddress,PortAssignment.unique())));
+  peerTmpdir[2]=ClientBase.createTmpDir();
+  QuorumPeer peer=new QuorumPeer(peers,peerTmpdir[1],peerTmpdir[1],peerClientPort[1],3,1,1000,2,2);
+  QuorumCnxManager cnxManager=new QuorumCnxManager(peer);
+  QuorumCnxManager.Listener listener=cnxManager.listener;
+  if (listener != null) {
+    listener.start();
+  }
+ else {
+    LOG.error("Null listener when initializing cnx manager");
+  }
+  long begin=Time.currentElapsedTime();
+  cnxManager.toSend(2L,createMsg(ServerState.LOOKING.ordinal(),1,-1,1));
+  long end=Time.currentElapsedTime();
+  if ((end - begin) > 6000)   Assert.fail("Waited more than necessary");
+  cnxManager.halt();
+  Assert.assertFalse(cnxManager.listener.isAlive());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.DisconnectedWatcherTest </h4><pre class="type-5 type-10 type-6 type-8 type-4 type-14 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testManyChildWatchersAutoReset() throws Exception {
+  ZooKeeper zk1=createClient();
+  MyWatcher watcher=new MyWatcher();
+  ZooKeeper zk2=createClient(watcher);
+  String pathBase="/long-path-000000000-111111111-222222222-333333333-444444444-" + "555555555-666666666-777777777-888888888-999999999";
+  zk1.create(pathBase,null,Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  List<String> paths=new ArrayList<String>();
+  for (int i=0; i < 10000; i++) {
+    String path=zk1.create(pathBase + "/ch-",null,Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT_SEQUENTIAL);
+    paths.add(path);
+  }
+  MyWatcher childWatcher=new MyWatcher();
+  int i=0;
+  for (  String path : paths) {
+    if (i % 3 == 0) {
+      zk2.getChildren(path,childWatcher);
+    }
+ else     if (i % 3 == 1) {
+      zk2.exists(path + "/foo",childWatcher);
+    }
+ else     if (i % 3 == 2) {
+      zk2.getData(path,childWatcher,null);
+    }
+    i++;
+  }
+  stopServer();
+  watcher.waitForDisconnected(30000);
+  startServer();
+  watcher.waitForConnected(30000);
+  i=0;
+  for (  String path : paths) {
+    if (i % 3 == 0) {
+      zk1.create(path + "/ch",null,Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+      WatchedEvent e=childWatcher.events.poll(TIMEOUT,TimeUnit.MILLISECONDS);
+      Assert.assertNotNull(e);
+      Assert.assertEquals(EventType.NodeChildrenChanged,e.getType());
+      Assert.assertEquals(path,e.getPath());
+    }
+ else     if (i % 3 == 1) {
+      zk1.create(path + "/foo",null,Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+      WatchedEvent e=childWatcher.events.poll(TIMEOUT,TimeUnit.MILLISECONDS);
+      Assert.assertNotNull(e);
+      Assert.assertEquals(EventType.NodeCreated,e.getType());
+      Assert.assertEquals(path + "/foo",e.getPath());
+    }
+ else     if (i % 3 == 2) {
+      zk1.setData(path,new byte[]{1,2,3},-1);
+      WatchedEvent e=childWatcher.events.poll(TIMEOUT,TimeUnit.MILLISECONDS);
+      Assert.assertNotNull(e);
+      Assert.assertEquals(EventType.NodeDataChanged,e.getType());
+      Assert.assertEquals(path,e.getPath());
+    }
+    i++;
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.FLENewEpochTest </h4><pre class="type-9 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testLENewEpoch() throws Exception {
+  LOG.info("TestLE: " + getTestName() + ", "+ count);
+  for (int i=0; i < count; i++) {
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress("127.0.0.1",PortAssignment.unique()),new InetSocketAddress("127.0.0.1",PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=PortAssignment.unique();
+  }
+  for (int i=1; i < count; i++) {
+    QuorumPeer peer=new QuorumPeer(peers,tmpdir[i],tmpdir[i],port[i],3,i,1000,2,2);
+    peer.startLeaderElection();
+    LEThread thread=new LEThread(peer,i);
+    thread.start();
+    threads.add(thread);
+  }
+  if (!start0.tryAcquire(4000,java.util.concurrent.TimeUnit.MILLISECONDS))   Assert.fail("First leader election failed");
+  QuorumPeer peer=new QuorumPeer(peers,tmpdir[0],tmpdir[0],port[0],3,0,1000,2,2);
+  peer.startLeaderElection();
+  LEThread thread=new LEThread(peer,0);
+  thread.start();
+  threads.add(thread);
+  LOG.info("Started threads " + getTestName());
+  for (int i=0; i < threads.size(); i++) {
+    threads.get(i).join(10000);
+    if (threads.get(i).isAlive()) {
+      Assert.fail("Threads didn't join");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.FLERestartTest </h4><pre class="type-9 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testLERestart() throws Exception {
+  LOG.info("TestLE: " + getTestName() + ", "+ count);
+  for (int i=0; i < count; i++) {
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress("127.0.0.1",PortAssignment.unique()),new InetSocketAddress("127.0.0.1",PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=PortAssignment.unique();
+  }
+  for (int i=0; i < count; i++) {
+    QuorumPeer peer=new QuorumPeer(peers,tmpdir[i],tmpdir[i],port[i],3,i,1000,2,2);
+    peer.startLeaderElection();
+    FLERestartThread thread=new FLERestartThread(peer,i);
+    thread.start();
+    restartThreads.add(thread);
+  }
+  LOG.info("Started threads " + getTestName());
+  for (int i=0; i < restartThreads.size(); i++) {
+    restartThreads.get(i).join(10000);
+    if (restartThreads.get(i).isAlive()) {
+      Assert.fail("Threads didn't join");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.FLETest </h4><pre class="type-5 type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJoinInconsistentEnsemble() throws Exception {
+  int sid;
+  QuorumPeer peer;
+  int waitTime=10 * 1000;
+  ArrayList<QuorumPeer> peerList=new ArrayList<QuorumPeer>();
+  for (sid=0; sid < 3; sid++) {
+    peers.put(Long.valueOf(sid),new QuorumServer(sid,new InetSocketAddress("127.0.0.1",PortAssignment.unique()),new InetSocketAddress("127.0.0.1",PortAssignment.unique())));
+    tmpdir[sid]=ClientBase.createTmpDir();
+    port[sid]=PortAssignment.unique();
+  }
+  for (sid=0; sid < 2; sid++) {
+    peer=new QuorumPeer(peers,tmpdir[sid],tmpdir[sid],port[sid],3,sid,2000,2,2);
+    LOG.info("Starting peer " + peer.getId());
+    peer.start();
+    peerList.add(sid,peer);
+  }
+  peer=peerList.get(0);
+  VerifyState v1=new VerifyState(peerList.get(0));
+  v1.start();
+  v1.join(waitTime);
+  Assert.assertFalse("Unable to form cluster in " + waitTime + " ms",!v1.isSuccess());
+  long leaderSid=peer.getCurrentVote().getId();
+  long zxid=peer.getCurrentVote().getZxid();
+  long electionEpoch=peer.getCurrentVote().getElectionEpoch();
+  ServerState state=peer.getCurrentVote().getState();
+  long peerEpoch=peer.getCurrentVote().getPeerEpoch();
+  Vote newVote=new Vote(leaderSid,zxid + 100,electionEpoch + 100,peerEpoch,state);
+  peer.setCurrentVote(newVote);
+  peer=new QuorumPeer(peers,tmpdir[2],tmpdir[2],port[2],3,2,2000,2,2);
+  LOG.info("Starting peer " + peer.getId());
+  peer.start();
+  peerList.add(sid,peer);
+  v1=new VerifyState(peer);
+  v1.start();
+  v1.join(waitTime);
+  if (v1.isAlive()) {
+    Assert.fail("Peer " + peer.getId() + " failed to join the cluster "+ "within "+ waitTime+ " ms");
+  }
+  for (int id=0; id < 3; id++) {
+    peer=peerList.get(id);
+    if (peer != null) {
+      peer.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-5 type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testJoin() throws Exception {
+  int sid;
+  QuorumPeer peer;
+  int waitTime=10 * 1000;
+  ArrayList<QuorumPeer> peerList=new ArrayList<QuorumPeer>();
+  for (sid=0; sid < 3; sid++) {
+    port[sid]=PortAssignment.unique();
+    peers.put(Long.valueOf(sid),new QuorumServer(sid,new InetSocketAddress("127.0.0.1",PortAssignment.unique()),new InetSocketAddress("127.0.0.1",PortAssignment.unique()),new InetSocketAddress("127.0.0.1",port[sid])));
+    tmpdir[sid]=ClientBase.createTmpDir();
+  }
+  for (sid=0; sid < 2; sid++) {
+    peer=new QuorumPeer(peers,tmpdir[sid],tmpdir[sid],port[sid],3,sid,2000,2,2);
+    LOG.info("Starting peer " + peer.getId());
+    peer.start();
+    peerList.add(sid,peer);
+  }
+  peer=peerList.get(0);
+  VerifyState v1=new VerifyState(peerList.get(0));
+  v1.start();
+  v1.join(waitTime);
+  Assert.assertFalse("Unable to form cluster in " + waitTime + " ms",!v1.isSuccess());
+  peer=new QuorumPeer(peers,tmpdir[sid],tmpdir[sid],port[sid],3,sid,2000,2,2);
+  LOG.info("Starting peer " + peer.getId());
+  peer.start();
+  peerList.add(sid,peer);
+  v1=new VerifyState(peer);
+  v1.start();
+  v1.join(waitTime);
+  if (v1.isAlive()) {
+    Assert.fail("Peer " + peer.getId() + " failed to join the cluster "+ "within "+ waitTime+ " ms");
+  }
+ else   if (!v1.isSuccess()) {
+    Assert.fail("Incorrect LEADING state for peer " + peer.getId());
+  }
+  for (int id=0; id < 3; id++) {
+    peer=peerList.get(id);
+    if (peer != null) {
+      peer.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.FLEZeroWeightTest </h4><pre class="type-9 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testZeroWeightQuorum() throws Exception {
+  LOG.info("TestZeroWeightQuorum: " + getTestName() + ", "+ count);
+  for (int i=0; i < count; i++) {
+    InetSocketAddress addr1=new InetSocketAddress("127.0.0.1",PortAssignment.unique());
+    InetSocketAddress addr2=new InetSocketAddress("127.0.0.1",PortAssignment.unique());
+    InetSocketAddress addr3=new InetSocketAddress("127.0.0.1",PortAssignment.unique());
+    port[i]=addr3.getPort();
+    qp.setProperty("server." + i,"127.0.0.1:" + addr1.getPort() + ":"+ addr2.getPort()+ ";"+ port[i]);
+    peers.put(Long.valueOf(i),new QuorumServer(i,addr1,addr2,addr3));
+    tmpdir[i]=ClientBase.createTmpDir();
+  }
+  for (int i=0; i < count; i++) {
+    QuorumHierarchical hq=new QuorumHierarchical(qp);
+    QuorumPeer peer=new QuorumPeer(peers,tmpdir[i],tmpdir[i],port[i],3,i,1000,2,2,hq);
+    peer.startLeaderElection();
+    LEThread thread=new LEThread(peer,i);
+    thread.start();
+    threads.add(thread);
+  }
+  LOG.info("Started threads " + getTestName());
+  for (int i=0; i < threads.size(); i++) {
+    threads.get(i).join(15000);
+    if (threads.get(i).isAlive()) {
+      Assert.fail("Threads didn't join");
+    }
+ else {
+      if (threads.get(i).fail)       Assert.fail("Elected zero-weight server");
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.FollowerResyncConcurrencyTest </h4><pre class="type-5 type-10 type-3 type-6 type-8 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Verify that the server is sending the proper zxid, and as a result
+ * the watch doesn't fire. See ZOOKEEPER-1412.
+ */
+@Test public void testFollowerWatcherResync() throws Exception {
+  QuorumUtil qu=new QuorumUtil(1);
+  qu.startAll();
+  int index=1;
+  while (qu.getPeer(index).peer.follower == null) {
+    index++;
+  }
+  LOG.info("Connecting to follower: {}",index);
+  TestableZooKeeper zk1=createTestableClient("localhost:" + qu.getPeer(index).peer.getClientPort());
+  zk1.create("/foo","foo".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  MyWatcher watcher=new MyWatcher();
+  TestableZooKeeper zk2=createTestableClient(watcher,"localhost:" + qu.getPeer(index).peer.getClientPort());
+  zk2.exists("/foo",true);
+  watcher.reset();
+  zk2.testableConnloss();
+  if (!watcher.clientConnected.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS)) {
+    fail("Unable to connect to server");
+  }
+  assertArrayEquals("foo".getBytes(),zk2.getData("/foo",false,null));
+  assertNull(watcher.events.poll(5,TimeUnit.SECONDS));
+  zk1.close();
+  zk2.close();
+  qu.shutdownAll();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.KeeperStateTest </h4><pre class="type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Validate that the deprecated constant still works. There were issues
+ * found with switch statements - which need compile time constants.
+ */
+@Test @SuppressWarnings("deprecation") public void testDeprecatedCodeOkInSwitch(){
+  int test=1;
+switch (test) {
+case Code.Ok:
+    Assert.assertTrue(true);
+  break;
+}
+}
+
+</code></pre>
+
+<br>
+<pre class="type-10 type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Verify the enum works (paranoid) 
+ */
+@Test public void testCodeOKInSwitch(){
+  Code test=Code.OK;
+switch (test) {
+case OK:
+    Assert.assertTrue(true);
+  break;
+}
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.LENonTerminateTest </h4><pre class="type-10 type-3 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This tests ZK-569.
+ * With three peers A, B and C, the following could happen:
+ * 1. Round 1, A,B and C all vote for themselves
+ * 2. Round 2, C dies, A and B vote for C
+ * 3. Because C has died, votes for it are ignored, but A and B never
+ * reset their votes. Hence LE never terminates. ZK-569 fixes this by
+ * resetting votes to themselves if the set of votes for live peers is null.
+ */
+@Test public void testNonTermination() throws Exception {
+  LOG.info("TestNonTermination: " + getTestName() + ", "+ count);
+  for (int i=0; i < count; i++) {
+    int clientport=PortAssignment.unique();
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress("127.0.0.1",clientport),new InetSocketAddress("127.0.0.1",PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=clientport;
+  }
+  QuorumPeer peer1=new MockQuorumPeer(peers,tmpdir[0],tmpdir[0],port[0],0,0,2,2,2);
+  peer1.startLeaderElection();
+  LEThread thread1=new LEThread(peer1,0);
+  QuorumPeer peer2=new MockQuorumPeer(peers,tmpdir[1],tmpdir[1],port[1],0,1,2,2,2);
+  peer2.startLeaderElection();
+  LEThread thread2=new LEThread(peer2,1);
+  Thread thread3=new Thread(){
+    public void run(){
+      try {
+        mockServer();
+      }
+ catch (      Exception e) {
+        LOG.error("exception",e);
+        Assert.fail("Exception when running mocked server " + e);
+      }
+    }
+  }
+;
+  thread3.start();
+  Assert.assertTrue("mockServer did not start in 5s",mockLatch.await(5000,TimeUnit.MILLISECONDS));
+  thread1.start();
+  thread2.start();
+  thread1.join(15000);
+  thread2.join(15000);
+  thread3.join(15000);
+  if (thread1.isAlive() || thread2.isAlive() || thread3.isAlive()) {
+    Assert.fail("Threads didn't join");
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.LETest </h4><pre class="type-9 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testLE() throws Exception {
+  int count=30;
+  HashMap<Long,QuorumServer> peers=new HashMap<Long,QuorumServer>(count);
+  ArrayList<LEThread> threads=new ArrayList<LEThread>(count);
+  File tmpdir[]=new File[count];
+  int port[]=new int[count];
+  votes=new Vote[count];
+  for (int i=0; i < count; i++) {
+    peers.put(Long.valueOf(i),new QuorumServer(i,new InetSocketAddress("127.0.0.1",PortAssignment.unique())));
+    tmpdir[i]=ClientBase.createTmpDir();
+    port[i]=PortAssignment.unique();
+  }
+  LeaderElection le[]=new LeaderElection[count];
+  leaderDies=true;
+  boolean allowOneBadLeader=leaderDies;
+  for (int i=0; i < le.length; i++) {
+    QuorumPeer peer=new QuorumPeer(peers,tmpdir[i],tmpdir[i],port[i],0,i,1000,2,2);
+    peer.startLeaderElection();
+    le[i]=new LeaderElection(peer);
+    LEThread thread=new LEThread(le[i],peer,i);
+    thread.start();
+    threads.add(thread);
+  }
+  for (int i=0; i < threads.size(); i++) {
+    threads.get(i).join(15000);
+    if (threads.get(i).isAlive()) {
+      Assert.fail("Threads didn't join");
+    }
+  }
+  long id=votes[0].getId();
+  for (int i=1; i < votes.length; i++) {
+    if (votes[i] == null) {
+      Assert.fail("Thread " + i + " had a null vote");
+    }
+    if (votes[i].getId() != id) {
+      if (allowOneBadLeader && votes[i].getId() == i) {
+        allowOneBadLeader=false;
+      }
+ else {
+        Assert.fail("Thread " + i + " got "+ votes[i].getId()+ " expected "+ id);
+      }
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.MultiTransactionTest </h4><pre class="type-10 type-3 type-2 type-6 type-8 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testGetResults() throws Exception {
+  Iterable<Op> ops=Arrays.asList(Op.create("/multi",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT),Op.delete("/multi",0),Op.setData("/multi","Y".getBytes(),0),Op.create("/foo",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT));
+  List<OpResult> results=null;
+  if (useAsync) {
+    final MultiResult res=new MultiResult();
+    zk.multi(ops,new MultiCallback(){
+      @Override public void processResult(      int rc,      String path,      Object ctx,      List<OpResult> opResults){
+synchronized (res) {
+          res.rc=rc;
+          res.results=opResults;
+          res.finished=true;
+          res.notifyAll();
+        }
+      }
+    }
+,null);
+synchronized (res) {
+      while (!res.finished) {
+        res.wait();
+      }
+    }
+    Assert.assertFalse("/multi should have been deleted so setData should have failed",KeeperException.Code.OK.intValue() == res.rc);
+    Assert.assertNull(zk.exists("/multi",null));
+    results=res.results;
+  }
+ else {
+    try {
+      zk.multi(ops);
+      Assert.fail("/multi should have been deleted so setData should have failed");
+    }
+ catch (    KeeperException e) {
+      Assert.assertNull(zk.exists("/multi",null));
+      results=e.getResults();
+    }
+  }
+  Assert.assertNotNull(results);
+  for (  OpResult r : results) {
+    LOG.info("RESULT==> {}",r);
+    if (r instanceof ErrorResult) {
+      ErrorResult er=(ErrorResult)r;
+      LOG.info("ERROR RESULT: {} ERR=>{}",er,KeeperException.Code.get(er.getErr()));
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.ObserverLETest </h4><pre class="type-10 type-2 type-6 type-8 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * See ZOOKEEPER-1294. Confirms that an observer will not support the quorum
+ * of a leader by forming a 5-node, 2-observer ensemble (so quorum size is 2).
+ * When all but the leader and one observer are shut down, the leader should
+ * enter the 'looking' state, not stay in the 'leading' state.
+ */
+@Test public void testLEWithObserver() throws Exception {
+  QuorumPeer leader=null;
+  for (  QuorumPeer server : Arrays.asList(qb.s1,qb.s2,qb.s3)) {
+    if (server.getServerState().equals(QuorumStats.Provider.FOLLOWING_STATE)) {
+      server.shutdown();
+      assertTrue("Waiting for server down",ClientBase.waitForServerDown("127.0.0.1:" + server.getClientPort(),ClientBase.CONNECTION_TIMEOUT));
+    }
+ else {
+      assertNull("More than one leader found",leader);
+      leader=server;
+    }
+  }
+  assertTrue("Leader is not in Looking state",ClientBase.waitForServerState(leader,ClientBase.CONNECTION_TIMEOUT,QuorumStats.Provider.LOOKING_STATE));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.QuorumUtilTest </h4><pre class="type-10 type-3 type-2 type-6 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * <p>
+ * This test ensures that all JXM beans associated to a {@link QuorumPeer}are unregistered when shuted down ({@link QuorumUtil#shutdown(int)}). It
+ * allows a successfull restarting of several zookeeper servers ({@link QuorumPeer}) running on the same JVM.
+ * <p>
+ * See ZOOKEEPER-1214 for details.
+ */
+@Test public void validateAllMXBeanAreUnregistered() throws IOException {
+  QuorumUtil qU=new QuorumUtil(1);
+  LOG.info(">-->> Starting up all servers...");
+  qU.startAll();
+  LOG.info(">-->> Servers up and running...");
+  int leaderIndex=qU.getLeaderServer();
+  int firstFollowerIndex=0;
+  int secondFollowerIndex=0;
+switch (leaderIndex) {
+case 1:
+    firstFollowerIndex=2;
+  secondFollowerIndex=3;
+break;
+case 2:
+firstFollowerIndex=1;
+secondFollowerIndex=3;
+break;
+case 3:
+firstFollowerIndex=1;
+secondFollowerIndex=2;
+break;
+default :
+Assert.fail("Unexpected leaderIndex value: " + leaderIndex);
+break;
+}
+LOG.info(">-->> Shuting down server [{}]",firstFollowerIndex);
+qU.shutdown(firstFollowerIndex);
+LOG.info(">-->> Shuting down server [{}]",secondFollowerIndex);
+qU.shutdown(secondFollowerIndex);
+LOG.info(">-->> Restarting server [{}]",firstFollowerIndex);
+qU.restart(firstFollowerIndex);
+LOG.info(">-->> Restarting server [{}]",secondFollowerIndex);
+qU.restart(secondFollowerIndex);
+qU.shutdownAll();
+Set<ZKMBeanInfo> pending=MBeanRegistry.getInstance().getRegisteredBeans();
+Assert.assertTrue("The following beans should have been unregistered: " + pending,pending.isEmpty());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.ReconfigTest </h4><pre class="type-9 type-5 type-10 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void testRoleChange() throws Exception {
+  qu=new QuorumUtil(1);
+  qu.disableJMXTest=true;
+  qu.startAll();
+  ZooKeeper[] zkArr=createHandles(qu);
+  List<String> joiningServers=new ArrayList<String>();
+  int leaderIndex=getLeaderId(qu);
+  int changingIndex=(leaderIndex == 1) ? 2 : 1;
+  String newRole="observer";
+  for (int i=0; i < 4; i++) {
+    ZooKeeper zk1=(changingIndex == leaderIndex) ? zkArr[leaderIndex] : zkArr[(leaderIndex % qu.ALL) + 1];
+    joiningServers.add("server." + changingIndex + "=localhost:"+ qu.getPeer(changingIndex).peer.getQuorumAddress().getPort()+ ":"+ qu.getPeer(changingIndex).peer.getElectionAddress().getPort()+ ":"+ newRole+ ";localhost:"+ qu.getPeer(changingIndex).peer.getClientPort());
+    reconfig(zk1,joiningServers,null,null,-1);
+    testNormalOperation(zkArr[changingIndex],zk1);
+    if (newRole.equals("observer")) {
+      Assert.assertTrue(qu.getPeer(changingIndex).peer.observer != null && qu.getPeer(changingIndex).peer.follower == null && qu.getPeer(changingIndex).peer.leader == null);
+      Assert.assertTrue(qu.getPeer(changingIndex).peer.getPeerState() == ServerState.OBSERVING);
+    }
+ else {
+      Assert.assertTrue(qu.getPeer(changingIndex).peer.observer == null && (qu.getPeer(changingIndex).peer.follower != null || qu.getPeer(changingIndex).peer.leader != null));
+      Assert.assertTrue(qu.getPeer(changingIndex).peer.getPeerState() == ServerState.FOLLOWING || qu.getPeer(changingIndex).peer.getPeerState() == ServerState.LEADING);
+    }
+    joiningServers.clear();
+    if (newRole.equals("observer")) {
+      newRole="participant";
+    }
+ else {
+      newRole="observer";
+      leaderIndex=getLeaderId(qu);
+      changingIndex=leaderIndex;
+    }
+  }
+  closeAllHandles(zkArr);
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testQuorumSystemChange() throws Exception {
+  qu=new QuorumUtil(3);
+  qu.disableJMXTest=true;
+  qu.startAll();
+  ZooKeeper[] zkArr=createHandles(qu);
+  ArrayList<String> members=new ArrayList<String>();
+  members.add("group.1=3:4:5");
+  members.add("group.2=1:2");
+  members.add("weight.1=0");
+  members.add("weight.2=0");
+  members.add("weight.3=1");
+  members.add("weight.4=1");
+  members.add("weight.5=1");
+  for (int i=1; i <= 5; i++) {
+    members.add("server." + i + "=127.0.0.1:"+ qu.getPeer(i).peer.getQuorumAddress().getPort()+ ":"+ qu.getPeer(i).peer.getElectionAddress().getPort()+ ";"+ "127.0.0.1:"+ qu.getPeer(i).peer.getClientPort());
+  }
+  reconfig(zkArr[1],null,null,members,-1);
+  testNormalOperation(zkArr[2],zkArr[3]);
+  testNormalOperation(zkArr[4],zkArr[5]);
+  for (int i=1; i <= 5; i++) {
+    if (!(qu.getPeer(i).peer.quorumVerifier instanceof QuorumHierarchical))     Assert.fail("peer " + i + " doesn't think the quorum system is Hieararchical!");
+  }
+  qu.shutdown(1);
+  qu.shutdown(2);
+  qu.shutdown(3);
+  qu.shutdown(7);
+  qu.shutdown(6);
+  testNormalOperation(zkArr[4],zkArr[5]);
+  qu.restart(1);
+  qu.restart(2);
+  members.clear();
+  for (int i=1; i <= 3; i++) {
+    members.add("server." + i + "=127.0.0.1:"+ qu.getPeer(i).peer.getQuorumAddress().getPort()+ ":"+ qu.getPeer(i).peer.getElectionAddress().getPort()+ ";"+ "127.0.0.1:"+ qu.getPeer(i).peer.getClientPort());
+  }
+  reconfig(zkArr[1],null,null,members,-1);
+  testNormalOperation(zkArr[1],zkArr[2]);
+  qu.shutdown(4);
+  qu.shutdown(5);
+  testNormalOperation(zkArr[1],zkArr[2]);
+  for (int i=1; i <= 2; i++) {
+    if (!(qu.getPeer(i).peer.quorumVerifier instanceof QuorumMaj))     Assert.fail("peer " + i + " doesn't think the quorum system is a majority quorum system!");
+  }
+  closeAllHandles(zkArr);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.SSLTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+/** 
+ * Developers might use standalone mode (which is the default for one server).
+ * This test checks SSL works in standalone mode of ZK server.
+ * <p/>
+ * Note that in this test the Zk server has only secureClientPort
+ */
+@Test public void testSecureStandaloneServer() throws Exception {
+  Integer secureClientPort=PortAssignment.unique();
+  MainThread mt=new MainThread(MainThread.UNSET_MYID,"",secureClientPort,false);
+  mt.start();
+  final CountDownLatch latch=new CountDownLatch(1);
+  ZooKeeper zk=new ZooKeeper("127.0.0.1:" + secureClientPort,TIMEOUT,new Watcher(){
+    @Override public void process(    WatchedEvent event){
+      if (event.getState() != Event.KeeperState.SyncConnected) {
+        Assert.fail("failed to connect to ZK server secure client port");
+      }
+      latch.countDown();
+    }
+  }
+);
+  if (!latch.await(TIMEOUT,TimeUnit.MILLISECONDS)) {
+    Assert.fail("Timeout connecting to ZK server secure port");
+  }
+  zk.create("/test","".getBytes(),ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  zk.delete("/test",-1);
+  zk.close();
+  mt.shutdown();
+}
+
+</code></pre>
+
+<br>
+<pre class="type-9 type-10 type-3 type-2 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that SSL works in cluster setup of ZK servers, which includes:
+ * 1. setting "secureClientPort" in "zoo.cfg" file.
+ * 2. setting jvm flags for serverCnxn, keystore, truststore.
+ * Finally, a zookeeper client should be able to connect to the secure port and
+ * communicate with server via secure connection.
+ * <p/>
+ * Note that in this test a ZK server has two ports -- clientPort and secureClientPort.
+ */
+@Test public void testSecureQuorumServer() throws Exception {
+  final int SERVER_COUNT=3;
+  final int clientPorts[]=new int[SERVER_COUNT];
+  final Integer secureClientPorts[]=new Integer[SERVER_COUNT];
+  StringBuilder sb=new StringBuilder();
+  for (int i=0; i < SERVER_COUNT; i++) {
+    clientPorts[i]=PortAssignment.unique();
+    secureClientPorts[i]=PortAssignment.unique();
+    String server=String.format("server.%d=localhost:%d:%d:participant;localhost:%d",i,PortAssignment.unique(),PortAssignment.unique(),clientPorts[i]);
+    sb.append(server + "\n");
+  }
+  String quorumCfg=sb.toString();
+  MainThread[] mt=new MainThread[SERVER_COUNT];
+  for (int i=0; i < SERVER_COUNT; i++) {
+    mt[i]=new MainThread(i,quorumCfg,secureClientPorts[i],true);
+    mt[i].start();
+  }
+  for (int i=0; i < SERVER_COUNT; i++) {
+    Assert.assertTrue("waiting for server " + i + " being up",ClientBase.waitForServerUp("127.0.0.1:" + clientPorts[i],TIMEOUT));
+    final CountDownLatch latch=new CountDownLatch(1);
+    ZooKeeper zk=new ZooKeeper("127.0.0.1:" + secureClientPorts[i],TIMEOUT,new Watcher(){
+      @Override public void process(      WatchedEvent event){
+        if (event.getState() != Event.KeeperState.SyncConnected) {
+          Assert.fail("failed to connect to ZK server secure client port");
+        }
+        latch.countDown();
+      }
+    }
+);
+    if (!latch.await(TIMEOUT,TimeUnit.MILLISECONDS)) {
+      Assert.fail("Timeout connecting to ZK server secure port");
+    }
+    zk.create("/test","".getBytes(),ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+    zk.delete("/test",-1);
+    zk.close();
+  }
+  for (int i=0; i < mt.length; i++) {
+    mt[i].shutdown();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.SaslAuthFailDesignatedClientTest </h4><pre class="type-10 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void testAuth() throws Exception {
+  CountdownWatcher watcher=new CountdownWatcher();
+  TestableZooKeeper zk=new TestableZooKeeper(hostPort,CONNECTION_TIMEOUT,watcher);
+  if (!watcher.clientConnected.await(CONNECTION_TIMEOUT,TimeUnit.MILLISECONDS)) {
+    Assert.fail("Unable to connect to server");
+  }
+  try {
+    zk.create("/path1",null,Ids.CREATOR_ALL_ACL,CreateMode.PERSISTENT);
+    Assert.fail("Should have gotten exception.");
+  }
+ catch (  KeeperException e) {
+    LOG.info("Got exception as expected: " + e);
+  }
+ finally {
+    zk.close();
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.SyncCallTest </h4><pre class="type-9 type-10 type-3 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSync() throws Exception {
+  try {
+    LOG.info("Starting ZK:" + (new Date()).toString());
+    opsCount=new CountDownLatch(limit);
+    ZooKeeper zk=createClient();
+    LOG.info("Beginning test:" + (new Date()).toString());
+    for (int i=0; i < 50; i++)     zk.create("/test" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT,(StringCallback)this,results);
+    for (int i=50; i < 100; i++) {
+      zk.create("/test" + i,new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT,(Create2Callback)this,results);
+    }
+    zk.sync("/test",this,results);
+    for (int i=0; i < 100; i++)     zk.delete("/test" + i,0,this,results);
+    for (int i=0; i < 100; i++)     zk.getChildren("/",new NullWatcher(),(ChildrenCallback)this,results);
+    for (int i=0; i < 100; i++)     zk.getChildren("/",new NullWatcher(),(Children2Callback)this,results);
+    LOG.info("Submitted all operations:" + (new Date()).toString());
+    if (!opsCount.await(10000,TimeUnit.MILLISECONDS))     Assert.fail("Haven't received all confirmations" + opsCount.getCount());
+    for (int i=0; i < limit; i++) {
+      Assert.assertEquals(0,(int)results.get(i));
+    }
+  }
+ catch (  IOException e) {
+    System.out.println(e.toString());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.WatcherTest </h4><pre class="type-9 type-5 type-10 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks that watches for pending requests do not get triggered,
+ * but watches set by previous requests do.
+ * @throws Exception
+ */
+@Test public void testWatchAutoResetWithPending() throws Exception {
+  MyWatcher watches[]=new MyWatcher[COUNT];
+  MyStatCallback cbs[]=new MyStatCallback[COUNT];
+  MyWatcher watcher=new MyWatcher();
+  int count[]=new int[1];
+  TestableZooKeeper zk=createClient(watcher,hostPort,6000);
+  ZooKeeper zk2=createClient(watcher,hostPort,5000);
+  zk2.create("/test",new byte[0],Ids.OPEN_ACL_UNSAFE,CreateMode.EPHEMERAL);
+  for (int i=0; i < COUNT / 2; i++) {
+    watches[i]=new MyWatcher();
+    cbs[i]=new MyStatCallback();
+    zk.exists("/test",watches[i],cbs[i],count);
+  }
+  zk.exists("/test",false);
+  Assert.assertTrue("Failed to pause the connection!",zk.pauseCnxn(3000));
+  zk2.close();
+  stopServer();
+  watches[0].waitForDisconnected(60000);
+  for (int i=COUNT / 2; i < COUNT; i++) {
+    watches[i]=new MyWatcher();
+    cbs[i]=new MyStatCallback();
+    zk.exists("/test",watches[i],cbs[i],count);
+  }
+  startServer();
+  watches[COUNT / 2 - 1].waitForConnected(60000);
+  Assert.assertEquals(null,zk.exists("/test",false));
+  Thread.sleep(10);
+  for (int i=0; i < COUNT / 2; i++) {
+    Assert.assertEquals("For " + i,1,watches[i].events.size());
+  }
+  for (int i=COUNT / 2; i < COUNT; i++) {
+    if (cbs[i].rc == 0) {
+      Assert.assertEquals("For " + i,1,watches[i].events.size());
+    }
+ else {
+      Assert.assertEquals("For " + i,0,watches[i].events.size());
+    }
+  }
+  Assert.assertEquals(COUNT,count[0]);
+  zk.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.ZkDatabaseCorruptionTest </h4><pre class="type-9 type-10 type-2 type-6 type-8 type-14 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCorruption() throws Exception {
+  ClientBase.waitForServerUp(qb.hostPort,10000);
+  ClientBase.waitForServerUp(qb.hostPort,10000);
+  ZooKeeper zk=new ZooKeeper(qb.hostPort,10000,new Watcher(){
+    public void process(    WatchedEvent event){
+    }
+  }
+);
+  SyncRequestProcessor.setSnapCount(100);
+  for (int i=0; i < 2000; i++) {
+    zk.create("/0-" + i,new byte[0],ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT,new NoopStringCallback(),null);
+  }
+  zk.close();
+  long leaderSid=1;
+  QuorumPeer leader=null;
+  for (  QuorumPeer quorumPeer : Arrays.asList(qb.s1,qb.s2,qb.s3,qb.s4,qb.s5)) {
+    if (quorumPeer.getPeerState() == ServerState.LEADING) {
+      leader=quorumPeer;
+      break;
+    }
+    ++leaderSid;
+  }
+  Assert.assertNotNull("Cannot find the leader.",leader);
+  leader.shutdown();
+  FileTxnSnapLog snapLog=leader.getTxnFactory();
+  File snapDir=snapLog.getSnapDir();
+  corruptAllSnapshots(snapDir);
+  qb.shutdownServers();
+  qb.setupServers();
+  if (leaderSid != 1)   qb.s1.start();
+ else   leader=qb.s1;
+  if (leaderSid != 2)   qb.s2.start();
+ else   leader=qb.s2;
+  if (leaderSid != 3)   qb.s3.start();
+ else   leader=qb.s3;
+  if (leaderSid != 4)   qb.s4.start();
+ else   leader=qb.s4;
+  if (leaderSid != 5)   qb.s5.start();
+ else   leader=qb.s5;
+  try {
+    leader.start();
+    Assert.assertTrue(false);
+  }
+ catch (  RuntimeException re) {
+    LOG.info("Got an error: expected",re);
+  }
+  String[] list=qb.hostPort.split(",");
+  for (int i=0; i < 5; i++) {
+    if (leaderSid != (i + 1)) {
+      String hp=list[i];
+      Assert.assertTrue("waiting for server up",ClientBase.waitForServerUp(hp,CONNECTION_TIMEOUT));
+      LOG.info("{} is accepting client connections",hp);
+    }
+ else {
+      LOG.info("Skipping the leader");
+    }
+  }
+  zk=qb.createClient();
+  SyncRequestProcessor.setSnapCount(100);
+  for (int i=2000; i < 4000; i++) {
+    zk.create("/0-" + i,new byte[0],ZooDefs.Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT,new NoopStringCallback(),null);
+  }
+  zk.close();
+  if (leaderSid != 1)   QuorumBase.shutdown(qb.s1);
+  if (leaderSid != 2)   QuorumBase.shutdown(qb.s2);
+  if (leaderSid != 3)   QuorumBase.shutdown(qb.s3);
+  if (leaderSid != 4)   QuorumBase.shutdown(qb.s4);
+  if (leaderSid != 5)   QuorumBase.shutdown(qb.s5);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.zookeeper.test.system.SimpleSysTest </h4><pre class="type-9 type-10 type-3 type-2 type-6 type-4 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * This test checks the following:
+ * 1) All clients connect successfully
+ * 2) Half of the servers die (assuming odd number) and a write succeeds
+ * 3) All servers are restarted and cluster stays alive
+ * 4) Clients see a change by the server
+ * 5) Clients' ephemeral nodes are cleaned up
+ * @throws Exception
+ */
+@Test public void testSimpleCase() throws Exception {
+  configureServers(serverCount);
+  configureClients(clientCount,SimpleClient.class,getHostPort());
+  Stat stat=new Stat();
+  startServers();
+  LOG.debug("Connecting to " + getHostPort());
+  ZooKeeper zk=new ZooKeeper(getHostPort(),15000,this);
+  waitForConnect(zk,10000);
+  zk.create("/simpleCase","orig".getBytes(),Ids.OPEN_ACL_UNSAFE,CreateMode.PERSISTENT);
+  startClients();
+  for (int i=0; i < getClientCount(); i++) {
+    for (int j=0; j < maxTries; j++) {
+      try {
+        byte b[]=zk.getData("/simpleCase/" + i,false,stat);
+        Assert.assertEquals("orig",new String(b));
+      }
+ catch (      NoNodeException e) {
+        if (j + 1 == maxTries) {
+          Assert.fail("Max tries exceeded on client " + i);
+        }
+        Thread.sleep(1000);
+      }
+    }
+  }
+  for (int i=0; i < getServerCount(); i++) {
+    stopServer(i);
+    if (i + 1 > getServerCount() / 2) {
+      startServer(i);
+    }
+ else     if (i + 1 == getServerCount() / 2) {
+      Assert.assertTrue("Connection didn't recover",waitForConnect(zk,10000));
+      try {
+        zk.setData("/simpleCase","new".getBytes(),-1);
+      }
+ catch (      ConnectionLossException e) {
+        Assert.assertTrue("Connection didn't recover",waitForConnect(zk,10000));
+        zk.setData("/simpleCase","new".getBytes(),-1);
+      }
+      for (int j=0; j < i; j++) {
+        LOG.info("Starting server " + j);
+        startServer(i);
+      }
+    }
+  }
+  Thread.sleep(100);
+  Assert.assertTrue("Servers didn't bounce",waitForConnect(zk,15000));
+  try {
+    zk.getData("/simpleCase",false,stat);
+  }
+ catch (  ConnectionLossException e) {
+    Assert.assertTrue("Servers didn't bounce",waitForConnect(zk,15000));
+  }
+  for (int i=0; i < getClientCount(); i++) {
+    for (int j=0; j < maxTries; j++) {
+      byte data[]=zk.getData("/simpleCase/" + i,false,stat);
+      if (new String(data).equals("new")) {
+        break;
+      }
+      if (j + 1 == maxTries) {
+        Assert.fail("max tries exceeded for " + i);
+      }
+      Thread.sleep(1000);
+    }
+  }
+  zk.setData("/simpleCase","die".getBytes(),-1);
+  for (int i=0; i < getClientCount(); i++) {
+    try {
+      for (int j=0; j < maxTries; j++) {
+        zk.getData("/simpleCase/" + i,false,stat);
+        if (j + 1 == maxTries) {
+          Assert.fail("max tries exceeded waiting for child " + i + " to die");
+        }
+        Thread.sleep(200);
+      }
+    }
+ catch (    NoNodeException e) {
+    }
+  }
+  stopClients();
+  stopServers();
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

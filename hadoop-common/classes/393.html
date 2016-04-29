@@ -1,0 +1,262 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.blockmanagement.TestBlockTokenWithDFS (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRead() throws Exception {
+  MiniDFSCluster cluster=null;
+  int numDataNodes=2;
+  Configuration conf=getConf(numDataNodes);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    final NameNode nn=cluster.getNameNode();
+    final NamenodeProtocols nnProto=nn.getRpcServer();
+    final BlockManager bm=nn.getNamesystem().getBlockManager();
+    final BlockTokenSecretManager sm=bm.getBlockTokenSecretManager();
+    SecurityTestUtil.setBlockTokenLifetime(sm,1000L);
+    Path fileToRead=new Path(FILE_TO_READ);
+    FileSystem fs=cluster.getFileSystem();
+    createFile(fs,fileToRead);
+    FSDataInputStream in1=fs.open(fileToRead);
+    assertTrue(checkFile1(in1));
+    FSDataInputStream in2=fs.open(fileToRead);
+    assertTrue(checkFile1(in2));
+    FSDataInputStream in3=fs.open(fileToRead);
+    assertTrue(checkFile2(in3));
+    DFSClient client=null;
+    try {
+      client=new DFSClient(new InetSocketAddress("localhost",cluster.getNameNodePort()),conf);
+    }
+  finally {
+      if (client != null)       client.close();
+    }
+    List<LocatedBlock> locatedBlocks=nnProto.getBlockLocations(FILE_TO_READ,0,FILE_SIZE).getLocatedBlocks();
+    LocatedBlock lblock=locatedBlocks.get(0);
+    Token<BlockTokenIdentifier> myToken=lblock.getBlockToken();
+    assertFalse(SecurityTestUtil.isBlockTokenExpired(myToken));
+    tryRead(conf,lblock,true);
+    while (!SecurityTestUtil.isBlockTokenExpired(myToken)) {
+      try {
+        Thread.sleep(10);
+      }
+ catch (      InterruptedException ignored) {
+      }
+    }
+    assertTrue(SecurityTestUtil.isBlockTokenExpired(myToken));
+    tryRead(conf,lblock,false);
+    lblock.setBlockToken(sm.generateToken(lblock.getBlock(),EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
+    tryRead(conf,lblock,true);
+    ExtendedBlock wrongBlock=new ExtendedBlock(lblock.getBlock().getBlockPoolId(),lblock.getBlock().getBlockId() + 1);
+    lblock.setBlockToken(sm.generateToken(wrongBlock,EnumSet.of(BlockTokenSecretManager.AccessMode.READ)));
+    tryRead(conf,lblock,false);
+    lblock.setBlockToken(sm.generateToken(lblock.getBlock(),EnumSet.of(BlockTokenSecretManager.AccessMode.WRITE,BlockTokenSecretManager.AccessMode.COPY,BlockTokenSecretManager.AccessMode.REPLACE)));
+    tryRead(conf,lblock,false);
+    SecurityTestUtil.setBlockTokenLifetime(sm,600 * 1000L);
+    List<LocatedBlock> lblocks=DFSTestUtil.getAllBlocks(in1);
+    for (    LocatedBlock blk : lblocks) {
+      assertTrue(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    in1.seek(0);
+    assertTrue(checkFile1(in1));
+    List<LocatedBlock> lblocks2=DFSTestUtil.getAllBlocks(in2);
+    for (    LocatedBlock blk : lblocks2) {
+      assertTrue(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    assertTrue(in2.seekToNewSource(0));
+    assertTrue(checkFile1(in2));
+    List<LocatedBlock> lblocks3=DFSTestUtil.getAllBlocks(in3);
+    for (    LocatedBlock blk : lblocks3) {
+      assertTrue(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    assertTrue(checkFile2(in3));
+    assertTrue(cluster.restartDataNodes(true));
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    cluster.shutdownNameNode(0);
+    lblocks=DFSTestUtil.getAllBlocks(in1);
+    for (    LocatedBlock blk : lblocks) {
+      assertFalse(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    in1.seek(0);
+    assertTrue(checkFile1(in1));
+    lblocks2=DFSTestUtil.getAllBlocks(in2);
+    for (    LocatedBlock blk : lblocks2) {
+      assertFalse(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    in2.seekToNewSource(0);
+    assertTrue(checkFile1(in2));
+    lblocks3=DFSTestUtil.getAllBlocks(in3);
+    for (    LocatedBlock blk : lblocks3) {
+      assertFalse(SecurityTestUtil.isBlockTokenExpired(blk.getBlockToken()));
+    }
+    assertTrue(checkFile2(in3));
+    cluster.restartNameNode(0);
+    cluster.shutdownNameNode(0);
+    in1.seek(0);
+    assertTrue(checkFile1(in1));
+    in2.seekToNewSource(0);
+    assertTrue(checkFile1(in2));
+    assertTrue(checkFile2(in3));
+    cluster.restartNameNode(0);
+    assertTrue(cluster.restartDataNodes(true));
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    cluster.shutdownNameNode(0);
+    in1.seek(0);
+    assertFalse(checkFile1(in1));
+    assertFalse(checkFile2(in3));
+    cluster.restartNameNode(0);
+    in1.seek(0);
+    assertTrue(checkFile1(in1));
+    in2.seekToNewSource(0);
+    assertTrue(checkFile1(in2));
+    assertTrue(checkFile2(in3));
+    assertTrue(cluster.restartDataNodes(false));
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    in1.seek(0);
+    assertTrue(checkFile1(in1));
+    in2.seekToNewSource(0);
+    assertTrue(checkFile1(in2));
+    assertTrue(checkFile2(in3));
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * testing that APPEND operation can handle token expiration when
+ * re-establishing pipeline is needed
+ */
+@Test public void testAppend() throws Exception {
+  MiniDFSCluster cluster=null;
+  int numDataNodes=2;
+  Configuration conf=getConf(numDataNodes);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    final NameNode nn=cluster.getNameNode();
+    final BlockManager bm=nn.getNamesystem().getBlockManager();
+    final BlockTokenSecretManager sm=bm.getBlockTokenSecretManager();
+    SecurityTestUtil.setBlockTokenLifetime(sm,1000L);
+    Path fileToAppend=new Path(FILE_TO_APPEND);
+    FileSystem fs=cluster.getFileSystem();
+    FSDataOutputStream stm=writeFile(fs,fileToAppend,(short)numDataNodes,BLOCK_SIZE);
+    stm.write(rawData,0,1);
+    stm.close();
+    stm=fs.append(fileToAppend);
+    int mid=rawData.length - 1;
+    stm.write(rawData,1,mid - 1);
+    stm.hflush();
+    Token<BlockTokenIdentifier> token=DFSTestUtil.getBlockToken(stm);
+    while (!SecurityTestUtil.isBlockTokenExpired(token)) {
+      try {
+        Thread.sleep(10);
+      }
+ catch (      InterruptedException ignored) {
+      }
+    }
+    cluster.stopDataNode(0);
+    stm.write(rawData,mid,rawData.length - mid);
+    stm.close();
+    FSDataInputStream in5=fs.open(fileToAppend);
+    assertTrue(checkFile1(in5));
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Integration testing of access token, involving NN, DN, and Balancer
+ */
+@Test public void testEnd2End() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setBoolean(DFSConfigKeys.DFS_BLOCK_ACCESS_TOKEN_ENABLE_KEY,true);
+  new TestBalancer().integrationTest(conf);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * testing that WRITE operation can handle token expiration when
+ * re-establishing pipeline is needed
+ */
+@Test public void testWrite() throws Exception {
+  MiniDFSCluster cluster=null;
+  int numDataNodes=2;
+  Configuration conf=getConf(numDataNodes);
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).numDataNodes(numDataNodes).build();
+    cluster.waitActive();
+    assertEquals(numDataNodes,cluster.getDataNodes().size());
+    final NameNode nn=cluster.getNameNode();
+    final BlockManager bm=nn.getNamesystem().getBlockManager();
+    final BlockTokenSecretManager sm=bm.getBlockTokenSecretManager();
+    SecurityTestUtil.setBlockTokenLifetime(sm,1000L);
+    Path fileToWrite=new Path(FILE_TO_WRITE);
+    FileSystem fs=cluster.getFileSystem();
+    FSDataOutputStream stm=writeFile(fs,fileToWrite,(short)numDataNodes,BLOCK_SIZE);
+    int mid=rawData.length - 1;
+    stm.write(rawData,0,mid);
+    stm.hflush();
+    Token<BlockTokenIdentifier> token=DFSTestUtil.getBlockToken(stm);
+    while (!SecurityTestUtil.isBlockTokenExpired(token)) {
+      try {
+        Thread.sleep(10);
+      }
+ catch (      InterruptedException ignored) {
+      }
+    }
+    cluster.stopDataNode(0);
+    stm.write(rawData,mid,rawData.length - mid);
+    stm.close();
+    FSDataInputStream in4=fs.open(fileToWrite);
+    assertTrue(checkFile1(in4));
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

@@ -1,0 +1,792 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.index.lucene.IndexCopierTest (22 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(17)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(13)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(12)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="15"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('15')" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements"><kbd id="tag-15"class="label-info"style="display: inline-block;font-size:7pt" >ConditionMatcher&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void basicTestWithFS() throws Exception {
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new IndexCopier(sameThreadExecutor(),getWorkDir());
+  Directory remote=new RAMDirectory();
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  byte[] t2=writeFile(remote,"t2");
+  assertEquals(2,wrapped.listAll().length);
+  assertTrue(wrapped.fileExists("t1"));
+  assertTrue(wrapped.fileExists("t2"));
+  assertEquals(t1.length,wrapped.fileLength("t1"));
+  assertEquals(t2.length,wrapped.fileLength("t2"));
+  readAndAssert(wrapped,"t1",t1);
+  File indexBaseDir=c1.getIndexDir("/foo");
+  File indexDir=new File(indexBaseDir,"0");
+  assertTrue(new File(indexDir,"t1").exists());
+  TabularData td=c1.getIndexPathMapping();
+  assertEquals(1,td.size());
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test public void cowFailureInCopy() throws Exception {
+  ExecutorService executorService=Executors.newFixedThreadPool(2);
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,executorService,getWorkDir());
+  final Set<String> toFail=Sets.newHashSet();
+  Directory remote=new CloseSafeDir(){
+    @Override public IndexOutput createOutput(    String name,    IOContext context) throws IOException {
+      if (toFail.contains(name)) {
+        throw new RuntimeException("Failing copy for " + name);
+      }
+      return super.createOutput(name,context);
+    }
+  }
+;
+  final Directory local=copier.wrapForWrite(defn,remote,false);
+  toFail.add("t2");
+  byte[] t1=writeFile(local,"t1");
+  byte[] t2=writeFile(local,"t2");
+  try {
+    local.close();
+    fail();
+  }
+ catch (  IOException ignore) {
+  }
+  executorService.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void cowCopyDoneOnClose() throws Exception {
+  final CollectingExecutor executor=new CollectingExecutor();
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,executor,getWorkDir());
+  Directory remote=new CloseSafeDir();
+  final Directory local=copier.wrapForWrite(defn,remote,false);
+  byte[] t1=writeFile(local,"t1");
+  assertTrue(local.fileExists("t1"));
+  assertFalse("t1 should NOT be copied to remote",remote.fileExists("t1"));
+  executor.executeAll();
+  assertTrue("t1 should now be copied to remote",remote.fileExists("t1"));
+  byte[] t2=writeFile(local,"t2");
+  assertFalse("t2 should NOT be copied to remote",remote.fileExists("t2"));
+  final ExecutorService executorService=Executors.newFixedThreadPool(4);
+  final CountDownLatch copyLatch=new CountDownLatch(1);
+  Future<?> copyTasks=executorService.submit(new Callable(){
+    @Override public Object call() throws Exception {
+      copyLatch.await();
+      executor.setForwardingExecutor(executorService);
+      executor.executeAll();
+      return null;
+    }
+  }
+);
+  final CountDownLatch closeLatch=new CountDownLatch(1);
+  Future<?> closeTasks=executorService.submit(new Callable(){
+    @Override public Object call() throws Exception {
+      closeLatch.await();
+      local.close();
+      return null;
+    }
+  }
+);
+  closeLatch.countDown();
+  assertFalse("t2 should NOT be copied to remote",remote.fileExists("t2"));
+  copyLatch.countDown();
+  closeTasks.get();
+  assertTrue("t2 should now be copied to remote",remote.fileExists("t2"));
+  executorService.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+/** 
+ * Test the interaction between COR and COW using same underlying directory
+ */
+@Test public void cowConcurrentAccess() throws Exception {
+  CollectingExecutor executor=new CollectingExecutor();
+  ExecutorService executorService=Executors.newFixedThreadPool(2);
+  executor.setForwardingExecutor(executorService);
+  Directory baseDir=new CloseSafeDir();
+  String indexPath="/foo";
+  builder.setProperty(LuceneIndexConstants.INDEX_PATH,indexPath);
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,executor,getWorkDir(),true);
+  Directory remote=new CloseSafeDir();
+  byte[] f1=writeFile(remote,"f1");
+  Directory cor1=copier.wrapForRead(indexPath,defn,remote);
+  readAndAssert(cor1,"f1",f1);
+  cor1.close();
+  final CountDownLatch pauseCopyLatch=new CountDownLatch(1);
+  Directory remote2=new FilterDirectory(remote){
+    @Override public IndexOutput createOutput(    String name,    IOContext context) throws IOException {
+      try {
+        pauseCopyLatch.await();
+      }
+ catch (      InterruptedException ignore) {
+      }
+      return super.createOutput(name,context);
+    }
+  }
+;
+  Directory cow1=copier.wrapForWrite(defn,remote2,false);
+  byte[] f2=writeFile(cow1,"f2");
+  remote.deleteFile("f1");
+  Directory cor2=copier.wrapForRead(indexPath,defn,remote);
+  executor.enableImmediateExecution();
+  cor2.close();
+  executor.enableDelayedExecution();
+  assertFalse(baseDir.fileExists("f1"));
+  assertFalse("f2 should not have been copied to remote so far",remote.fileExists("f2"));
+  assertTrue("f2 should exist",baseDir.fileExists("f2"));
+  pauseCopyLatch.countDown();
+  cow1.close();
+  assertTrue("f2 should exist",remote.fileExists("f2"));
+  executorService.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void cowReadDoneFromLocalIfFileExist() throws Exception {
+  final Set<String> readLocal=newHashSet();
+  Directory baseDir=new CloseSafeDir(){
+    @Override public IndexInput openInput(    String name,    IOContext context) throws IOException {
+      readLocal.add(name);
+      return super.openInput(name,context);
+    }
+  }
+;
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  final Set<String> readRemotes=newHashSet();
+  Directory remote=new RAMDirectory(){
+    @Override public IndexInput openInput(    String name,    IOContext context) throws IOException {
+      readRemotes.add(name);
+      return super.openInput(name,context);
+    }
+  }
+;
+  byte[] t1=writeFile(remote,"t1");
+  Directory local=copier.wrapForWrite(defn,remote,false);
+  readRemotes.clear();
+  readLocal.clear();
+  readAndAssert(local,"t1",t1);
+  assertEquals(newHashSet("t1"),readRemotes);
+  assertEquals(newHashSet(),readLocal);
+  Directory localForRead=copier.wrapForRead("/foo",defn,remote);
+  readAndAssert(localForRead,"t1",t1);
+  readRemotes.clear();
+  readLocal.clear();
+  readAndAssert(local,"t1",t1);
+  assertEquals(newHashSet(),readRemotes);
+  assertEquals(newHashSet("t1"),readLocal);
+  local.close();
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * Test for the case where local directory is opened already contains
+ * the index files and in such a case file should not be read from remote
+ */
+@Test public void reuseLocalDir() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  TestRAMDirectory remote=new TestRAMDirectory();
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(1,remote.openedFiles.size());
+  Directory wrapped2=c1.wrapForRead("/foo",defn,remote);
+  remote.reset();
+  readAndAssert(wrapped2,"t1",t1);
+  assertEquals(0,remote.openedFiles.size());
+  Directory wrapped3=c1.wrapForRead("/foo",defn,remote);
+  remote.reset();
+  writeFile(baseDir,"t1");
+  readAndAssert(wrapped3,"t1",t1);
+  assertEquals(1,remote.openedFiles.size());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void basicTest() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory remote=new RAMDirectory();
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  byte[] t2=writeFile(remote,"t2");
+  assertEquals(2,wrapped.listAll().length);
+  assertTrue(wrapped.fileExists("t1"));
+  assertTrue(wrapped.fileExists("t2"));
+  assertEquals(t1.length,wrapped.fileLength("t1"));
+  assertEquals(t2.length,wrapped.fileLength("t2"));
+  readAndAssert(wrapped,"t1",t1);
+  assertTrue(baseDir.fileExists("t1"));
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Checks for the case where if the file exist local before writer starts
+ * then those files do not get deleted even if deleted by writer via
+ * indexing process from 'baseDir' as they might be in use by existing open
+ * indexes
+ */
+@Test public void cowExistingLocalFileNotDeleted() throws Exception {
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory remote=new CloseSafeDir();
+  byte[] t1=writeFile(remote,"t1");
+  byte[] t2=writeFile(remote,"t2");
+  Directory local=copier.wrapForWrite(defn,remote,false);
+  assertEquals(newHashSet("t1","t2"),newHashSet(local.listAll()));
+  byte[] t3=writeFile(local,"t3");
+  Directory localForRead=copier.wrapForRead("/foo",defn,remote);
+  readAndAssert(localForRead,"t1",t1);
+  assertTrue(baseDir.fileExists("t1"));
+  local.deleteFile("t1");
+  assertFalse("t1 should be deleted from remote",remote.fileExists("t1"));
+  assertFalse("t1 should be deleted from 'local' view also",local.fileExists("t1"));
+  assertTrue("t1 should not be deleted from baseDir",baseDir.fileExists("t1"));
+  assertTrue(baseDir.fileExists("t3"));
+  local.deleteFile("t3");
+  assertFalse("t1 should be deleted from remote",local.fileExists("t3"));
+  assertTrue("t1 should NOT be deleted from remote",baseDir.fileExists("t3"));
+  local.close();
+  assertFalse("t3 should also be deleted from local",baseDir.fileExists("t3"));
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects are null
+"></span><br>
+@Test public void cowPoolClosedWithTaskInQueue() throws Exception {
+  ExecutorService executorService=Executors.newFixedThreadPool(2);
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,executorService,getWorkDir());
+  final Set<String> toPause=Sets.newHashSet();
+  final CountDownLatch pauseCopyLatch=new CountDownLatch(1);
+  Directory remote=new CloseSafeDir(){
+    @Override public IndexOutput createOutput(    String name,    IOContext context) throws IOException {
+      if (toPause.contains(name)) {
+        try {
+          pauseCopyLatch.await();
+        }
+ catch (        InterruptedException ignore) {
+        }
+      }
+      return super.createOutput(name,context);
+    }
+  }
+;
+  final Directory local=copier.wrapForWrite(defn,remote,false);
+  toPause.add("t2");
+  byte[] t1=writeFile(local,"t1");
+  byte[] t2=writeFile(local,"t2");
+  byte[] t3=writeFile(local,"t3");
+  byte[] t4=writeFile(local,"t4");
+  final AtomicReference<Throwable> error=new AtomicReference<Throwable>();
+  Thread closer=new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        local.close();
+      }
+ catch (      Throwable e) {
+        e.printStackTrace();
+        error.set(e);
+      }
+    }
+  }
+);
+  closer.start();
+  copier.close();
+  executorService.shutdown();
+  executorService.awaitTermination(100,TimeUnit.MILLISECONDS);
+  pauseCopyLatch.countDown();
+  closer.join();
+  assertNotNull("Close should have thrown an exception",error.get());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void cowCopyDoneOnCloseExceptionHandling() throws Exception {
+  final CollectingExecutor executor=new CollectingExecutor();
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,executor,getWorkDir());
+  Directory remote=new CloseSafeDir();
+  final Directory local=copier.wrapForWrite(defn,remote,false);
+  byte[] t1=writeFile(local,"t1");
+  assertTrue(local.fileExists("t1"));
+  assertFalse("t1 should NOT be copied to remote",remote.fileExists("t1"));
+  executor.executeAll();
+  assertTrue("t1 should now be copied to remote",remote.fileExists("t1"));
+  byte[] t2=writeFile(local,"t2");
+  assertFalse("t2 should NOT be copied to remote",remote.fileExists("t2"));
+  ExecutorService executorService=Executors.newFixedThreadPool(2);
+  final CountDownLatch copyLatch=new CountDownLatch(1);
+  Future<?> copyTasks=executorService.submit(new Callable(){
+    @Override public Object call() throws Exception {
+      copyLatch.await();
+      executor.executeAll();
+      executor.enableImmediateExecution();
+      return null;
+    }
+  }
+);
+  final CountDownLatch closeLatch=new CountDownLatch(1);
+  Future<?> closeTasks=executorService.submit(new Callable(){
+    @Override public Object call() throws Exception {
+      closeLatch.await();
+      local.close();
+      return null;
+    }
+  }
+);
+  closeLatch.countDown();
+  assertFalse("t2 should NOT be copied to remote",remote.fileExists("t2"));
+  copyLatch.countDown();
+  closeTasks.get();
+  assertTrue("t2 should now be copied to remote",remote.fileExists("t2"));
+  executorService.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void deletedOnlyFilesForOlderVersion() throws Exception {
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory remote1=new RAMDirectory();
+  byte[] t1=writeFile(remote1,"t1");
+  Directory local1=copier.wrapForRead("/foo",defn,remote1);
+  readAndAssert(local1,"t1",t1);
+  Directory remote2=new RAMDirectory();
+  byte[] t2=writeFile(remote2,"t2");
+  Directory local2=copier.wrapForRead("/foo",defn,remote2);
+  readAndAssert(local2,"t2",t2);
+  local1.close();
+  readAndAssert(local2,"t2",t2);
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void deleteOldPostReindex() throws Exception {
+  assumeNotWindows();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new IndexCopier(sameThreadExecutor(),getWorkDir());
+  Directory remote=new CloseSafeDir();
+  Directory w1=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  byte[] t2=writeFile(remote,"t2");
+  readAndAssert(w1,"t1",t1);
+  readAndAssert(w1,"t2",t2);
+  File indexBaseDir=c1.getIndexDir("/foo");
+  File indexDir=new File(indexBaseDir,"0");
+  assertTrue(new File(indexDir,"t1").exists());
+  builder.setProperty(REINDEX_COUNT,1);
+  defn=new IndexDefinition(root,builder.getNodeState());
+  w1.close();
+  Directory w2=c1.wrapForRead("/foo",defn,remote);
+  readAndAssert(w2,"t1",t1);
+  w2.close();
+  assertFalse("Old index directory should have been removed",indexDir.exists());
+  File indexDir2=new File(indexBaseDir,"1");
+  assertTrue(new File(indexDir2,"t1").exists());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-15 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies logic rules using matcher-style statements">ConditionMatcher</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies logic rules using matcher-style statements
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void basicTestWithPrefetch() throws Exception {
+  final List<String> syncedFiles=Lists.newArrayList();
+  Directory baseDir=new RAMDirectory(){
+    @Override public void sync(    Collection<String> names) throws IOException {
+      syncedFiles.addAll(names);
+      super.sync(names);
+    }
+  }
+;
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir(),true);
+  Directory remote=new RAMDirectory();
+  byte[] t1=writeFile(remote,"t1");
+  byte[] t2=writeFile(remote,"t2");
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  assertEquals(2,wrapped.listAll().length);
+  assertThat(syncedFiles,containsInAnyOrder("t1","t2"));
+  assertTrue(wrapped.fileExists("t1"));
+  assertTrue(wrapped.fileExists("t2"));
+  assertTrue(baseDir.fileExists("t1"));
+  assertTrue(baseDir.fileExists("t2"));
+  assertEquals(t1.length,wrapped.fileLength("t1"));
+  assertEquals(t2.length,wrapped.fileLength("t2"));
+  readAndAssert(wrapped,"t1",t1);
+}
+
+</code></pre>
+
+<pre class="type-9 type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void copyInProgressStats() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  final List<ListenableFuture<?>> submittedTasks=Lists.newArrayList();
+  ExecutorService executor=new ForwardingListeningExecutorService(){
+    @Override protected ListeningExecutorService delegate(){
+      return MoreExecutors.listeningDecorator(Executors.newSingleThreadExecutor());
+    }
+    @Override public void execute(    Runnable command){
+      submittedTasks.add(super.submit(command));
+    }
+  }
+;
+  IndexCopier c1=new RAMIndexCopier(baseDir,executor,getWorkDir());
+  final CountDownLatch copyProceed=new CountDownLatch(1);
+  final CountDownLatch copyRequestArrived=new CountDownLatch(1);
+  TestRAMDirectory remote=new TestRAMDirectory(){
+    @Override public void copy(    Directory to,    String src,    String dest,    IOContext context) throws IOException {
+      copyRequestArrived.countDown();
+      try {
+        copyProceed.await();
+      }
+ catch (      InterruptedException e) {
+      }
+      super.copy(to,src,dest,context);
+    }
+  }
+;
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  readAndAssert(wrapped,"t1",t1);
+  copyRequestArrived.await();
+  assertEquals(1,c1.getCopyInProgressCount());
+  assertEquals(1,remote.openedFiles.size());
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(1,c1.getCopyInProgressCount());
+  assertEquals(IOUtils.humanReadableByteCount(t1.length),c1.getCopyInProgressSize());
+  assertEquals(1,c1.getCopyInProgressDetails().length);
+  System.out.println(Arrays.toString(c1.getCopyInProgressDetails()));
+  assertEquals(2,remote.openedFiles.size());
+  copyProceed.countDown();
+  Futures.allAsList(submittedTasks).get();
+  remote.reset();
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(0,remote.openedFiles.size());
+  assertEquals(0,c1.getCopyInProgressCount());
+  executor.shutdown();
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void failureInDelete() throws Exception {
+  final Set<String> testFiles=new HashSet<String>();
+  Directory baseDir=new CloseSafeDir(){
+    @Override public void deleteFile(    String name) throws IOException {
+      if (testFiles.contains(name)) {
+        throw new IOException("Not allowed to delete " + name);
+      }
+      super.deleteFile(name);
+    }
+  }
+;
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory r1=new RAMDirectory();
+  byte[] t1=writeFile(r1,"t1");
+  byte[] t2=writeFile(r1,"t2");
+  Directory w1=c1.wrapForRead("/foo",defn,r1);
+  readAndAssert(w1,"t1",t1);
+  readAndAssert(w1,"t2",t2);
+  assertTrue(baseDir.fileExists("t1"));
+  assertTrue(baseDir.fileExists("t2"));
+  Directory r2=new CloseSafeDir();
+  copy(r1,r2);
+  r2.deleteFile("t1");
+  Directory w2=c1.wrapForRead("/foo",defn,r2);
+  testFiles.add("t1");
+  w2.close();
+  assertEquals(1,c1.getFailedToDeleteFiles().size());
+  IndexCopier.LocalIndexFile testFile=c1.getFailedToDeleteFiles().values().iterator().next();
+  assertEquals(1,testFile.getDeleteAttemptCount());
+  assertEquals(IOUtils.humanReadableByteCount(t1.length),c1.getGarbageSize());
+  assertEquals(1,c1.getGarbageDetails().length);
+  Directory w3=c1.wrapForRead("/foo",defn,r2);
+  w3.close();
+  assertEquals(2,testFile.getDeleteAttemptCount());
+  testFiles.clear();
+  Directory w4=c1.wrapForRead("/foo",defn,r2);
+  w4.close();
+  assertEquals(0,c1.getFailedToDeleteFiles().size());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void wrapForWriteWithIndexPath() throws Exception {
+  assumeNotWindows();
+  Directory remote=new CloseSafeDir();
+  IndexCopier copier=new IndexCopier(sameThreadExecutor(),getWorkDir());
+  builder.setProperty(LuceneIndexConstants.INDEX_PATH,"foo");
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  Directory dir=copier.wrapForWrite(defn,remote,false);
+  byte[] t1=writeFile(dir,"t1");
+  dir.close();
+  readAndAssert(remote,"t1",t1);
+  List<File> files=new ArrayList<File>(FileUtils.listFiles(copier.getIndexRootDir(),null,true));
+  assertEquals(1,files.size());
+  assertEquals("t1",files.get(0).getName());
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void concurrentRead() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  CollectingExecutor executor=new CollectingExecutor();
+  IndexCopier c1=new RAMIndexCopier(baseDir,executor,getWorkDir());
+  TestRAMDirectory remote=new TestRAMDirectory();
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,"t1");
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(1,c1.getScheduledForCopyCount());
+  assertEquals(1,remote.openedFiles.size());
+  assertEquals(1,executor.commands.size());
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(1,c1.getScheduledForCopyCount());
+  assertEquals(2,remote.openedFiles.size());
+  assertEquals(1,executor.commands.size());
+  executor.executeAll();
+  remote.reset();
+  readAndAssert(wrapped,"t1",t1);
+  assertEquals(0,remote.openedFiles.size());
+  assertEquals(0,c1.getScheduledForCopyCount());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+"></span><br>
+@Test public void deletesOnClose() throws Exception {
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory r1=new RAMDirectory();
+  byte[] t1=writeFile(r1,"t1");
+  byte[] t2=writeFile(r1,"t2");
+  Directory w1=c1.wrapForRead("/foo",defn,r1);
+  readAndAssert(w1,"t1",t1);
+  readAndAssert(w1,"t2",t2);
+  assertTrue(baseDir.fileExists("t1"));
+  assertTrue(baseDir.fileExists("t2"));
+  Directory r2=new RAMDirectory();
+  copy(r1,r2);
+  r2.deleteFile("t1");
+  Directory w2=c1.wrapForRead("/foo",defn,r2);
+  w2.close();
+  assertFalse("t1 should have been deleted",baseDir.fileExists("t1"));
+  assertTrue(baseDir.fileExists("t2"));
+}
+
+</code></pre>
+
+<pre class="type-5 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void nonExistentFile() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  CollectingExecutor executor=new CollectingExecutor();
+  IndexCopier c1=new RAMIndexCopier(baseDir,executor,getWorkDir(),true);
+  Directory remote=new RAMDirectory();
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  try {
+    wrapped.openInput("foo.txt",IOContext.DEFAULT);
+    fail();
+  }
+ catch (  FileNotFoundException ignore) {
+  }
+  assertEquals(0,executor.commands.size());
+}
+
+</code></pre>
+
+<pre class="type-5 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void deleteCorruptedFile() throws Exception {
+  Directory baseDir=new RAMDirectory();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  RAMIndexCopier c1=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory remote=new RAMDirectory(){
+    @Override public IndexInput openInput(    String name,    IOContext context) throws IOException {
+      throw new IllegalStateException("boom");
+    }
+  }
+;
+  String fileName="failed.txt";
+  Directory wrapped=c1.wrapForRead("/foo",defn,remote);
+  byte[] t1=writeFile(remote,fileName);
+  try {
+    readAndAssert(wrapped,fileName,t1);
+    fail("Read of file should have failed");
+  }
+ catch (  IllegalStateException ignore) {
+  }
+  assertFalse(c1.baseDir.fileExists(fileName));
+}
+
+</code></pre>
+
+<pre class="type-6 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void wrapForWriteWithoutIndexPath() throws Exception {
+  assumeNotWindows();
+  Directory remote=new CloseSafeDir();
+  IndexCopier copier=new IndexCopier(sameThreadExecutor(),getWorkDir());
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  Directory dir=copier.wrapForWrite(defn,remote,false);
+  byte[] t1=writeFile(dir,"t1");
+  dir.close();
+  readAndAssert(remote,"t1",t1);
+  assertArrayEquals(FileUtils.EMPTY_FILE_ARRAY,copier.getIndexWorkDir().listFiles());
+}
+
+</code></pre>
+
+<pre class="type-9 type-5 type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void copyOnWriteBasics() throws Exception {
+  Directory baseDir=new CloseSafeDir();
+  IndexDefinition defn=new IndexDefinition(root,builder.getNodeState());
+  IndexCopier copier=new RAMIndexCopier(baseDir,sameThreadExecutor(),getWorkDir());
+  Directory remote=new RAMDirectory();
+  byte[] t1=writeFile(remote,"t1");
+  Directory local=copier.wrapForWrite(defn,remote,false);
+  assertEquals(newHashSet("t1"),newHashSet(local.listAll()));
+  assertEquals(t1.length,local.fileLength("t1"));
+  byte[] t2=writeFile(local,"t2");
+  assertEquals(newHashSet("t1","t2"),newHashSet(local.listAll()));
+  assertEquals(t2.length,local.fileLength("t2"));
+  assertTrue(local.fileExists("t1"));
+  assertTrue(local.fileExists("t2"));
+  assertTrue("t2 should be copied to remote",remote.fileExists("t2"));
+  readAndAssert(local,"t1",t1);
+  readAndAssert(local,"t2",t2);
+  local.deleteFile("t1");
+  assertEquals(newHashSet("t2"),newHashSet(local.listAll()));
+  local.deleteFile("t2");
+  assertEquals(newHashSet(),newHashSet(local.listAll()));
+  try {
+    local.fileLength("nonExistentFile");
+    fail();
+  }
+ catch (  FileNotFoundException ignore) {
+  }
+  try {
+    local.openInput("nonExistentFile",IOContext.DEFAULT);
+    fail();
+  }
+ catch (  FileNotFoundException ignore) {
+  }
+  local.close();
+  assertFalse(baseDir.fileExists("t2"));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

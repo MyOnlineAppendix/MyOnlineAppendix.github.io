@@ -1,0 +1,447 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.io.hfile.TestLruBlockCache (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(10)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(9)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(4)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-7 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test public void testBackgroundEvictionThread() throws Exception {
+  long maxSize=100000;
+  int numBlocks=9;
+  long blockSize=calculateBlockSizeDefault(maxSize,numBlocks);
+  assertTrue("calculateBlockSize appears broken.",blockSize * numBlocks <= maxSize);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize);
+  EvictionThread evictionThread=cache.getEvictionThread();
+  assertTrue(evictionThread != null);
+  CachedItem[] blocks=generateFixedBlocks(numBlocks + 1,blockSize,"block");
+  while (!evictionThread.isEnteringRun()) {
+    Thread.sleep(1);
+  }
+  for (  CachedItem block : blocks) {
+    cache.cacheBlock(block.cacheKey,block);
+  }
+  int n=0;
+  while (cache.getStats().getEvictionCount() == 0) {
+    Thread.sleep(200);
+    assertTrue("Eviction never happened.",n++ < 20);
+  }
+  n=0;
+  for (long prevCnt=0, curCnt=cache.getBlockCount(); prevCnt != curCnt; prevCnt=curCnt, curCnt=cache.getBlockCount()) {
+    Thread.sleep(200);
+    assertTrue("Cache never stabilized.",n++ < 20);
+  }
+  long evictionCount=cache.getStats().getEvictionCount();
+  assertTrue(evictionCount >= 1);
+  System.out.println("Background Evictions run: " + evictionCount);
+}
+
+</code></pre>
+
+<pre class="type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testPastNPeriodsMetrics() throws Exception {
+  double delta=0.01;
+  CacheStats stats=new CacheStats("test",3);
+  stats.rollMetricsPeriod();
+  assertEquals(0.0,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.0,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.hit(false);
+  stats.hit(true);
+  stats.miss(false,false);
+  stats.miss(false,false);
+  stats.rollMetricsPeriod();
+  assertEquals(0.5,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(1.0,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.miss(true,false);
+  stats.miss(false,false);
+  stats.miss(false,false);
+  stats.miss(false,false);
+  stats.rollMetricsPeriod();
+  assertEquals(0.25,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.5,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.hit(false);
+  stats.hit(true);
+  stats.hit(false);
+  stats.hit(true);
+  stats.rollMetricsPeriod();
+  assertEquals(0.5,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.75,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.miss(true,false);
+  stats.miss(true,false);
+  stats.rollMetricsPeriod();
+  assertEquals(0.4,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.4,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.miss(true,false);
+  stats.miss(true,false);
+  stats.hit(false);
+  stats.hit(false);
+  stats.rollMetricsPeriod();
+  assertEquals(0.6,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals((double)1 / 3,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.rollMetricsPeriod();
+  assertEquals((double)1 / 3,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.0,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.rollMetricsPeriod();
+  assertEquals(0.5,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.0,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.rollMetricsPeriod();
+  assertEquals(0.0,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.0,stats.getHitCachingRatioPastNPeriods(),delta);
+  stats.miss(true,false);
+  stats.miss(false,false);
+  stats.hit(true);
+  stats.hit(false);
+  stats.rollMetricsPeriod();
+  assertEquals(0.5,stats.getHitRatioPastNPeriods(),delta);
+  assertEquals(0.5,stats.getHitCachingRatioPastNPeriods(),delta);
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCacheEvictionSimple() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSizeDefault(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false);
+  CachedItem[] blocks=generateFixedBlocks(10,blockSize,"block");
+  long expectedCacheSize=cache.heapSize();
+  for (  CachedItem block : blocks) {
+    cache.cacheBlock(block.cacheKey,block);
+    expectedCacheSize+=block.cacheBlockHeapSize();
+  }
+  assertEquals(1,cache.getStats().getEvictionCount());
+  assertTrue(expectedCacheSize > (maxSize * LruBlockCache.DEFAULT_ACCEPTABLE_FACTOR));
+  assertTrue(cache.heapSize() < maxSize);
+  assertTrue(cache.heapSize() < (maxSize * LruBlockCache.DEFAULT_ACCEPTABLE_FACTOR));
+  assertTrue(cache.getBlock(blocks[0].cacheKey,true,false,true) == null);
+  for (int i=1; i < blocks.length; i++) {
+    assertEquals(cache.getBlock(blocks[i].cacheKey,true,false,true),blocks[i]);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-8 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCacheEvictionTwoPriorities() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSizeDefault(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false);
+  CachedItem[] singleBlocks=generateFixedBlocks(5,10000,"single");
+  CachedItem[] multiBlocks=generateFixedBlocks(5,10000,"multi");
+  long expectedCacheSize=cache.heapSize();
+  for (  CachedItem block : multiBlocks) {
+    cache.cacheBlock(block.cacheKey,block);
+    expectedCacheSize+=block.cacheBlockHeapSize();
+    assertEquals(cache.getBlock(block.cacheKey,true,false,true),block);
+  }
+  for (  CachedItem block : singleBlocks) {
+    cache.cacheBlock(block.cacheKey,block);
+    expectedCacheSize+=block.heapSize();
+  }
+  assertEquals(cache.getStats().getEvictionCount(),1);
+  assertEquals(cache.getStats().getEvictedCount(),2);
+  assertTrue(expectedCacheSize > (maxSize * LruBlockCache.DEFAULT_ACCEPTABLE_FACTOR));
+  assertTrue(cache.heapSize() <= maxSize);
+  assertTrue(cache.heapSize() <= (maxSize * LruBlockCache.DEFAULT_ACCEPTABLE_FACTOR));
+  assertTrue(cache.getBlock(singleBlocks[0].cacheKey,true,false,true) == null);
+  assertTrue(cache.getBlock(multiBlocks[0].cacheKey,true,false,true) == null);
+  for (int i=1; i < 4; i++) {
+    assertEquals(cache.getBlock(singleBlocks[i].cacheKey,true,false,true),singleBlocks[i]);
+    assertEquals(cache.getBlock(multiBlocks[i].cacheKey,true,false,true),multiBlocks[i]);
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-9 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testResizeBlockCache() throws Exception {
+  long maxSize=300000;
+  long blockSize=calculateBlockSize(maxSize,31);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false,(int)Math.ceil(1.2 * maxSize / blockSize),LruBlockCache.DEFAULT_LOAD_FACTOR,LruBlockCache.DEFAULT_CONCURRENCY_LEVEL,0.98f,0.99f,0.33f,0.33f,0.34f,false,16 * 1024 * 1024);
+  CachedItem[] singleBlocks=generateFixedBlocks(10,blockSize,"single");
+  CachedItem[] multiBlocks=generateFixedBlocks(10,blockSize,"multi");
+  CachedItem[] memoryBlocks=generateFixedBlocks(10,blockSize,"memory");
+  for (int i=0; i < 10; i++) {
+    cache.cacheBlock(singleBlocks[i].cacheKey,singleBlocks[i]);
+    cache.cacheBlock(multiBlocks[i].cacheKey,multiBlocks[i]);
+    cache.getBlock(multiBlocks[i].cacheKey,true,false,true);
+    cache.cacheBlock(memoryBlocks[i].cacheKey,memoryBlocks[i],true,false);
+  }
+  assertEquals(0,cache.getStats().getEvictionCount());
+  cache.setMaxSize((long)(maxSize * 0.5f));
+  assertEquals(1,cache.getStats().getEvictionCount());
+  assertEquals(15,cache.getStats().getEvictedCount());
+  for (int i=0; i < 5; i++) {
+    assertEquals(null,cache.getBlock(singleBlocks[i].cacheKey,true,false,true));
+    assertEquals(null,cache.getBlock(multiBlocks[i].cacheKey,true,false,true));
+    assertEquals(null,cache.getBlock(memoryBlocks[i].cacheKey,true,false,true));
+  }
+  for (int i=5; i < 10; i++) {
+    assertEquals(singleBlocks[i],cache.getBlock(singleBlocks[i].cacheKey,true,false,true));
+    assertEquals(multiBlocks[i],cache.getBlock(multiBlocks[i].cacheKey,true,false,true));
+    assertEquals(memoryBlocks[i],cache.getBlock(memoryBlocks[i].cacheKey,true,false,true));
+  }
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testScanResistance() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSize(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false,(int)Math.ceil(1.2 * maxSize / blockSize),LruBlockCache.DEFAULT_LOAD_FACTOR,LruBlockCache.DEFAULT_CONCURRENCY_LEVEL,0.66f,0.99f,0.33f,0.33f,0.34f,false,16 * 1024 * 1024);
+  CachedItem[] singleBlocks=generateFixedBlocks(20,blockSize,"single");
+  CachedItem[] multiBlocks=generateFixedBlocks(5,blockSize,"multi");
+  for (  CachedItem block : multiBlocks) {
+    cache.cacheBlock(block.cacheKey,block);
+    cache.getBlock(block.cacheKey,true,false,true);
+  }
+  for (int i=0; i < 5; i++) {
+    cache.cacheBlock(singleBlocks[i].cacheKey,singleBlocks[i]);
+  }
+  assertEquals(1,cache.getStats().getEvictionCount());
+  assertEquals(4,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[0].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(singleBlocks[1].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[0].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[1].cacheKey,true,false,true));
+  for (int i=5; i < 18; i++) {
+    cache.cacheBlock(singleBlocks[i].cacheKey,singleBlocks[i]);
+  }
+  assertEquals(4,cache.getStats().getEvictionCount());
+  assertEquals(16,cache.getStats().getEvictedCount());
+  assertEquals(7,cache.getBlockCount());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testCacheEvictionThreePriorities() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSize(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false,(int)Math.ceil(1.2 * maxSize / blockSize),LruBlockCache.DEFAULT_LOAD_FACTOR,LruBlockCache.DEFAULT_CONCURRENCY_LEVEL,0.98f,0.99f,0.33f,0.33f,0.34f,false,16 * 1024 * 1024);
+  CachedItem[] singleBlocks=generateFixedBlocks(5,blockSize,"single");
+  CachedItem[] multiBlocks=generateFixedBlocks(5,blockSize,"multi");
+  CachedItem[] memoryBlocks=generateFixedBlocks(5,blockSize,"memory");
+  long expectedCacheSize=cache.heapSize();
+  for (int i=0; i < 3; i++) {
+    cache.cacheBlock(singleBlocks[i].cacheKey,singleBlocks[i]);
+    expectedCacheSize+=singleBlocks[i].cacheBlockHeapSize();
+    cache.cacheBlock(multiBlocks[i].cacheKey,multiBlocks[i]);
+    expectedCacheSize+=multiBlocks[i].cacheBlockHeapSize();
+    cache.getBlock(multiBlocks[i].cacheKey,true,false,true);
+    cache.cacheBlock(memoryBlocks[i].cacheKey,memoryBlocks[i],true,false);
+    expectedCacheSize+=memoryBlocks[i].cacheBlockHeapSize();
+  }
+  assertEquals(0,cache.getStats().getEvictionCount());
+  assertEquals(expectedCacheSize,cache.heapSize());
+  cache.cacheBlock(singleBlocks[3].cacheKey,singleBlocks[3]);
+  assertEquals(1,cache.getStats().getEvictionCount());
+  assertEquals(1,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[0].cacheKey,true,false,true));
+  cache.getBlock(singleBlocks[1].cacheKey,true,false,true);
+  cache.cacheBlock(singleBlocks[4].cacheKey,singleBlocks[4]);
+  assertEquals(2,cache.getStats().getEvictionCount());
+  assertEquals(2,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(multiBlocks[0].cacheKey,true,false,true));
+  cache.cacheBlock(memoryBlocks[3].cacheKey,memoryBlocks[3],true,false);
+  assertEquals(3,cache.getStats().getEvictionCount());
+  assertEquals(3,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(memoryBlocks[0].cacheKey,true,false,true));
+  CachedItem[] bigBlocks=generateFixedBlocks(3,blockSize * 3,"big");
+  cache.cacheBlock(bigBlocks[0].cacheKey,bigBlocks[0]);
+  assertEquals(4,cache.getStats().getEvictionCount());
+  assertEquals(6,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[2].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(singleBlocks[3].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(singleBlocks[4].cacheKey,true,false,true));
+  cache.getBlock(bigBlocks[0].cacheKey,true,false,true);
+  cache.cacheBlock(bigBlocks[1].cacheKey,bigBlocks[1]);
+  assertEquals(5,cache.getStats().getEvictionCount());
+  assertEquals(9,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[1].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[1].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[2].cacheKey,true,false,true));
+  cache.cacheBlock(bigBlocks[2].cacheKey,bigBlocks[2],true,false);
+  assertEquals(6,cache.getStats().getEvictionCount());
+  assertEquals(12,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(memoryBlocks[1].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(memoryBlocks[2].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(memoryBlocks[3].cacheKey,true,false,true));
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-8 type-5 type-12 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testCacheSimple() throws Exception {
+  long maxSize=1000000;
+  long blockSize=calculateBlockSizeDefault(maxSize,101);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize);
+  CachedItem[] blocks=generateRandomBlocks(100,blockSize);
+  long expectedCacheSize=cache.heapSize();
+  for (  CachedItem block : blocks) {
+    assertTrue(cache.getBlock(block.cacheKey,true,false,true) == null);
+  }
+  for (  CachedItem block : blocks) {
+    cache.cacheBlock(block.cacheKey,block);
+    expectedCacheSize+=block.cacheBlockHeapSize();
+  }
+  assertEquals(expectedCacheSize,cache.heapSize());
+  for (  CachedItem block : blocks) {
+    HeapSize buf=cache.getBlock(block.cacheKey,true,false,true);
+    assertTrue(buf != null);
+    assertEquals(buf.heapSize(),block.heapSize());
+  }
+  long expectedBlockCount=cache.getBlockCount();
+  for (  CachedItem block : blocks) {
+    cache.cacheBlock(block.cacheKey,block);
+  }
+  assertEquals("Cache should ignore cache requests for blocks already in cache",expectedBlockCount,cache.getBlockCount());
+  assertEquals(expectedCacheSize,cache.heapSize());
+  for (  CachedItem block : blocks) {
+    HeapSize buf=cache.getBlock(block.cacheKey,true,false,true);
+    assertTrue(buf != null);
+    assertEquals(buf.heapSize(),block.heapSize());
+  }
+  assertEquals(0,cache.getStats().getEvictionCount());
+  Thread t=new LruBlockCache.StatisticsThread(cache);
+  t.start();
+  t.join();
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-13 type-5 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaxBlockSize() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSize(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false,(int)Math.ceil(1.2 * maxSize / blockSize),LruBlockCache.DEFAULT_LOAD_FACTOR,LruBlockCache.DEFAULT_CONCURRENCY_LEVEL,0.66f,0.99f,0.33f,0.33f,0.34f,false,1024);
+  CachedItem[] tooLong=generateFixedBlocks(10,1024 + 5,"long");
+  CachedItem[] small=generateFixedBlocks(15,600,"small");
+  for (  CachedItem i : tooLong) {
+    cache.cacheBlock(i.cacheKey,i);
+  }
+  for (  CachedItem i : small) {
+    cache.cacheBlock(i.cacheKey,i);
+  }
+  assertEquals(15,cache.getBlockCount());
+  for (  CachedItem i : small) {
+    assertNotNull(cache.getBlock(i.cacheKey,true,false,false));
+  }
+  for (  CachedItem i : tooLong) {
+    assertNull(cache.getBlock(i.cacheKey,true,false,false));
+  }
+  assertEquals(10,cache.getStats().getFailedInserts());
+}
+
+</code></pre>
+
+<pre class="type-4 type-7 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testCacheEvictionInMemoryForceMode() throws Exception {
+  long maxSize=100000;
+  long blockSize=calculateBlockSize(maxSize,10);
+  LruBlockCache cache=new LruBlockCache(maxSize,blockSize,false,(int)Math.ceil(1.2 * maxSize / blockSize),LruBlockCache.DEFAULT_LOAD_FACTOR,LruBlockCache.DEFAULT_CONCURRENCY_LEVEL,0.98f,0.99f,0.2f,0.3f,0.5f,true,16 * 1024 * 1024);
+  CachedItem[] singleBlocks=generateFixedBlocks(10,blockSize,"single");
+  CachedItem[] multiBlocks=generateFixedBlocks(10,blockSize,"multi");
+  CachedItem[] memoryBlocks=generateFixedBlocks(10,blockSize,"memory");
+  long expectedCacheSize=cache.heapSize();
+  for (int i=0; i < 4; i++) {
+    cache.cacheBlock(singleBlocks[i].cacheKey,singleBlocks[i]);
+    expectedCacheSize+=singleBlocks[i].cacheBlockHeapSize();
+    cache.cacheBlock(multiBlocks[i].cacheKey,multiBlocks[i]);
+    expectedCacheSize+=multiBlocks[i].cacheBlockHeapSize();
+    cache.getBlock(multiBlocks[i].cacheKey,true,false,true);
+  }
+  cache.cacheBlock(singleBlocks[4].cacheKey,singleBlocks[4]);
+  expectedCacheSize+=singleBlocks[4].cacheBlockHeapSize();
+  assertEquals(0,cache.getStats().getEvictionCount());
+  assertEquals(expectedCacheSize,cache.heapSize());
+  cache.cacheBlock(memoryBlocks[0].cacheKey,memoryBlocks[0],true,false);
+  assertEquals(1,cache.getStats().getEvictionCount());
+  assertEquals(1,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[0].cacheKey,true,false,true));
+  cache.cacheBlock(memoryBlocks[1].cacheKey,memoryBlocks[1],true,false);
+  assertEquals(2,cache.getStats().getEvictionCount());
+  assertEquals(2,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[1].cacheKey,true,false,true));
+  cache.cacheBlock(memoryBlocks[2].cacheKey,memoryBlocks[2],true,false);
+  cache.cacheBlock(memoryBlocks[3].cacheKey,memoryBlocks[3],true,false);
+  cache.cacheBlock(memoryBlocks[4].cacheKey,memoryBlocks[4],true,false);
+  cache.cacheBlock(memoryBlocks[5].cacheKey,memoryBlocks[5],true,false);
+  assertEquals(6,cache.getStats().getEvictionCount());
+  assertEquals(6,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[2].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(singleBlocks[3].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[0].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[1].cacheKey,true,false,true));
+  cache.cacheBlock(memoryBlocks[6].cacheKey,memoryBlocks[6],true,false);
+  cache.cacheBlock(memoryBlocks[7].cacheKey,memoryBlocks[7],true,false);
+  cache.cacheBlock(memoryBlocks[8].cacheKey,memoryBlocks[8],true,false);
+  assertEquals(9,cache.getStats().getEvictionCount());
+  assertEquals(9,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[4].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[2].cacheKey,true,false,true));
+  assertEquals(null,cache.getBlock(multiBlocks[3].cacheKey,true,false,true));
+  cache.cacheBlock(memoryBlocks[9].cacheKey,memoryBlocks[9],true,false);
+  assertEquals(10,cache.getStats().getEvictionCount());
+  assertEquals(10,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(memoryBlocks[0].cacheKey,true,false,true));
+  cache.cacheBlock(singleBlocks[9].cacheKey,singleBlocks[9]);
+  assertEquals(11,cache.getStats().getEvictionCount());
+  assertEquals(11,cache.getStats().getEvictedCount());
+  assertEquals(null,cache.getBlock(singleBlocks[9].cacheKey,true,false,true));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

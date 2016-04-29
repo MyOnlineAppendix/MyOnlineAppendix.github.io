@@ -1,0 +1,366 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestListCorruptFileBlocks (5 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(3)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Check that listCorruptFileBlocks works while the namenode is still in safemode.
+ */
+@Test(timeout=300000) public void testListCorruptFileBlocksInSafeMode() throws Exception {
+  MiniDFSCluster cluster=null;
+  Random random=new Random();
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    conf.setFloat(DFSConfigKeys.DFS_NAMENODE_SAFEMODE_THRESHOLD_PCT_KEY,1.5f);
+    conf.setFloat(DFSConfigKeys.DFS_NAMENODE_REPL_QUEUE_THRESHOLD_PCT_KEY,0f);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE,10);
+    cluster=new MiniDFSCluster.Builder(conf).waitSafeMode(false).build();
+    cluster.getNameNodeRpc().setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_LEAVE,false);
+    FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil.Builder().setName("testListCorruptFileBlocksInSafeMode").setNumFiles(2).setMaxLevels(1).setMaxSize(512).build();
+    util.createFiles(fs,"/srcdat10");
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting None.",badFiles.size() == 0);
+    File storageDir=cluster.getInstanceStorageDir(0,0);
+    File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,cluster.getNamesystem().getBlockPoolId());
+    assertTrue("data directory does not exist",data_dir.exists());
+    List<File> metaFiles=MiniDFSCluster.getAllBlockMetadataFiles(data_dir);
+    assertTrue("Data directory does not contain any blocks or there was an " + "IO error",metaFiles != null && !metaFiles.isEmpty());
+    File metaFile=metaFiles.get(0);
+    RandomAccessFile file=new RandomAccessFile(metaFile,"rw");
+    FileChannel channel=file.getChannel();
+    long position=channel.size() - 2;
+    int length=2;
+    byte[] buffer=new byte[length];
+    random.nextBytes(buffer);
+    channel.write(ByteBuffer.wrap(buffer),position);
+    file.close();
+    LOG.info("Deliberately corrupting file " + metaFile.getName() + " at offset "+ position+ " length "+ length);
+    try {
+      util.checkFiles(fs,"/srcdat10");
+    }
+ catch (    BlockMissingException e) {
+      System.out.println("Received BlockMissingException as expected.");
+    }
+catch (    IOException e) {
+      assertTrue("Corrupted replicas not handled properly. " + "Expecting BlockMissingException " + " but received IOException "+ e,false);
+    }
+    badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    cluster.restartNameNode(0);
+    fs=cluster.getFileSystem();
+    while (!cluster.getNameNode().namesystem.isPopulatingReplQueues()) {
+      try {
+        LOG.info("waiting for replication queues");
+        Thread.sleep(1000);
+      }
+ catch (      InterruptedException ignore) {
+      }
+    }
+    try {
+      util.checkFiles(fs,"/srcdat10");
+    }
+ catch (    BlockMissingException e) {
+      System.out.println("Received BlockMissingException as expected.");
+    }
+catch (    IOException e) {
+      assertTrue("Corrupted replicas not handled properly. " + "Expecting BlockMissingException " + " but received IOException "+ e,false);
+    }
+    badFiles=cluster.getNameNode().getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    assertTrue("Namenode is not in safe mode",cluster.getNameNode().isInSafeMode());
+    cluster.getNameNodeRpc().setSafeMode(HdfsConstants.SafeModeAction.SAFEMODE_LEAVE,false);
+    util.cleanup(fs,"/srcdat10");
+  }
+ catch (  Exception e) {
+    LOG.error(StringUtils.stringifyException(e));
+    throw e;
+  }
+ finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-13 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test if NN.listCorruptFiles() returns the right number of results.
+ * The corrupt blocks are detected by the BlockPoolSliceScanner.
+ * Also, test that DFS.listCorruptFileBlocks can make multiple successive
+ * calls.
+ */
+@Test(timeout=300000) public void testMaxCorruptFiles() throws Exception {
+  MiniDFSCluster cluster=null;
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    FileSystem fs=cluster.getFileSystem();
+    final int maxCorruptFileBlocks=FSNamesystem.DEFAULT_MAX_CORRUPT_FILEBLOCKS_RETURNED;
+    DFSTestUtil util=new DFSTestUtil.Builder().setName("testMaxCorruptFiles").setNumFiles(maxCorruptFileBlocks * 3).setMaxLevels(1).setMaxSize(512).build();
+    util.createFiles(fs,"/srcdat2",(short)1);
+    util.waitReplication(fs,"/srcdat2",(short)1);
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting none.",badFiles.size() == 0);
+    final String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 4; i++) {
+      for (int j=0; j <= 1; j++) {
+        File storageDir=cluster.getInstanceStorageDir(i,j);
+        File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+        LOG.info("Removing files from " + data_dir);
+        List<File> metadataFiles=MiniDFSCluster.getAllBlockMetadataFiles(data_dir);
+        if (metadataFiles == null)         continue;
+        for (        File metadataFile : metadataFiles) {
+          File blockFile=Block.metaToBlockFile(metadataFile);
+          assertTrue("Cannot remove file.",blockFile.delete());
+          assertTrue("Cannot remove file.",metadataFile.delete());
+        }
+      }
+    }
+    LOG.info("Restarting Datanode to trigger BlockPoolSliceScanner");
+    cluster.restartDataNodes();
+    cluster.waitActive();
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    while (badFiles.size() < maxCorruptFileBlocks) {
+      LOG.info("# of corrupt files is: " + badFiles.size());
+      Thread.sleep(10000);
+      badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/srcdat2",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting "+ maxCorruptFileBlocks+ ".",badFiles.size() == maxCorruptFileBlocks);
+    CorruptFileBlockIterator iter=(CorruptFileBlockIterator)fs.listCorruptFileBlocks(new Path("/srcdat2"));
+    int corruptPaths=countPaths(iter);
+    assertTrue("Expected more than " + maxCorruptFileBlocks + " corrupt file blocks but got "+ corruptPaths,corruptPaths > maxCorruptFileBlocks);
+    assertTrue("Iterator should have made more than 1 call but made " + iter.getCallsMade(),iter.getCallsMade() > 1);
+    util.cleanup(fs,"/srcdat2");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-13 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=300000) public void testlistCorruptFileBlocks() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+  FileSystem fs=null;
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil.Builder().setName("testGetCorruptFiles").setNumFiles(3).setMaxLevels(1).setMaxSize(1024).build();
+    util.createFiles(fs,"/corruptData");
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+    int numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 4; i++) {
+      for (int j=0; j <= 1; j++) {
+        File storageDir=cluster.getInstanceStorageDir(i,j);
+        File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+        List<File> metadataFiles=MiniDFSCluster.getAllBlockMetadataFiles(data_dir);
+        if (metadataFiles == null)         continue;
+        for (        File metadataFile : metadataFiles) {
+          File blockFile=Block.metaToBlockFile(metadataFile);
+          LOG.info("Deliberately removing file " + blockFile.getName());
+          assertTrue("Cannot remove file.",blockFile.delete());
+          LOG.info("Deliberately removing file " + metadataFile.getName());
+          assertTrue("Cannot remove file.",metadataFile.delete());
+        }
+      }
+    }
+    int count=0;
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+    numCorrupt=corruptFileBlocks.size();
+    while (numCorrupt < 3) {
+      Thread.sleep(1000);
+      corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",null);
+      numCorrupt=corruptFileBlocks.size();
+      count++;
+      if (count > 30)       break;
+    }
+    LOG.info("Namenode has bad files. " + numCorrupt);
+    assertTrue(numCorrupt == 3);
+    FSNamesystem.CorruptFileBlockInfo[] cfb=corruptFileBlocks.toArray(new FSNamesystem.CorruptFileBlockInfo[0]);
+    String[] cookie=new String[]{"1"};
+    Collection<FSNamesystem.CorruptFileBlockInfo> nextCorruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",cookie);
+    FSNamesystem.CorruptFileBlockInfo[] ncfb=nextCorruptFileBlocks.toArray(new FSNamesystem.CorruptFileBlockInfo[0]);
+    numCorrupt=nextCorruptFileBlocks.size();
+    assertTrue(numCorrupt == 2);
+    assertTrue(ncfb[0].block.getBlockName().equalsIgnoreCase(cfb[1].block.getBlockName()));
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/corruptData",cookie);
+    numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    util.createFiles(fs,"/goodData");
+    corruptFileBlocks=namenode.getNamesystem().listCorruptFileBlocks("/goodData",null);
+    numCorrupt=corruptFileBlocks.size();
+    assertTrue(numCorrupt == 0);
+    util.cleanup(fs,"/corruptData");
+    util.cleanup(fs,"/goodData");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * check if nn.getCorruptFiles() returns a file that has corrupted blocks 
+ */
+@Test(timeout=300000) public void testListCorruptFilesCorruptedBlock() throws Exception {
+  MiniDFSCluster cluster=null;
+  Random random=new Random();
+  try {
+    Configuration conf=new HdfsConfiguration();
+    conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+    conf.setInt(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,3 * 1000);
+    conf.setInt(DFSConfigKeys.DFS_CLIENT_RETRY_WINDOW_BASE,10);
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    FileSystem fs=cluster.getFileSystem();
+    DFSTestUtil util=new DFSTestUtil.Builder().setName("testCorruptFilesCorruptedBlock").setNumFiles(2).setMaxLevels(1).setMaxSize(512).build();
+    util.createFiles(fs,"/srcdat10");
+    final NameNode namenode=cluster.getNameNode();
+    Collection<FSNamesystem.CorruptFileBlockInfo> badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    assertTrue("Namenode has " + badFiles.size() + " corrupt files. Expecting None.",badFiles.size() == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    File storageDir=cluster.getInstanceStorageDir(0,1);
+    File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+    assertTrue("data directory does not exist",data_dir.exists());
+    List<File> metaFiles=MiniDFSCluster.getAllBlockMetadataFiles(data_dir);
+    assertTrue("Data directory does not contain any blocks or there was an " + "IO error",metaFiles != null && !metaFiles.isEmpty());
+    File metaFile=metaFiles.get(0);
+    RandomAccessFile file=new RandomAccessFile(metaFile,"rw");
+    FileChannel channel=file.getChannel();
+    long position=channel.size() - 2;
+    int length=2;
+    byte[] buffer=new byte[length];
+    random.nextBytes(buffer);
+    channel.write(ByteBuffer.wrap(buffer),position);
+    file.close();
+    LOG.info("Deliberately corrupting file " + metaFile.getName() + " at offset "+ position+ " length "+ length);
+    try {
+      util.checkFiles(fs,"/srcdat10");
+    }
+ catch (    BlockMissingException e) {
+      System.out.println("Received BlockMissingException as expected.");
+    }
+catch (    IOException e) {
+      assertTrue("Corrupted replicas not handled properly. Expecting BlockMissingException " + " but received IOException " + e,false);
+    }
+    badFiles=namenode.getNamesystem().listCorruptFileBlocks("/",null);
+    LOG.info("Namenode has bad files. " + badFiles.size());
+    assertTrue("Namenode has " + badFiles.size() + " bad files. Expecting 1.",badFiles.size() == 1);
+    util.cleanup(fs,"/srcdat10");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-13 type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * test listCorruptFileBlocks in DistributedFileSystem
+ */
+@Test(timeout=300000) public void testlistCorruptFileBlocksDFS() throws Exception {
+  Configuration conf=new Configuration();
+  conf.setLong(DFSConfigKeys.DFS_BLOCKREPORT_INTERVAL_MSEC_KEY,1000);
+  conf.setInt(DFSConfigKeys.DFS_DATANODE_DIRECTORYSCAN_INTERVAL_KEY,1);
+  FileSystem fs=null;
+  MiniDFSCluster cluster=null;
+  try {
+    cluster=new MiniDFSCluster.Builder(conf).build();
+    cluster.waitActive();
+    fs=cluster.getFileSystem();
+    DistributedFileSystem dfs=(DistributedFileSystem)fs;
+    DFSTestUtil util=new DFSTestUtil.Builder().setName("testGetCorruptFiles").setNumFiles(3).setMaxLevels(1).setMaxSize(1024).build();
+    util.createFiles(fs,"/corruptData");
+    RemoteIterator<Path> corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+    int numCorrupt=countPaths(corruptFileBlocks);
+    assertTrue(numCorrupt == 0);
+    String bpid=cluster.getNamesystem().getBlockPoolId();
+    for (int i=0; i < 2; i++) {
+      File storageDir=cluster.getInstanceStorageDir(0,i);
+      File data_dir=MiniDFSCluster.getFinalizedDir(storageDir,bpid);
+      List<File> metadataFiles=MiniDFSCluster.getAllBlockMetadataFiles(data_dir);
+      if (metadataFiles == null)       continue;
+      for (      File metadataFile : metadataFiles) {
+        File blockFile=Block.metaToBlockFile(metadataFile);
+        LOG.info("Deliberately removing file " + blockFile.getName());
+        assertTrue("Cannot remove file.",blockFile.delete());
+        LOG.info("Deliberately removing file " + metadataFile.getName());
+        assertTrue("Cannot remove file.",metadataFile.delete());
+      }
+    }
+    int count=0;
+    corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+    numCorrupt=countPaths(corruptFileBlocks);
+    while (numCorrupt < 3) {
+      Thread.sleep(1000);
+      corruptFileBlocks=dfs.listCorruptFileBlocks(new Path("/corruptData"));
+      numCorrupt=countPaths(corruptFileBlocks);
+      count++;
+      if (count > 30)       break;
+    }
+    LOG.info("Namenode has bad files. " + numCorrupt);
+    assertTrue(numCorrupt == 3);
+    util.cleanup(fs,"/corruptData");
+    util.cleanup(fs,"/goodData");
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

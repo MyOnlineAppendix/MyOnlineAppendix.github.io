@@ -1,0 +1,274 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestBlockPlacementPolicyRaid </h4><pre class="type-10 type-11 type-4 type-7 type-5 type-12 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test BlockPlacementPolicyRaid actually deletes the correct replica.
+ * Start 2 datanodes and create 1 source file and its parity file.
+ * 1) Start host1, create the parity file with replication 1
+ * 2) Start host2, create the source file with replication 2
+ * 3) Set repliation of source file to 1
+ * Verify that the policy should delete the block with more companion blocks.
+ */
+@Test public void testDeleteReplica() throws IOException {
+  setupCluster();
+  try {
+    setBlockPlacementPolicy(namesystem,new BlockPlacementPolicyDefault(conf,namesystem,namesystem.clusterMap));
+    DatanodeDescriptor datanode1=namesystem.datanodeMap.values().iterator().next();
+    String source="/dir/file";
+    String parity=xorPrefix + source;
+    final Path parityPath=new Path(parity);
+    DFSTestUtil.createFile(fs,parityPath,3,(short)1,0L);
+    DFSTestUtil.waitReplication(fs,parityPath,(short)1);
+    cluster.startDataNodes(conf,1,true,null,rack2,host2,null);
+    DatanodeDescriptor datanode2=null;
+    for (    DatanodeDescriptor d : namesystem.datanodeMap.values()) {
+      if (!d.getName().equals(datanode1.getName())) {
+        datanode2=d;
+      }
+    }
+    Assert.assertTrue(datanode2 != null);
+    cluster.waitActive();
+    final Path sourcePath=new Path(source);
+    DFSTestUtil.createFile(fs,sourcePath,5,(short)2,0L);
+    DFSTestUtil.waitReplication(fs,sourcePath,(short)2);
+    refreshPolicy();
+    Assert.assertEquals(parity,policy.getParityFile(source));
+    Assert.assertEquals(source,policy.getSourceFile(parity,xorPrefix));
+    List<LocatedBlock> sourceBlocks=getBlocks(namesystem,source);
+    List<LocatedBlock> parityBlocks=getBlocks(namesystem,parity);
+    Assert.assertEquals(5,sourceBlocks.size());
+    Assert.assertEquals(3,parityBlocks.size());
+    Collection<LocatedBlock> companionBlocks;
+    companionBlocks=getCompanionBlocks(namesystem,policy,sourceBlocks.get(0).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{0,1},new int[]{0});
+    companionBlocks=getCompanionBlocks(namesystem,policy,sourceBlocks.get(1).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{0,1},new int[]{0});
+    companionBlocks=getCompanionBlocks(namesystem,policy,sourceBlocks.get(2).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{2,3},new int[]{1});
+    companionBlocks=getCompanionBlocks(namesystem,policy,sourceBlocks.get(3).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{2,3},new int[]{1});
+    companionBlocks=getCompanionBlocks(namesystem,policy,sourceBlocks.get(4).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{4},new int[]{2});
+    companionBlocks=getCompanionBlocks(namesystem,policy,parityBlocks.get(0).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{0,1},new int[]{0});
+    companionBlocks=getCompanionBlocks(namesystem,policy,parityBlocks.get(1).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{2,3},new int[]{1});
+    companionBlocks=getCompanionBlocks(namesystem,policy,parityBlocks.get(2).getBlock());
+    verifyCompanionBlocks(companionBlocks,sourceBlocks,parityBlocks,new int[]{4},new int[]{2});
+    refreshPolicy();
+    setBlockPlacementPolicy(namesystem,policy);
+    fs.setReplication(sourcePath,(short)1);
+    DFSTestUtil.waitReplication(fs,sourcePath,(short)1);
+    Map<String,Integer> counters=new HashMap<String,Integer>();
+    refreshPolicy();
+    for (int i=0; i < parityBlocks.size(); i++) {
+      companionBlocks=getCompanionBlocks(namesystem,policy,parityBlocks.get(i).getBlock());
+      counters=BlockPlacementPolicyRaid.countCompanionBlocks(companionBlocks,false);
+      Assert.assertTrue(counters.get(datanode1.getName()) >= 1 && counters.get(datanode1.getName()) <= 2);
+      Assert.assertTrue(counters.get(datanode1.getName()) + counters.get(datanode2.getName()) == companionBlocks.size());
+      counters=BlockPlacementPolicyRaid.countCompanionBlocks(companionBlocks,true);
+      Assert.assertTrue(counters.get(datanode1.getParent().getName()) >= 1 && counters.get(datanode1.getParent().getName()) <= 2);
+      Assert.assertTrue(counters.get(datanode1.getParent().getName()) + counters.get(datanode2.getParent().getName()) == companionBlocks.size());
+    }
+  }
+  finally {
+    if (cluster != null) {
+      cluster.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestJvmManager </h4><pre class="type-10 type-4 type-7 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+/** 
+ * Tests the jvm kill from JvmRunner and JvmManager simultaneously.
+ * Starts a process, which sleeps for 60 seconds, in a thread.
+ * Calls JvmRunner.kill() in a thread.
+ * Also calls JvmManager.taskKilled().
+ * Makes sure that the jvm is killed and JvmManager could launch another task
+ * properly.
+ * @throws Exception
+ */
+@Test public void testJvmKill() throws Exception {
+  JvmManagerForType mapJvmManager=jvmManager.getJvmManagerForType(TaskType.MAP);
+  JobConf taskConf=new JobConf(ttConf);
+  TaskAttemptID attemptID=new TaskAttemptID("test",0,TaskType.MAP,0,0);
+  Task task=new MapTask(null,attemptID,0,null,1);
+  task.setConf(taskConf);
+  TaskInProgress tip=tt.new TaskInProgress(task,taskConf);
+  File pidFile=new File(TEST_DIR,"pid");
+  final TaskRunner taskRunner=task.createRunner(tt,tip);
+  final Vector<String> vargs=new Vector<String>(2);
+  vargs.add(writeScript("SLEEP","sleep 60\n",pidFile).getAbsolutePath());
+  final File workDir=new File(TEST_DIR,"work");
+  workDir.mkdir();
+  final File stdout=new File(TEST_DIR,"stdout");
+  final File stderr=new File(TEST_DIR,"stderr");
+  Thread launcher=new Thread(){
+    public void run(){
+      try {
+        taskRunner.launchJvmAndWait(null,vargs,stdout,stderr,100,workDir,null);
+      }
+ catch (      InterruptedException e) {
+        e.printStackTrace();
+        return;
+      }
+    }
+  }
+;
+  launcher.start();
+  for (int i=0; i < 10; i++) {
+    if (pidFile.exists()) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertTrue("pidFile is not present",pidFile.exists());
+  BufferedReader in=new BufferedReader(new FileReader(pidFile));
+  String pid=in.readLine();
+  in.close();
+  JVMId jvmid=mapJvmManager.runningTaskToJvm.get(taskRunner);
+  jvmManager.setPidToJvm(jvmid,pid);
+  final JvmRunner jvmRunner=mapJvmManager.jvmIdToRunner.get(jvmid);
+  Thread killer=new Thread(){
+    public void run(){
+      jvmRunner.kill();
+    }
+  }
+;
+  killer.start();
+  Thread.sleep(100);
+  taskRunner.kill();
+  assertTrue(jvmRunner.killed);
+  attemptID=new TaskAttemptID("test",0,TaskType.MAP,0,1);
+  task=new MapTask(null,attemptID,0,null,1);
+  task.setConf(taskConf);
+  tip=tt.new TaskInProgress(task,taskConf);
+  TaskRunner taskRunner2=task.createRunner(tt,tip);
+  Vector<String> vargs2=new Vector<String>(1);
+  vargs2.add(writeScript("LS","ls",pidFile).getAbsolutePath());
+  File workDir2=new File(TEST_DIR,"work2");
+  workDir.mkdir();
+  File stdout2=new File(TEST_DIR,"stdout2");
+  File stderr2=new File(TEST_DIR,"stderr2");
+  taskRunner2.launchJvmAndWait(null,vargs2,stdout2,stderr2,100,workDir2,null);
+  killer.join();
+  jvmRunner.join();
+  launcher.join();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestTaskLauncher </h4><pre class="type-10 type-4 type-6 type-5 type-12 type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Tests the case "task waiting to be launched is killed externally".
+ * Launches a task which will wait for ever to get slots. Kill the
+ * task and see if launcher is able to come out of the wait and pickup a
+ * another task.
+ * @throws IOException
+ */
+@Test public void testExternalKillForLaunchTask() throws IOException {
+  JobConf ttConf=new JobConf();
+  ttConf.setInt(TTConfig.TT_MAP_SLOTS,4);
+  TaskTracker tt=new MyTaskTracker();
+  tt.runningTasks=new LinkedHashMap<TaskAttemptID,TaskInProgress>();
+  tt.setConf(ttConf);
+  tt.setIndexCache(new IndexCache(ttConf));
+  tt.setTaskMemoryManagerEnabledFlag();
+  tt.setTaskTrackerInstrumentation(TaskTracker.createInstrumentation(tt,tt.getJobConf()));
+  TaskLauncher mapLauncher=tt.new TaskLauncher(TaskType.MAP,4);
+  mapLauncher.start();
+  String jtId="test";
+  TaskAttemptID attemptID=new TaskAttemptID(jtId,1,TaskType.MAP,0,0);
+  Task task=new MapTask(null,attemptID,0,null,5);
+  mapLauncher.addToTaskQueue(new LaunchTaskAction(task));
+  TaskInProgress killTip=tt.runningTasks.get(attemptID);
+  assertNotNull(killTip);
+  for (int i=0; i < 300; i++) {
+    if (mapLauncher.getNumWaitingTasksToLaunch() == 0) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertEquals("Launcher didnt pick up the task " + attemptID + "to launch",0,mapLauncher.getNumWaitingTasksToLaunch());
+  tt.processKillTaskAction(new KillTaskAction(attemptID));
+  assertEquals(TaskStatus.State.KILLED,killTip.getRunState());
+  TaskAttemptID runningAttemptID=new TaskAttemptID(jtId,1,TaskType.MAP,0,expectedLaunchAttemptId);
+  mapLauncher.addToTaskQueue(new LaunchTaskAction(new MapTask(null,runningAttemptID,0,null,1)));
+  TaskInProgress runningTip=tt.runningTasks.get(runningAttemptID);
+  assertNotNull(runningTip);
+  for (int i=0; i < 300; i++) {
+    if (runningTip.getRunState().equals(TaskStatus.State.RUNNING)) {
+      break;
+    }
+    UtilsForTests.waitFor(100);
+  }
+  assertEquals(TaskStatus.State.RUNNING,runningTip.getRunState());
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.hadoop.mapred.TestTextInputFormat </h4><pre class="type-4 type-7 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testMRMaxLine() throws Exception {
+  final int MAXPOS=1024 * 1024;
+  final int MAXLINE=10 * 1024;
+  final int BUF=64 * 1024;
+  final InputStream infNull=new InputStream(){
+    int position=0;
+    final int MAXPOSBUF=1024 * 1024 + BUF;
+    @Override public int read(){
+      ++position;
+      return 0;
+    }
+    @Override public int read(    byte[] b){
+      assertTrue("Read too many bytes from the stream",position < MAXPOSBUF);
+      Arrays.fill(b,(byte)0);
+      position+=b.length;
+      return b.length;
+    }
+  }
+;
+  final LongWritable key=new LongWritable();
+  final Text val=new Text();
+  LOG.info("Reading a line from /dev/null");
+  final Configuration conf=new Configuration(false);
+  conf.setInt(org.apache.hadoop.mapreduce.lib.input.LineRecordReader.MAX_LINE_LENGTH,MAXLINE);
+  conf.setInt("io.file.buffer.size",BUF);
+  final LineRecordReader lrr=new LineRecordReader(infNull,0,MAXPOS,conf);
+  assertFalse("Read a line from null",lrr.next(key,val));
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

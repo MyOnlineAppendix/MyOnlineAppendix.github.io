@@ -1,0 +1,262 @@
+<h3 style="margin:0px">Class: org.apache.bookkeeper.replication.AuditorPeriodicCheckTest (6 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-3 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * test that the periodic checking will detect corruptions in
+ * the bookie entry log
+ */
+@Test(timeout=30000) public void testEntryLogCorruption() throws Exception {
+  LedgerManagerFactory mFactory=LedgerManagerFactory.newLedgerManagerFactory(bsConfs.get(0),zkc);
+  LedgerUnderreplicationManager underReplicationManager=mFactory.newLedgerUnderreplicationManager();
+  underReplicationManager.disableLedgerReplication();
+  LedgerHandle lh=bkc.createLedger(3,3,DigestType.CRC32,"passwd".getBytes());
+  long ledgerId=lh.getId();
+  for (int i=0; i < 100; i++) {
+    lh.addEntry("testdata".getBytes());
+  }
+  lh.close();
+  BookieAccessor.forceFlush(bs.get(0).getBookie());
+  File ledgerDir=bsConfs.get(0).getLedgerDirs()[0];
+  ledgerDir=Bookie.getCurrentDirectory(ledgerDir);
+  File[] entryLogs=ledgerDir.listFiles(new FilenameFilter(){
+    public boolean accept(    File dir,    String name){
+      return name.endsWith(".log");
+    }
+  }
+);
+  ByteBuffer junk=ByteBuffer.allocate(1024 * 1024);
+  for (  File f : entryLogs) {
+    FileOutputStream out=new FileOutputStream(f);
+    out.getChannel().write(junk);
+    out.close();
+  }
+  restartBookies();
+  underReplicationManager.enableLedgerReplication();
+  long underReplicatedLedger=-1;
+  for (int i=0; i < 10; i++) {
+    underReplicatedLedger=underReplicationManager.pollLedgerToRereplicate();
+    if (underReplicatedLedger != -1) {
+      break;
+    }
+    Thread.sleep(CHECK_INTERVAL * 1000);
+  }
+  assertEquals("Ledger should be under replicated",ledgerId,underReplicatedLedger);
+  underReplicationManager.close();
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After @Override public void tearDown() throws Exception {
+  for (  AuditorElector e : auditorElectors.values()) {
+    e.shutdown();
+  }
+  for (  ZooKeeper zk : zkClients) {
+    zk.close();
+  }
+  zkClients.clear();
+  super.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+/** 
+ * Test that the period check will succeed if a ledger is deleted midway
+ */
+@Test(timeout=120000) public void testPeriodicCheckWhenLedgerDeleted() throws Exception {
+  for (  AuditorElector e : auditorElectors.values()) {
+    e.shutdown();
+  }
+  final int numLedgers=10;
+  List<Long> ids=new LinkedList<Long>();
+  for (int i=0; i < numLedgers; i++) {
+    LedgerHandle lh=bkc.createLedger(3,3,DigestType.CRC32,"passwd".getBytes());
+    ids.add(lh.getId());
+    for (int j=0; j < 2; j++) {
+      lh.addEntry("testdata".getBytes());
+    }
+    lh.close();
+  }
+  final Auditor auditor=new Auditor(Bookie.getBookieAddress(bsConfs.get(0)).toString(),bsConfs.get(0),zkc);
+  final AtomicBoolean exceptionCaught=new AtomicBoolean(false);
+  final CountDownLatch latch=new CountDownLatch(1);
+  Thread t=new Thread(){
+    public void run(){
+      try {
+        latch.countDown();
+        for (int i=0; i < numLedgers; i++) {
+          auditor.checkAllLedgers();
+        }
+      }
+ catch (      Exception e) {
+        LOG.error("Caught exception while checking all ledgers",e);
+        exceptionCaught.set(true);
+      }
+    }
+  }
+;
+  t.start();
+  latch.await();
+  for (  Long id : ids) {
+    bkc.deleteLedger(id);
+  }
+  t.join();
+  assertFalse("Shouldn't have thrown exception",exceptionCaught.get());
+}
+
+</code></pre>
+
+<pre class="type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before @Override public void setUp() throws Exception {
+  super.setUp();
+  for (int i=0; i < numBookies; i++) {
+    ServerConfiguration conf=new ServerConfiguration(bsConfs.get(i));
+    conf.setAuditorPeriodicCheckInterval(CHECK_INTERVAL);
+    String addr=bs.get(i).getLocalAddress().toString();
+    ZooKeeper zk=ZooKeeperClient.newBuilder().connectString(zkUtil.getZooKeeperConnectString()).sessionTimeoutMs(10000).build();
+    zkClients.add(zk);
+    AuditorElector auditorElector=new AuditorElector(addr,conf,zk);
+    auditorElectors.put(addr,auditorElector);
+    auditorElector.start();
+    LOG.debug("Starting Auditor Elector");
+  }
+}
+
+</code></pre>
+
+<pre class="type-3 type-4 type-9 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * Test that the period checker will not run when auto replication has been disabled
+ */
+@Test(timeout=120000) public void testPeriodicCheckWhenDisabled() throws Exception {
+  LedgerManagerFactory mFactory=LedgerManagerFactory.newLedgerManagerFactory(bsConfs.get(0),zkc);
+  final LedgerUnderreplicationManager underReplicationManager=mFactory.newLedgerUnderreplicationManager();
+  final int numLedgers=10;
+  final int numMsgs=2;
+  final CountDownLatch completeLatch=new CountDownLatch(numMsgs * numLedgers);
+  final AtomicInteger rc=new AtomicInteger(BKException.Code.OK);
+  List<LedgerHandle> lhs=new ArrayList<LedgerHandle>();
+  for (int i=0; i < numLedgers; i++) {
+    LedgerHandle lh=bkc.createLedger(3,3,DigestType.CRC32,"passwd".getBytes());
+    lhs.add(lh);
+    for (int j=0; j < 2; j++) {
+      lh.asyncAddEntry("testdata".getBytes(),new AddCallback(){
+        public void addComplete(        int rc2,        LedgerHandle lh,        long entryId,        Object ctx){
+          if (rc.compareAndSet(BKException.Code.OK,rc2)) {
+            LOG.info("Failed to add entry : {}",BKException.getMessage(rc2));
+          }
+          completeLatch.countDown();
+        }
+      }
+,null);
+    }
+  }
+  completeLatch.await();
+  if (rc.get() != BKException.Code.OK) {
+    throw BKException.create(rc.get());
+  }
+  for (  LedgerHandle lh : lhs) {
+    lh.close();
+  }
+  underReplicationManager.disableLedgerReplication();
+  final AtomicInteger numReads=new AtomicInteger(0);
+  ServerConfiguration conf=killBookie(0);
+  Bookie deadBookie=new Bookie(conf){
+    @Override public ByteBuffer readEntry(    long ledgerId,    long entryId) throws IOException, NoLedgerException {
+      numReads.incrementAndGet();
+      throw new IOException("Fake I/O exception");
+    }
+  }
+;
+  bsConfs.add(conf);
+  bs.add(startBookie(conf,deadBookie));
+  Thread.sleep(CHECK_INTERVAL * 2000);
+  assertEquals("Nothing should have tried to read",0,numReads.get());
+  underReplicationManager.enableLedgerReplication();
+  Thread.sleep(CHECK_INTERVAL * 2000);
+  underReplicationManager.disableLedgerReplication();
+  Thread.sleep(CHECK_INTERVAL * 2000);
+  int numUnderreplicated=0;
+  long underReplicatedLedger=-1;
+  do {
+    underReplicatedLedger=underReplicationManager.pollLedgerToRereplicate();
+    if (underReplicatedLedger == -1) {
+      break;
+    }
+    numUnderreplicated++;
+    underReplicationManager.markLedgerReplicated(underReplicatedLedger);
+  }
+ while (underReplicatedLedger != -1);
+  Thread.sleep(CHECK_INTERVAL * 2000);
+  underReplicatedLedger=underReplicationManager.pollLedgerToRereplicate();
+  assertEquals("There should be no underreplicated ledgers",-1,underReplicatedLedger);
+  LOG.info("{} of {} ledgers underreplicated",numUnderreplicated,numUnderreplicated);
+  assertTrue("All should be underreplicated",numUnderreplicated <= numLedgers && numUnderreplicated > 0);
+}
+
+</code></pre>
+
+<pre class="type-3 type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+/** 
+ * test that the period checker will detect corruptions in
+ * the bookie index files
+ */
+@Test(timeout=30000) public void testIndexCorruption() throws Exception {
+  LedgerManagerFactory mFactory=LedgerManagerFactory.newLedgerManagerFactory(bsConfs.get(0),zkc);
+  LedgerUnderreplicationManager underReplicationManager=mFactory.newLedgerUnderreplicationManager();
+  LedgerHandle lh=bkc.createLedger(3,3,DigestType.CRC32,"passwd".getBytes());
+  long ledgerToCorrupt=lh.getId();
+  for (int i=0; i < 100; i++) {
+    lh.addEntry("testdata".getBytes());
+  }
+  lh.close();
+  lh=bkc.createLedger(3,3,DigestType.CRC32,"passwd".getBytes());
+  for (int i=0; i < 100; i++) {
+    lh.addEntry("testdata".getBytes());
+  }
+  lh.close();
+  BookieAccessor.forceFlush(bs.get(0).getBookie());
+  File ledgerDir=bsConfs.get(0).getLedgerDirs()[0];
+  ledgerDir=Bookie.getCurrentDirectory(ledgerDir);
+  File index=new File(ledgerDir,IndexPersistenceMgr.getLedgerName(ledgerToCorrupt));
+  LOG.info("file to corrupt{}",index);
+  ByteBuffer junk=ByteBuffer.allocate(1024 * 1024);
+  FileOutputStream out=new FileOutputStream(index);
+  out.getChannel().write(junk);
+  out.close();
+  long underReplicatedLedger=-1;
+  for (int i=0; i < 10; i++) {
+    underReplicatedLedger=underReplicationManager.pollLedgerToRereplicate();
+    if (underReplicatedLedger != -1) {
+      break;
+    }
+    Thread.sleep(CHECK_INTERVAL * 1000);
+  }
+  assertEquals("Ledger should be under replicated",ledgerToCorrupt,underReplicatedLedger);
+  underReplicationManager.close();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

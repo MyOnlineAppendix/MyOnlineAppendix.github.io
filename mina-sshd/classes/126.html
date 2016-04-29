@@ -1,0 +1,160 @@
+<h3 style="margin:0px">Class: org.apache.sshd.server.shell.InvertedShellWrapperTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testShellDiesBeforeAllDataExhausted() throws Exception {
+  final String IN_CONTENT="shellInput";
+  final String OUT_CONTENT="shellOutput";
+  final String ERR_CONTENT="shellError";
+  try (final InputStream stdin=newDelayedInputStream(Long.SIZE,IN_CONTENT);final ByteArrayOutputStream shellIn=new ByteArrayOutputStream(Byte.MAX_VALUE);final InputStream shellOut=newDelayedInputStream(Byte.SIZE,OUT_CONTENT);ByteArrayOutputStream stdout=new ByteArrayOutputStream(OUT_CONTENT.length() + Byte.SIZE);final InputStream shellErr=newDelayedInputStream(Short.SIZE,ERR_CONTENT);ByteArrayOutputStream stderr=new ByteArrayOutputStream(ERR_CONTENT.length() + Byte.SIZE)){
+    InvertedShell shell=new InvertedShell(){
+      @Override public void start(      Environment env) throws IOException {
+      }
+      @Override public void setSession(      ServerSession session){
+      }
+      @Override public boolean isAlive(){
+        return false;
+      }
+      @Override public InputStream getOutputStream(){
+        return shellOut;
+      }
+      @Override public OutputStream getInputStream(){
+        return shellIn;
+      }
+      @Override public InputStream getErrorStream(){
+        return shellErr;
+      }
+      @Override public int exitValue(){
+        return -1;
+      }
+      @Override public void destroy(){
+      }
+    }
+;
+    BogusExitCallback exitCallback=new BogusExitCallback();
+    InvertedShellWrapper wrapper=new InvertedShellWrapper(shell);
+    try {
+      wrapper.setInputStream(stdin);
+      wrapper.setOutputStream(stdout);
+      wrapper.setErrorStream(stderr);
+      wrapper.setExitCallback(exitCallback);
+      wrapper.start(new BogusEnvironment());
+      wrapper.pumpStreams();
+    }
+  finally {
+      wrapper.destroy();
+    }
+    assertEquals("Mismatched STDIN value",IN_CONTENT,shellIn.toString(StandardCharsets.UTF_8.name()));
+    assertEquals("Mismatched STDOUT value",OUT_CONTENT,stdout.toString(StandardCharsets.UTF_8.name()));
+    assertEquals("Mismatched STDERR value",ERR_CONTENT,stderr.toString(StandardCharsets.UTF_8.name()));
+  }
+ }
+
+</code></pre>
+
+<pre class="type-3 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testExceptionWhilePumpStreams() throws Exception {
+  final BogusInvertedShell bogusShell=newShell("out","err");
+  bogusShell.setAlive(false);
+  final int DESTROYED_EXIT_VALUE=7365;
+  InvertedShell shell=new InvertedShell(){
+    private boolean destroyed;
+    @Override public void start(    Environment env) throws IOException {
+      bogusShell.start(env);
+    }
+    @Override public void setSession(    ServerSession session){
+      bogusShell.setSession(session);
+    }
+    @Override public boolean isAlive(){
+      return bogusShell.isAlive();
+    }
+    @Override public InputStream getOutputStream(){
+      return bogusShell.getOutputStream();
+    }
+    @Override public OutputStream getInputStream(){
+      return bogusShell.getInputStream();
+    }
+    @Override public InputStream getErrorStream(){
+      return bogusShell.getErrorStream();
+    }
+    @Override public int exitValue(){
+      return destroyed ? DESTROYED_EXIT_VALUE : bogusShell.exitValue();
+    }
+    @Override public void destroy(){
+      bogusShell.destroy();
+      bogusShell.setAlive(false);
+      destroyed=true;
+    }
+  }
+;
+  try (ByteArrayOutputStream out=new ByteArrayOutputStream();ByteArrayOutputStream err=new ByteArrayOutputStream();InputStream stdin=new InputStream(){
+    private final byte[] data=getCurrentTestName().getBytes(StandardCharsets.UTF_8);
+    private int readPos;
+    @Override public int read() throws IOException {
+      if (readPos >= data.length) {
+        throw new EOFException("Data exhausted");
+      }
+      return data[readPos++];
+    }
+    @Override public int available() throws IOException {
+      return data.length;
+    }
+  }
+){
+    BogusExitCallback exitCallback=new BogusExitCallback();
+    InvertedShellWrapper wrapper=new InvertedShellWrapper(shell);
+    try {
+      wrapper.setInputStream(stdin);
+      wrapper.setOutputStream(out);
+      wrapper.setErrorStream(err);
+      wrapper.setExitCallback(exitCallback);
+      wrapper.start(new BogusEnvironment());
+      wrapper.pumpStreams();
+    }
+  finally {
+      wrapper.destroy();
+    }
+    assertEquals("Mismatched exit value",DESTROYED_EXIT_VALUE,exitCallback.getExitValue());
+    assertEquals("Mismatched exit message",EOFException.class.getSimpleName(),exitCallback.getExitMessage());
+  }
+ }
+
+</code></pre>
+
+<pre class="type-3 type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testStreamsAreFlushedBeforeClosing() throws Exception {
+  BogusInvertedShell shell=newShell("out","err");
+  shell.setAlive(false);
+  try (ByteArrayInputStream in=new ByteArrayInputStream("in".getBytes(StandardCharsets.UTF_8));ByteArrayOutputStream out=new ByteArrayOutputStream(50);ByteArrayOutputStream err=new ByteArrayOutputStream()){
+    InvertedShellWrapper wrapper=new InvertedShellWrapper(shell);
+    try {
+      wrapper.setInputStream(in);
+      wrapper.setOutputStream(out);
+      wrapper.setErrorStream(err);
+      wrapper.setExitCallback(new BogusExitCallback());
+      wrapper.start(new BogusEnvironment());
+      wrapper.pumpStreams();
+      assertEquals("stdin","in",shell.getInputStream().toString());
+      assertEquals("stdout","out",out.toString());
+      assertEquals("stderr","err",err.toString());
+    }
+  finally {
+      wrapper.destroy();
+    }
+  }
+ }
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

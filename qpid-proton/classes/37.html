@@ -1,0 +1,82 @@
+<h3 style="margin:0px">Class: org.apache.qpid.proton.systemtests.LinkTest (1 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-9 type-2 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testProperties() throws Exception {
+  Map<Symbol,Object> receiverProps=new HashMap<>();
+  receiverProps.put(RCV_PROP,RCV_PROP_VAL);
+  Map<Symbol,Object> senderProps=new HashMap<>();
+  senderProps.put(SND_PROP,SND_PROP_VAL);
+  LOGGER.fine(bold("======== About to create transports"));
+  getClient().transport=Proton.transport();
+  ProtocolTracerEnabler.setProtocolTracer(getClient().transport,TestLoggingHelper.CLIENT_PREFIX);
+  getServer().transport=Proton.transport();
+  ProtocolTracerEnabler.setProtocolTracer(getServer().transport,"            " + TestLoggingHelper.SERVER_PREFIX);
+  doOutputInputCycle();
+  getClient().connection=Proton.connection();
+  getClient().transport.bind(getClient().connection);
+  getServer().connection=Proton.connection();
+  getServer().transport.bind(getServer().connection);
+  LOGGER.fine(bold("======== About to open connections"));
+  getClient().connection.open();
+  getServer().connection.open();
+  doOutputInputCycle();
+  LOGGER.fine(bold("======== About to open sessions"));
+  getClient().session=getClient().connection.session();
+  getClient().session.open();
+  pumpClientToServer();
+  getServer().session=getServer().connection.sessionHead(of(UNINITIALIZED),of(ACTIVE));
+  assertEndpointState(getServer().session,UNINITIALIZED,ACTIVE);
+  getServer().session.open();
+  assertEndpointState(getServer().session,ACTIVE,ACTIVE);
+  pumpServerToClient();
+  assertEndpointState(getClient().session,ACTIVE,ACTIVE);
+  LOGGER.fine(bold("======== About to create reciever"));
+  getClient().source=new Source();
+  getClient().source.setAddress(_sourceAddress);
+  getClient().target=new Target();
+  getClient().target.setAddress(null);
+  getClient().receiver=getClient().session.receiver("link1");
+  getClient().receiver.setTarget(getClient().target);
+  getClient().receiver.setSource(getClient().source);
+  getClient().receiver.setReceiverSettleMode(ReceiverSettleMode.FIRST);
+  getClient().receiver.setSenderSettleMode(SenderSettleMode.UNSETTLED);
+  getClient().receiver.setProperties(receiverProps);
+  assertEndpointState(getClient().receiver,UNINITIALIZED,UNINITIALIZED);
+  getClient().receiver.open();
+  assertEndpointState(getClient().receiver,ACTIVE,UNINITIALIZED);
+  pumpClientToServer();
+  LOGGER.fine(bold("======== About to set up implicitly created sender"));
+  getServer().sender=(Sender)getServer().connection.linkHead(of(UNINITIALIZED),of(ACTIVE));
+  getServer().sender.setReceiverSettleMode(getServer().sender.getRemoteReceiverSettleMode());
+  getServer().sender.setSenderSettleMode(getServer().sender.getRemoteSenderSettleMode());
+  org.apache.qpid.proton.amqp.transport.Source serverRemoteSource=getServer().sender.getRemoteSource();
+  getServer().sender.setSource(serverRemoteSource);
+  getServer().sender.setProperties(senderProps);
+  assertEndpointState(getServer().sender,UNINITIALIZED,ACTIVE);
+  getServer().sender.open();
+  assertEndpointState(getServer().sender,ACTIVE,ACTIVE);
+  pumpServerToClient();
+  assertEndpointState(getClient().receiver,ACTIVE,ACTIVE);
+  Map<Symbol,Object> serverRemoteProperties=getServer().sender.getRemoteProperties();
+  assertNotNull("Server had no remote properties",serverRemoteProperties);
+  assertEquals("Server remote properties not expected size",1,serverRemoteProperties.size());
+  assertTrue("Server remote properties lack expected key: " + RCV_PROP,serverRemoteProperties.containsKey(RCV_PROP));
+  assertEquals("Server remote properties contain unexpected value for key: " + RCV_PROP,RCV_PROP_VAL,serverRemoteProperties.get(RCV_PROP));
+  Map<Symbol,Object> clientRemoteProperties=getClient().receiver.getRemoteProperties();
+  assertNotNull("Client had no remote properties",clientRemoteProperties);
+  assertEquals("Client remote properties not expected size",1,clientRemoteProperties.size());
+  assertTrue("Client remote properties lack expected key: " + SND_PROP,clientRemoteProperties.containsKey(SND_PROP));
+  assertEquals("Client remote properties contain unexpected value for key: " + SND_PROP,SND_PROP_VAL,clientRemoteProperties.get(SND_PROP));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

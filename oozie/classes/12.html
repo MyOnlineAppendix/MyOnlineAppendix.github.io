@@ -1,0 +1,369 @@
+<h3 style="margin:0px">Class: org.apache.oozie.command.coord.TestCoordPushDependencyCheckXCommand (13 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-4 type-1 type-2 type-6 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testRequeueOnException() throws Exception {
+  Services.get().getConf().setInt(RecoveryService.CONF_SERVICE_INTERVAL,6000);
+  String newHCatDependency1="hcat://" + server + "/nodb/notable/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/nodb/notable/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  CoordinatorJobBean job=addRecordToCoordJobTableForWaiting("coord-job-for-action-input-check.xml",CoordinatorJob.Status.RUNNING,false,true);
+  CoordinatorActionBean action=addRecordToCoordActionTableForWaiting(job.getId(),1,CoordinatorAction.Status.WAITING,"coord-action-for-action-input-check.xml",null,newHCatDependency,"Z");
+  String actionId=action.getId();
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  try {
+    new CoordPushDependencyCheckXCommand(actionId,true).call();
+    fail();
+  }
+ catch (  Exception e) {
+    assertTrue(e.getMessage().contains("NoSuchObjectException"));
+  }
+  CallableQueueService callableQueueService=Services.get().get(CallableQueueService.class);
+  assertEquals(0,callableQueueService.getQueueDump().size());
+  new CoordActionInputCheckXCommand(actionId,job.getId()).call();
+  callableQueueService=Services.get().get(CallableQueueService.class);
+  assertEquals(0,callableQueueService.getQueueDump().size());
+  setMissingDependencies(actionId,newHCatDependency1);
+  try {
+    new CoordPushDependencyCheckXCommand(actionId,true).call();
+    fail();
+  }
+ catch (  Exception e) {
+    assertTrue(e.getMessage().contains("NoSuchObjectException"));
+  }
+  final List<String> queueDump=callableQueueService.getQueueDump();
+  assertEquals(1,callableQueueService.getQueueDump().size());
+  assertTrue(queueDump.get(0).contains("coord_push_dep_check"));
+  log.info("Queue dump is " + queueDump.toString());
+  assertTrue(queueDump.get(0).matches(".* delay=(599[0-9]{3}|600000)"));
+}
+
+</code></pre>
+
+<pre class="type-3 type-4 type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTimeOutWithException2() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId,true).call();
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.WAITING);
+  PartitionDependencyManagerService pdms=Services.get().get(PartitionDependencyManagerService.class);
+  HCatAccessorService hcatService=Services.get().get(HCatAccessorService.class);
+  assertTrue(pdms.getWaitingActions(new HCatURI(newHCatDependency1)).contains(actionId));
+  assertTrue(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+  long timeOutCreationTime=System.currentTimeMillis() - (12 * 60 * 1000);
+  setCoordActionCreationTime(actionId,timeOutCreationTime);
+  dropTable(db,table,true);
+  try {
+    new CoordPushDependencyCheckXCommand(actionId).call();
+    fail();
+  }
+ catch (  Exception e) {
+    assertTrue(e.getMessage().contains("NoSuchObjectException"));
+  }
+  Thread.sleep(100);
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.TIMEDOUT);
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency1)));
+  assertFalse(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+}
+
+</code></pre>
+
+<pre class="type-3 type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTimeOut() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId,true).call();
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.WAITING);
+  PartitionDependencyManagerService pdms=Services.get().get(PartitionDependencyManagerService.class);
+  HCatAccessorService hcatService=Services.get().get(HCatAccessorService.class);
+  assertTrue(pdms.getWaitingActions(new HCatURI(newHCatDependency1)).contains(actionId));
+  assertTrue(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+  long timeOutCreationTime=System.currentTimeMillis() - (12 * 60 * 1000);
+  setCoordActionCreationTime(actionId,timeOutCreationTime);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  Thread.sleep(100);
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.TIMEDOUT);
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency1)));
+  assertFalse(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+}
+
+</code></pre>
+
+<pre class="type-3 type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+"></span><br>
+@Test public void testLogMessagePrefix() throws Exception {
+  Logger logger=Logger.getLogger(DependencyChecker.class);
+  ByteArrayOutputStream out=new ByteArrayOutputStream();
+  Layout layout=new SimpleLayout();
+  Appender appender=new WriterAppender(layout,out);
+  logger.addAppender(appender);
+  String db="default";
+  String table="tablename";
+  populateTable(db,table);
+  String newHCatDependency="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String actionId1=addInitRecords(newHCatDependency);
+  new CoordPushDependencyCheckXCommand(actionId1).call();
+  assertTrue(out.toString().contains("ACTION[" + actionId1 + "]"));
+  out.reset();
+  String actionId2=addInitRecords(newHCatDependency);
+  new CoordPushDependencyCheckXCommand(actionId2).call();
+  assertFalse(out.toString().contains("ACTION[" + actionId1 + "]"));
+  assertTrue(out.toString().contains("ACTION[" + actionId2 + "]"));
+}
+
+</code></pre>
+
+<pre class="type-4 type-1 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTimeOutWithException1() throws Exception {
+  String newHCatDependency1="hcat://" + server + "/nodb/notable/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/nodb/notable/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  try {
+    new CoordPushDependencyCheckXCommand(actionId,true).call();
+    fail();
+  }
+ catch (  Exception e) {
+    assertTrue(e.getMessage().contains("NoSuchObjectException"));
+  }
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  PartitionDependencyManagerService pdms=Services.get().get(PartitionDependencyManagerService.class);
+  HCatAccessorService hcatService=Services.get().get(HCatAccessorService.class);
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency1)));
+  assertFalse(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+  long timeOutCreationTime=System.currentTimeMillis() - (12 * 60 * 1000);
+  setCoordActionCreationTime(actionId,timeOutCreationTime);
+  try {
+    new CoordPushDependencyCheckXCommand(actionId).call();
+    fail();
+  }
+ catch (  Exception e) {
+    assertTrue(e.getMessage().contains("NoSuchObjectException"));
+  }
+  Thread.sleep(100);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.TIMEDOUT);
+}
+
+</code></pre>
+
+<pre class="type-3 type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testUpdateCoordTableMultipleDepsV3() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId,true).call();
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.WAITING);
+  PartitionDependencyManagerService pdms=Services.get().get(PartitionDependencyManagerService.class);
+  HCatAccessorService hcatService=Services.get().get(HCatAccessorService.class);
+  assertTrue(pdms.getWaitingActions(new HCatURI(newHCatDependency1)).contains(actionId));
+  assertTrue(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency2)));
+  addPartition(db,table,"dt=20120430;country=brazil");
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,"",CoordinatorAction.Status.READY);
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency1)));
+  assertFalse(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testUpdateCoordTableSingleDep() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,"",CoordinatorAction.Status.READY);
+}
+
+</code></pre>
+
+<pre class="type-3 type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testResolveCoordConfiguration() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120412;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  CoordinatorJobBean job=addRecordToCoordJobTableForWaiting("coord-job-for-action-input-check.xml",CoordinatorJob.Status.RUNNING,false,true);
+  CoordinatorActionBean action=addRecordToCoordActionTableForWaiting(job.getId(),1,CoordinatorAction.Status.WAITING,"coord-action-for-action-push-check.xml",null,newHCatDependency,"Z");
+  String actionId=action.getId();
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  CoordinatorActionBean caBean=checkCoordAction(actionId,"",CoordinatorAction.Status.READY);
+  Element eAction=XmlUtils.parseXml(caBean.getActionXml());
+  Element configElem=eAction.getChild("action",eAction.getNamespace()).getChild("workflow",eAction.getNamespace()).getChild("configuration",eAction.getNamespace());
+  List<?> elementList=configElem.getChildren("property",configElem.getNamespace());
+  Element e1=(Element)elementList.get(0);
+  Element e2=(Element)elementList.get(1);
+  assertEquals("hcat://dummyhcat:1000/db1/table1/ds=/2009-29,hcat://dummyhcat:1000/db1/table1/ds=/2009-29," + "hcat://dummyhcat:1000/db1/table1/ds=/2009-29",e1.getChild("value",e1.getNamespace()).getValue());
+  assertEquals("hcat://dummyhcat:1000/db1/table1/ds=/2009-29",e2.getChild("value",e1.getNamespace()).getValue());
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testUpdateCoordTableMultipleDepsV2() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  dropPartition(db,table,"dt=20120430;country=usa");
+  addPartition(db,table,"dt=20120430;country=brazil");
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,newHCatDependency2,CoordinatorAction.Status.WAITING);
+  addPartition(db,table,"dt=20120430;country=usa");
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,"",CoordinatorAction.Status.READY);
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After protected void tearDown() throws Exception {
+  Services.get().destroy();
+  super.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-7 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test public void testUpdateCoordTableMultipleDepsV1() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120412;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  checkCoordAction(actionId,"",CoordinatorAction.Status.READY);
+}
+
+</code></pre>
+
+<pre class="type-3 type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testTimeOutWithUnresolvedMissingDependencies() throws Exception {
+  String db="default";
+  String table="tablename";
+  String newHCatDependency1="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=brazil";
+  String newHCatDependency2="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=usa";
+  String newHCatDependency3="hcat://" + server + "/"+ db+ "/"+ table+ "/dt=20120430;country=uk";
+  String newHCatDependency=newHCatDependency1 + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency2;
+  populateTable(db,table);
+  String actionId=addInitRecords(newHCatDependency);
+  checkCoordAction(actionId,newHCatDependency,CoordinatorAction.Status.WAITING);
+  new CoordPushDependencyCheckXCommand(actionId,true).call();
+  checkCoordAction(actionId,newHCatDependency1,CoordinatorAction.Status.WAITING);
+  PartitionDependencyManagerService pdms=Services.get().get(PartitionDependencyManagerService.class);
+  HCatAccessorService hcatService=Services.get().get(HCatAccessorService.class);
+  assertTrue(pdms.getWaitingActions(new HCatURI(newHCatDependency1)).contains(actionId));
+  assertTrue(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+  long timeOutCreationTime=System.currentTimeMillis() - (12 * 60 * 1000);
+  setCoordActionCreationTime(actionId,timeOutCreationTime);
+  setMissingDependencies(actionId,newHCatDependency + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency3);
+  addPartition(db,table,"dt=20120430;country=brazil");
+  checkDependencies(actionId,newHCatDependency + CoordELFunctions.INSTANCE_SEPARATOR + newHCatDependency3,newHCatDependency1);
+  new CoordPushDependencyCheckXCommand(actionId).call();
+  Thread.sleep(1300);
+  checkDependencies(actionId,newHCatDependency3,"");
+  assertNull(pdms.getWaitingActions(new HCatURI(newHCatDependency1)));
+  assertFalse(hcatService.isRegisteredForNotification(new HCatURI(newHCatDependency1)));
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before protected void setUp() throws Exception {
+  super.setUp();
+  services=super.setupServicesForHCatalog();
+  services.init();
+  server=getMetastoreAuthority();
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

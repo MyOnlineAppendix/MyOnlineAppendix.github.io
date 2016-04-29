@@ -1,0 +1,97 @@
+<h3 style="margin:0px">Class: org.apache.oozie.sla.TestSLAJobEventListener (4 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-2 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test public void testOnJobEvent() throws Exception {
+  SLAService slas=services.get(SLAService.class);
+  SLAJobEventListener listener=new SLAJobEventListener();
+  listener.init(services.getConf());
+  SLARegistrationBean job=_createSLARegBean("wf1",AppType.WORKFLOW_JOB);
+  job.setExpectedStart(DateUtils.parseDateUTC("2012-07-22T00:00Z"));
+  slas.addRegistrationEvent(job);
+  assertEquals(1,slas.getSLACalculator().size());
+  Date actualStart=DateUtils.parseDateUTC("2012-07-22T01:00Z");
+  WorkflowJobEvent wfe=new WorkflowJobEvent("wf1","caId1",WorkflowJob.Status.RUNNING,"user1","wf-app-name1",actualStart,null);
+  listener.onWorkflowJobEvent(wfe);
+  SLACalcStatus serviceObj=slas.getSLACalculator().get("wf1");
+  assertEquals(EventStatus.START_MISS,serviceObj.getEventStatus());
+  assertEquals(1,serviceObj.getEventProcessed());
+  job=_createSLARegBean("wfId1@wa1",AppType.WORKFLOW_ACTION);
+  slas.addRegistrationEvent(job);
+  assertEquals(2,slas.getSLACalculator().size());
+  job.setExpectedStart(DateUtils.parseDateUTC("2012-07-22T00:00Z"));
+  WorkflowActionEvent wae=new WorkflowActionEvent("wfId1@wa1","wfId1",WorkflowAction.Status.RUNNING,"user1","wf-app-name1",actualStart,null);
+  listener.onWorkflowActionEvent(wae);
+  serviceObj=slas.getSLACalculator().get("wfId1@wa1");
+  assertEquals(EventStatus.START_MISS,serviceObj.getEventStatus());
+  job=_createSLARegBean("cj1",AppType.COORDINATOR_JOB);
+  job.setExpectedEnd(DateUtils.parseDateUTC("2012-07-22T01:00Z"));
+  slas.addRegistrationEvent(job);
+  assertEquals(3,slas.getSLACalculator().size());
+  Date actualEnd=DateUtils.parseDateUTC("2012-07-22T00:00Z");
+  CoordinatorJobEvent cje=new CoordinatorJobEvent("cj1","bj1",CoordinatorJob.Status.SUCCEEDED,"user1","coord-app-name1",actualStart,actualEnd);
+  listener.onCoordinatorJobEvent(cje);
+  SLASummaryBean summary=SLASummaryQueryExecutor.getInstance().get(SLASummaryQuery.GET_SLA_SUMMARY,"cj1");
+  assertEquals(6,summary.getEventProcessed());
+  assertEquals(EventStatus.END_MET,summary.getEventStatus());
+  job=_createSLARegBean("cj1@ca1",AppType.COORDINATOR_ACTION);
+  actualEnd=DateUtils.parseDateUTC("2012-07-22T02:00Z");
+  slas.addRegistrationEvent(job);
+  assertEquals(4,slas.getSLACalculator().size());
+  CoordinatorActionEvent cae=new CoordinatorActionEvent("cj1@ca1","cj1",CoordinatorAction.Status.RUNNING,"user1","coord-app-name1",null,actualEnd,null);
+  listener.onCoordinatorActionEvent(cae);
+  cae=new CoordinatorActionEvent("cj1@ca1","cj1",CoordinatorAction.Status.KILLED,"user1","coord-app-name1",null,actualEnd,null);
+  listener.onCoordinatorActionEvent(cae);
+  summary=SLASummaryQueryExecutor.getInstance().get(SLASummaryQuery.GET_SLA_SUMMARY,"cj1@ca1");
+  assertEquals(8,summary.getEventProcessed());
+  assertEquals(EventStatus.END_MISS,summary.getEventStatus());
+  assertEquals(3,slas.getSLACalculator().size());
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Override @Before protected void setUp() throws Exception {
+  super.setUp();
+  services=new Services();
+  Configuration conf=services.getConf();
+  conf.set(Services.CONF_SERVICE_EXT_CLASSES,"org.apache.oozie.service.EventHandlerService," + "org.apache.oozie.sla.service.SLAService");
+  conf.setClass(EventHandlerService.CONF_LISTENERS,SLAJobEventListener.class,JobEventListener.class);
+  services.init();
+}
+
+</code></pre>
+
+<pre class="type-9 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@Override @After protected void tearDown() throws Exception {
+  services.destroy();
+  super.tearDown();
+}
+
+</code></pre>
+
+<pre class="type-1 type-2 type-8 type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects are null
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testListenerConfigured() throws Exception {
+  EventHandlerService ehs=services.get(EventHandlerService.class);
+  assertNotNull(ehs);
+  assertTrue(SLAService.isEnabled());
+  assertTrue(ehs.listEventListeners().contains(SLAJobEventListener.class.getCanonicalName()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

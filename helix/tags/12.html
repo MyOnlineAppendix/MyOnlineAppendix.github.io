@@ -1,0 +1,996 @@
+<h3><span class=" glyphicon glyphicon-tag"/>&nbspPublicFieldVerifier</h3><kbd>Verifies values related to public fields.</kbd><br><br><br><h4 style="margin:0px">Class: org.apache.helix.TestZkBasis </h4><pre class="type-8 type-2 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+/** 
+ * test zk watchers are renewed automatically after session expiry
+ * zookeeper-client side keeps all registered watchers see ZooKeeper.WatchRegistration.register()
+ * after session expiry, all watchers are renewed
+ * if a path that has watches on it has been removed during session expiry,
+ * the watchers on that path will still get callbacks after session renewal, especially:
+ * a data-watch will get data-deleted callback
+ * a child-watch will get a child-change callback with current-child-list = null
+ * this can be used for cleanup watchers on the zookeeper-client side
+ */
+@Test public void testWatchRenew() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String testName=className + "_" + methodName;
+  final ZkClient client=new ZkClient(_zkaddr,ZkClient.DEFAULT_SESSION_TIMEOUT,ZkClient.DEFAULT_CONNECTION_TIMEOUT,new ZNRecordSerializer());
+  final String path="/" + testName + "/test";
+  client.delete(path);
+  ZkListener listener=new ZkListener();
+  client.subscribeDataChanges(path,listener);
+  client.subscribeChildChanges(path,listener);
+  ZkTestHelper.expireSession(client);
+  boolean succeed=listener._childChangeCountDown.await(10,TimeUnit.SECONDS);
+  Assert.assertTrue(succeed,"fail to wait on child-change count-down in 10 seconds after session-expiry");
+  Assert.assertEquals(listener._parentPath,path,"fail to get child-change callback after session-expiry");
+  Assert.assertNull(listener._currentChilds,"fail to get child-change callback with currentChilds=null after session expiry");
+  succeed=listener._dataDeleteCountDown.await(10,TimeUnit.SECONDS);
+  Assert.assertTrue(succeed,"fail to wait on data-delete count-down in 10 seconds after session-expiry");
+  Assert.assertEquals(listener._dataDeletePath,path,"fail to get data-delete callback after session-expiry");
+  client.close();
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.integration.TestSchedulerMessage </h4><pre class="type-4 type-7 type-14 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testSchedulerMsgContraints() throws JsonGenerationException, JsonMappingException, IOException, InterruptedException {
+  TestMessagingHandlerFactoryLatch factory=new TestMessagingHandlerFactoryLatch();
+  HelixManager manager=null;
+  for (int i=0; i < NODE_NR; i++) {
+    _participants[i].getMessagingService().registerMessageHandlerFactory(factory.getMessageType(),factory);
+    _participants[i].getMessagingService().registerMessageHandlerFactory(factory.getMessageType(),factory);
+    manager=_participants[i];
+  }
+  Message schedulerMessage=new Message(MessageType.SCHEDULER_MSG + "",UUID.randomUUID().toString());
+  schedulerMessage.setTgtSessionId("*");
+  schedulerMessage.setTgtName("CONTROLLER");
+  schedulerMessage.setSrcName("CONTROLLER");
+  Message msg=new Message(factory.getMessageType(),"Template");
+  msg.setTgtSessionId("*");
+  msg.setMsgState(MessageState.NEW);
+  Criteria cr=new Criteria();
+  cr.setInstanceName("localhost_%");
+  cr.setRecipientInstanceType(InstanceType.PARTICIPANT);
+  cr.setSessionSpecific(false);
+  cr.setResource("%");
+  cr.setPartition("%");
+  ObjectMapper mapper=new ObjectMapper();
+  SerializationConfig serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  StringWriter sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  String crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  schedulerMessage.getRecord().setMapField("MessageTemplate",msg.getRecord().getSimpleFields());
+  schedulerMessage.getRecord().setSimpleField("TIMEOUT","-1");
+  schedulerMessage.getRecord().setSimpleField("WAIT_ALL","true");
+  schedulerMessage.getRecord().setSimpleField(DefaultSchedulerMessageHandlerFactory.SCHEDULER_TASK_QUEUE,"TestSchedulerMsgContraints");
+  Criteria cr2=new Criteria();
+  cr2.setRecipientInstanceType(InstanceType.CONTROLLER);
+  cr2.setInstanceName("*");
+  cr2.setSessionSpecific(false);
+  MockAsyncCallback callback=new MockAsyncCallback();
+  mapper=new ObjectMapper();
+  serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  HelixDataAccessor helixDataAccessor=manager.getHelixDataAccessor();
+  Builder keyBuilder=helixDataAccessor.keyBuilder();
+  Map<String,String> constraints=new TreeMap<String,String>();
+  constraints.put("MESSAGE_TYPE","STATE_TRANSITION");
+  constraints.put("TRANSITION","OFFLINE-COMPLETED");
+  constraints.put("CONSTRAINT_VALUE","1");
+  constraints.put("INSTANCE",".*");
+  manager.getClusterManagmentTool().setConstraint(manager.getClusterName(),ConstraintType.MESSAGE_CONSTRAINT,"constraint1",new ConstraintItem(constraints));
+  crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  manager.getMessagingService().sendAndWait(cr2,schedulerMessage,callback,-1);
+  String msgId=callback._message.getResultMap().get(DefaultSchedulerMessageHandlerFactory.SCHEDULER_MSG_ID);
+  for (int j=0; j < 10; j++) {
+    Thread.sleep(200);
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    if (statusUpdate.getMapFields().containsKey("SentMessageCount")) {
+      Assert.assertEquals(statusUpdate.getMapFields().get("SentMessageCount").get("MessageCount"),"" + (_PARTITIONS * 3));
+      break;
+    }
+  }
+  for (int i=0; i < _PARTITIONS * 3 / 5; i++) {
+    for (int j=0; j < 10; j++) {
+      Thread.sleep(300);
+      if (factory._messageCount == 5 * (i + 1))       break;
+    }
+    Thread.sleep(300);
+    Assert.assertEquals(factory._messageCount,5 * (i + 1));
+    factory.signal();
+  }
+  for (int j=0; j < 10; j++) {
+    Thread.sleep(200);
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    if (statusUpdate.getMapFields().containsKey("Summary")) {
+      break;
+    }
+  }
+  Assert.assertEquals(_PARTITIONS,factory._results.size());
+  PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+  ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+  Assert.assertTrue(statusUpdate.getMapField("SentMessageCount").get("MessageCount").equals("" + (_PARTITIONS * 3)));
+  int messageResultCount=0;
+  for (  String key : statusUpdate.getMapFields().keySet()) {
+    if (key.startsWith("MessageResult ")) {
+      messageResultCount++;
+    }
+  }
+  Assert.assertEquals(messageResultCount,_PARTITIONS * 3);
+  int count=0;
+  for (  Set<String> val : factory._results.values()) {
+    count+=val.size();
+  }
+  Assert.assertEquals(count,_PARTITIONS * 3);
+  manager.getClusterManagmentTool().removeConstraint(manager.getClusterName(),ConstraintType.MESSAGE_CONSTRAINT,"constraint1");
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testSchedulerMsg3() throws Exception {
+  _factory._results.clear();
+  Thread.sleep(2000);
+  HelixManager manager=null;
+  for (int i=0; i < NODE_NR; i++) {
+    _participants[i].getMessagingService().registerMessageHandlerFactory(_factory.getMessageType(),_factory);
+    manager=_participants[i];
+  }
+  Message schedulerMessage=new Message(MessageType.SCHEDULER_MSG + "",UUID.randomUUID().toString());
+  schedulerMessage.setTgtSessionId("*");
+  schedulerMessage.setTgtName("CONTROLLER");
+  schedulerMessage.setSrcName("CONTROLLER");
+  Message msg=new Message(_factory.getMessageType(),"Template");
+  msg.setTgtSessionId("*");
+  msg.setMsgState(MessageState.NEW);
+  Criteria cr=new Criteria();
+  cr.setInstanceName("localhost_%");
+  cr.setRecipientInstanceType(InstanceType.PARTICIPANT);
+  cr.setSessionSpecific(false);
+  cr.setResource("%");
+  cr.setPartition("%");
+  ObjectMapper mapper=new ObjectMapper();
+  SerializationConfig serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  StringWriter sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  String crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  schedulerMessage.getRecord().setMapField("MessageTemplate",msg.getRecord().getSimpleFields());
+  schedulerMessage.getRecord().setSimpleField("TIMEOUT","-1");
+  schedulerMessage.getRecord().setSimpleField("WAIT_ALL","true");
+  schedulerMessage.getRecord().setSimpleField(DefaultSchedulerMessageHandlerFactory.SCHEDULER_TASK_QUEUE,"TestSchedulerMsg3");
+  Criteria cr2=new Criteria();
+  cr2.setRecipientInstanceType(InstanceType.CONTROLLER);
+  cr2.setInstanceName("*");
+  cr2.setSessionSpecific(false);
+  MockAsyncCallback callback=new MockAsyncCallback();
+  cr.setInstanceName("localhost_%");
+  mapper=new ObjectMapper();
+  serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  for (int i=0; i < 4; i++) {
+    callback=new MockAsyncCallback();
+    cr.setInstanceName("localhost_" + (START_PORT + i));
+    mapper=new ObjectMapper();
+    serializationConfig=mapper.getSerializationConfig();
+    serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+    sw=new StringWriter();
+    mapper.writeValue(sw,cr);
+    schedulerMessage.setMsgId(UUID.randomUUID().toString());
+    crString=sw.toString();
+    schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+    manager.getMessagingService().sendAndWait(cr2,schedulerMessage,callback,-1);
+    String msgId=callback._message.getResultMap().get(DefaultSchedulerMessageHandlerFactory.SCHEDULER_MSG_ID);
+    HelixDataAccessor helixDataAccessor=manager.getHelixDataAccessor();
+    Builder keyBuilder=helixDataAccessor.keyBuilder();
+    for (int j=0; j < 100; j++) {
+      Thread.sleep(200);
+      PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+      ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+      if (statusUpdate.getMapFields().containsKey("Summary")) {
+        break;
+      }
+    }
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    Assert.assertTrue(statusUpdate.getMapField("SentMessageCount").get("MessageCount").equals("" + (_PARTITIONS * 3 / 5)));
+    int messageResultCount=0;
+    for (    String key : statusUpdate.getMapFields().keySet()) {
+      if (key.startsWith("MessageResult")) {
+        messageResultCount++;
+      }
+    }
+    Assert.assertEquals(messageResultCount,_PARTITIONS * 3 / 5);
+    boolean success=false;
+    for (int j=0; j < 6; j++) {
+      int count=0;
+      for (      Set<String> val : _factory._results.values()) {
+        count+=val.size();
+      }
+      success=count == _PARTITIONS * 3 / 5 * (i + 1);
+      if (success) {
+        break;
+      }
+      Thread.sleep(500);
+    }
+    Assert.assertTrue(success);
+  }
+}
+
+</code></pre>
+
+<br>
+<pre class="type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test() public void testSchedulerMsg2() throws Exception {
+  _factory._results.clear();
+  Thread.sleep(2000);
+  HelixManager manager=null;
+  for (int i=0; i < NODE_NR; i++) {
+    _participants[i].getMessagingService().registerMessageHandlerFactory(_factory.getMessageType(),_factory);
+    manager=_participants[i];
+  }
+  Message schedulerMessage=new Message(MessageType.SCHEDULER_MSG + "",UUID.randomUUID().toString());
+  schedulerMessage.setTgtSessionId("*");
+  schedulerMessage.setTgtName("CONTROLLER");
+  schedulerMessage.setSrcName("CONTROLLER");
+  Message msg=new Message(_factory.getMessageType(),"Template");
+  msg.setTgtSessionId("*");
+  msg.setMsgState(MessageState.NEW);
+  Criteria cr=new Criteria();
+  cr.setInstanceName("localhost_%");
+  cr.setRecipientInstanceType(InstanceType.PARTICIPANT);
+  cr.setSessionSpecific(false);
+  cr.setResource("%");
+  cr.setPartition("%");
+  ObjectMapper mapper=new ObjectMapper();
+  SerializationConfig serializationConfig=mapper.getSerializationConfig();
+  serializationConfig.set(SerializationConfig.Feature.INDENT_OUTPUT,true);
+  StringWriter sw=new StringWriter();
+  mapper.writeValue(sw,cr);
+  String crString=sw.toString();
+  schedulerMessage.getRecord().setSimpleField("Criteria",crString);
+  schedulerMessage.getRecord().setMapField("MessageTemplate",msg.getRecord().getSimpleFields());
+  schedulerMessage.getRecord().setSimpleField("TIMEOUT","-1");
+  schedulerMessage.getRecord().setSimpleField("WAIT_ALL","true");
+  Criteria cr2=new Criteria();
+  cr2.setRecipientInstanceType(InstanceType.CONTROLLER);
+  cr2.setInstanceName("*");
+  cr2.setSessionSpecific(false);
+  schedulerMessage.getRecord().setSimpleField(DefaultSchedulerMessageHandlerFactory.SCHEDULER_TASK_QUEUE,"TestSchedulerMsg2");
+  MockAsyncCallback callback=new MockAsyncCallback();
+  manager.getMessagingService().sendAndWait(cr2,schedulerMessage,callback,-1);
+  String msgId=callback._message.getResultMap().get(DefaultSchedulerMessageHandlerFactory.SCHEDULER_MSG_ID);
+  HelixDataAccessor helixDataAccessor=manager.getHelixDataAccessor();
+  Builder keyBuilder=helixDataAccessor.keyBuilder();
+  for (int i=0; i < 10; i++) {
+    Thread.sleep(200);
+    PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+    ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+    if (statusUpdate.getMapFields().containsKey("Summary")) {
+      break;
+    }
+  }
+  Assert.assertEquals(_PARTITIONS,_factory._results.size());
+  PropertyKey controllerTaskStatus=keyBuilder.controllerTaskStatus(MessageType.SCHEDULER_MSG.toString(),msgId);
+  ZNRecord statusUpdate=helixDataAccessor.getProperty(controllerTaskStatus).getRecord();
+  Assert.assertTrue(statusUpdate.getMapField("SentMessageCount").get("MessageCount").equals("" + (_PARTITIONS * 3)));
+  int messageResultCount=0;
+  for (  String key : statusUpdate.getMapFields().keySet()) {
+    if (key.startsWith("MessageResult ")) {
+      messageResultCount++;
+    }
+  }
+  Assert.assertEquals(messageResultCount,_PARTITIONS * 3);
+  int count=0;
+  for (  Set<String> val : _factory._results.values()) {
+    count+=val.size();
+  }
+  Assert.assertEquals(count,_PARTITIONS * 3);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestWtCacheAsyncOpMultiThread </h4><pre class="type-7 type-1 type-8 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testHappyPathZkCacheBaseDataAccessor(){
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  baseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> cachePaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,cachePaths,null);
+  boolean ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  List<Callable<Boolean>> threads=new ArrayList<Callable<Boolean>>();
+  for (int i=0; i < 2; i++) {
+    threads.add(new TestCreateZkCacheBaseDataAccessor(accessor,clusterName,i));
+  }
+  TestHelper.startThreadsConcurrently(threads,1000);
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  threads.clear();
+  for (int i=0; i < 2; i++) {
+    threads.add(new TestUpdateZkCacheBaseDataAccessor(accessor,clusterName,i));
+  }
+  TestHelper.startThreadsConcurrently(threads,1000);
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  threads.clear();
+  for (int i=0; i < 2; i++) {
+    threads.add(new TestSetZkCacheBaseDataAccessor(accessor,clusterName,i));
+  }
+  TestHelper.startThreadsConcurrently(threads,1000);
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestWtCacheAsyncOpSingleThread </h4><pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHappyPathZkCacheBaseDataAccessor(){
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  baseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> cachePaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,cachePaths,null);
+  boolean ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  List<String> paths=new ArrayList<String>();
+  List<ZNRecord> records=new ArrayList<ZNRecord>();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901","session_0","TestDB" + i);
+    ZNRecord record=new ZNRecord("TestDB" + i);
+    paths.add(path);
+    records.add(record);
+  }
+  boolean[] success=accessor.createChildren(paths,records,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in create: " + paths.get(i));
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  List<DataUpdater<ZNRecord>> updaters=new ArrayList<DataUpdater<ZNRecord>>();
+  for (int j=0; j < 10; j++) {
+    paths.clear();
+    updaters.clear();
+    for (int i=0; i < 10; i++) {
+      String path=curStatePath + "/session_0/TestDB" + i;
+      ZNRecord newRecord=new ZNRecord("TestDB" + i);
+      newRecord.setSimpleField("" + j,"" + j);
+      DataUpdater<ZNRecord> updater=new ZNRecordUpdater(newRecord);
+      paths.add(path);
+      updaters.add(updater);
+    }
+    success=accessor.updateChildren(paths,updaters,AccessOption.PERSISTENT);
+    for (int i=0; i < 10; i++) {
+      Assert.assertTrue(success[i],"Should succeed in update: " + paths.get(i));
+    }
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  paths.clear();
+  records.clear();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    ZNRecord record=new ZNRecord("TestDB" + i);
+    paths.add(path);
+    records.add(record);
+  }
+  success=accessor.setChildren(paths,records,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in set: " + paths.get(i));
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  paths.clear();
+  records.clear();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    paths.add(path);
+  }
+  records=accessor.get(paths,null,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertEquals(records.get(i).getId(),"TestDB" + i);
+  }
+  records.clear();
+  records=accessor.getChildren(extViewPath,null,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertEquals(records.get(i).getId(),"TestDB" + i);
+  }
+  paths.clear();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901","session_0","TestDB" + i);
+    paths.add(path);
+  }
+  success=accessor.exists(paths,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should exits: TestDB" + i);
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestWtCacheSyncOpSingleThread </h4><pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHappyPathZkCacheBaseDataAccessor() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  baseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> cachePaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,cachePaths,null);
+  boolean ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    boolean success=accessor.create(path,new ZNRecord("TestDB" + i),AccessOption.PERSISTENT);
+    Assert.assertTrue(success,"Should succeed in create: " + path);
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    for (int j=0; j < 10; j++) {
+      ZNRecord newRecord=new ZNRecord("TestDB" + i);
+      newRecord.setSimpleField("" + j,"" + j);
+      boolean success=accessor.update(path,new ZNRecordUpdater(newRecord),AccessOption.PERSISTENT);
+      Assert.assertTrue(success,"Should succeed in update: " + path);
+    }
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    boolean success=accessor.set(path,new ZNRecord("TestDB" + i),AccessOption.PERSISTENT);
+    Assert.assertTrue(success,"Should succeed in set: " + path);
+  }
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._wtCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"wtCache doesn't match data on Zk");
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    ZNRecord record=accessor.get(path,null,0);
+    Assert.assertEquals(record.getId(),"TestDB" + i);
+  }
+  List<String> childNames=accessor.getChildNames(extViewPath,0);
+  Assert.assertEquals(childNames.size(),10,"Should contain only: TestDB0-9");
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(childNames.contains("TestDB" + i));
+  }
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901","session_0","TestDB" + i);
+    Assert.assertTrue(accessor.exists(path,0));
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestZkCacheAsyncOpSingleThread </h4><pre class="type-4 type-7 type-1 type-8 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testHappyPathExtOpZkCacheBaseDataAccessor() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  ZkClient extZkclient=new ZkClient(_zkaddr);
+  extZkclient.setZkSerializer(new ZNRecordSerializer());
+  ZkBaseDataAccessor<ZNRecord> extBaseAccessor=new ZkBaseDataAccessor<ZNRecord>(extZkclient);
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  extBaseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> zkCacheInitPaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,null,zkCacheInitPaths);
+  boolean ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  List<String> paths=new ArrayList<String>();
+  List<ZNRecord> records=new ArrayList<ZNRecord>();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901","session_0","TestDB" + i);
+    ZNRecord record=new ZNRecord("TestDB" + i);
+    paths.add(path);
+    records.add(record);
+  }
+  boolean[] success=extBaseAccessor.createChildren(paths,records,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in create: " + paths.get(i));
+  }
+  for (int i=0; i < 10; i++) {
+    ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+    if (ret == true)     break;
+    Thread.sleep(100);
+  }
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  List<DataUpdater<ZNRecord>> updaters=new ArrayList<DataUpdater<ZNRecord>>();
+  for (int j=0; j < 10; j++) {
+    paths.clear();
+    updaters.clear();
+    for (int i=0; i < 10; i++) {
+      String path=curStatePath + "/session_0/TestDB" + i;
+      ZNRecord newRecord=new ZNRecord("TestDB" + i);
+      newRecord.setSimpleField("" + j,"" + j);
+      DataUpdater<ZNRecord> updater=new ZNRecordUpdater(newRecord);
+      paths.add(path);
+      updaters.add(updater);
+    }
+    success=extBaseAccessor.updateChildren(paths,updaters,AccessOption.PERSISTENT);
+    for (int i=0; i < 10; i++) {
+      Assert.assertTrue(success[i],"Should succeed in update: " + paths.get(i));
+    }
+  }
+  Thread.sleep(100);
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  paths.clear();
+  records.clear();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    ZNRecord record=new ZNRecord("TestDB" + i);
+    paths.add(path);
+    records.add(record);
+  }
+  success=extBaseAccessor.setChildren(paths,records,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in set: " + paths.get(i));
+  }
+  Thread.sleep(100);
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  paths.clear();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+    paths.add(path);
+  }
+  success=extBaseAccessor.remove(paths,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in remove: " + paths.get(i));
+  }
+  Thread.sleep(100);
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  extZkclient.close();
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testHappyPathSelfOpZkCacheBaseDataAccessor() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(_zkclient);
+  baseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> zkCacheInitPaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,null,zkCacheInitPaths);
+  boolean ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  List<String> paths=new ArrayList<String>();
+  List<ZNRecord> records=new ArrayList<ZNRecord>();
+  for (int i=0; i < 10; i++) {
+    String path=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901","session_0","TestDB" + i);
+    ZNRecord record=new ZNRecord("TestDB" + i);
+    paths.add(path);
+    records.add(record);
+  }
+  boolean[] success=accessor.createChildren(paths,records,AccessOption.PERSISTENT);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should succeed in create: " + paths.get(i));
+  }
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,false);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  List<DataUpdater<ZNRecord>> updaters=new ArrayList<DataUpdater<ZNRecord>>();
+  for (int j=0; j < 10; j++) {
+    paths.clear();
+    updaters.clear();
+    for (int i=0; i < 10; i++) {
+      String path=curStatePath + "/session_0/TestDB" + i;
+      ZNRecord newRecord=new ZNRecord("TestDB" + i);
+      newRecord.setSimpleField("" + j,"" + j);
+      DataUpdater<ZNRecord> updater=new ZNRecordUpdater(newRecord);
+      paths.add(path);
+      updaters.add(updater);
+    }
+    success=accessor.updateChildren(paths,updaters,AccessOption.PERSISTENT);
+    for (int i=0; i < 10; i++) {
+      Assert.assertTrue(success[i],"Should succeed in update: " + paths.get(i));
+    }
+  }
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  paths.clear();
+  records.clear();
+  for (int j=0; j < 10; j++) {
+    for (int i=0; i < 10; i++) {
+      String path=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName,"TestDB" + i);
+      ZNRecord record=new ZNRecord("TestDB" + i);
+      record.setSimpleField("setKey","" + j);
+      paths.add(path);
+      records.add(record);
+    }
+    success=accessor.setChildren(paths,records,AccessOption.PERSISTENT);
+    for (int i=0; i < 10; i++) {
+      Assert.assertTrue(success[i],"Should succeed in set: " + paths.get(i));
+    }
+  }
+  ret=TestHelper.verifyZkCache(zkCacheInitPaths,accessor._zkCache._cache,_zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  paths.clear();
+  records.clear();
+  for (int i=0; i < 10; i++) {
+    String path=extViewPath + "/TestDB" + i;
+    paths.add(path);
+  }
+  records=accessor.get(paths,null,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertEquals(records.get(i).getId(),"TestDB" + i);
+  }
+  records.clear();
+  records=accessor.getChildren(extViewPath,null,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertEquals(records.get(i).getId(),"TestDB" + i);
+  }
+  paths.clear();
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    paths.add(path);
+  }
+  success=accessor.exists(paths,0);
+  for (int i=0; i < 10; i++) {
+    Assert.assertTrue(success[i],"Should exits: " + paths.get(i));
+  }
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.manager.zk.TestZkCacheSyncOpSingleThread </h4><pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testZkCacheCallbackExternalOpNoChroot() throws Exception {
+  String className=TestHelper.getTestClassName();
+  String methodName=TestHelper.getTestMethodName();
+  String clusterName=className + "_" + methodName;
+  System.out.println("START " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+  ZkClient zkclient=new ZkClient(_zkaddr);
+  zkclient.setZkSerializer(new ZNRecordSerializer());
+  ZkBaseDataAccessor<ZNRecord> extBaseAccessor=new ZkBaseDataAccessor<ZNRecord>(zkclient);
+  String curStatePath=PropertyPathConfig.getPath(PropertyType.CURRENTSTATES,clusterName,"localhost_8901");
+  String extViewPath=PropertyPathConfig.getPath(PropertyType.EXTERNALVIEW,clusterName);
+  ZkBaseDataAccessor<ZNRecord> baseAccessor=new ZkBaseDataAccessor<ZNRecord>(zkclient);
+  extBaseAccessor.create(curStatePath,null,AccessOption.PERSISTENT);
+  List<String> cachePaths=Arrays.asList(curStatePath,extViewPath);
+  ZkCacheBaseDataAccessor<ZNRecord> accessor=new ZkCacheBaseDataAccessor<ZNRecord>(baseAccessor,null,null,cachePaths);
+  TestListener listener=new TestListener();
+  accessor.subscribe(curStatePath,listener);
+  List<String> createPaths=new ArrayList<String>();
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    createPaths.add(path);
+    boolean success=extBaseAccessor.create(path,new ZNRecord("TestDB" + i),AccessOption.PERSISTENT);
+    Assert.assertTrue(success,"Should succeed in create: " + path);
+  }
+  Thread.sleep(500);
+  boolean ret=TestHelper.verifyZkCache(cachePaths,accessor._zkCache._cache,zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  System.out.println("createCnt: " + listener._createPathQueue.size());
+  Assert.assertEquals(listener._createPathQueue.size(),11,"Shall get 11 onCreate callbacks.");
+  createPaths.add(curStatePath + "/session_0");
+  List<String> createCallbackPaths=new ArrayList<String>(listener._createPathQueue);
+  Collections.sort(createPaths);
+  Collections.sort(createCallbackPaths);
+  Assert.assertEquals(createCallbackPaths,createPaths,"Should get create callbacks at " + createPaths + ", but was "+ createCallbackPaths);
+  List<String> updatePaths=new ArrayList<String>();
+  listener.reset();
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    for (int j=0; j < 10; j++) {
+      updatePaths.add(path);
+      ZNRecord newRecord=new ZNRecord("TestDB" + i);
+      newRecord.setSimpleField("" + j,"" + j);
+      boolean success=accessor.update(path,new ZNRecordUpdater(newRecord),AccessOption.PERSISTENT);
+      Assert.assertTrue(success,"Should succeed in update: " + path);
+    }
+  }
+  Thread.sleep(500);
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._zkCache._cache,zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  System.out.println("changeCnt: " + listener._changePathQueue.size());
+  Assert.assertEquals(listener._changePathQueue.size(),100,"Shall get 100 onChange callbacks.");
+  List<String> updateCallbackPaths=new ArrayList<String>(listener._changePathQueue);
+  Collections.sort(updatePaths);
+  Collections.sort(updateCallbackPaths);
+  Assert.assertEquals(updateCallbackPaths,updatePaths,"Should get change callbacks at " + updatePaths + ", but was "+ updateCallbackPaths);
+  TreeSet<String> removePaths=new TreeSet<String>();
+  listener.reset();
+  for (int i=0; i < 10; i++) {
+    String path=curStatePath + "/session_0/TestDB" + i;
+    removePaths.add(path);
+    boolean success=accessor.remove(path,AccessOption.PERSISTENT);
+    Assert.assertTrue(success,"Should succeed in remove: " + path);
+  }
+  Thread.sleep(500);
+  ret=TestHelper.verifyZkCache(cachePaths,accessor._zkCache._cache,zkclient,true);
+  Assert.assertTrue(ret,"zkCache doesn't match data on Zk");
+  System.out.println("deleteCnt: " + listener._deletePathQueue.size());
+  Assert.assertTrue(listener._deletePathQueue.size() >= 10,"Shall get at least 10 onDelete callbacks.");
+  Set<String> removeCallbackPaths=new TreeSet<String>(listener._deletePathQueue);
+  Assert.assertEquals(removeCallbackPaths,removePaths,"Should get remove callbacks at " + removePaths + ", but was "+ removeCallbackPaths);
+  System.out.println("END " + clusterName + " at "+ new Date(System.currentTimeMillis()));
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.messaging.handling.TestConfigThreadpoolSize </h4><pre class="type-4 type-14 type-1 type-6 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions inside branch conditions">BranchVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies assertions inside branch conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void TestThreadPoolSizeConfig(){
+  String instanceName="localhost_" + (START_PORT + 0);
+  HelixManager manager=_participants[0];
+  ConfigAccessor accessor=manager.getConfigAccessor();
+  HelixConfigScope scope=new HelixConfigScopeBuilder(ConfigScopeProperty.PARTICIPANT).forCluster(manager.getClusterName()).forParticipant(instanceName).build();
+  accessor.set(scope,"TestMsg." + HelixTaskExecutor.MAX_THREADS,"" + 12);
+  scope=new HelixConfigScopeBuilder(ConfigScopeProperty.CLUSTER).forCluster(manager.getClusterName()).build();
+  accessor.set(scope,"TestMsg." + HelixTaskExecutor.MAX_THREADS,"" + 8);
+  for (int i=0; i < NODE_NR; i++) {
+    instanceName="localhost_" + (START_PORT + i);
+    _participants[i].getMessagingService().registerMessageHandlerFactory("TestMsg",new TestMessagingHandlerFactory());
+    _participants[i].getMessagingService().registerMessageHandlerFactory("TestMsg2",new TestMessagingHandlerFactory2());
+  }
+  for (int i=0; i < NODE_NR; i++) {
+    instanceName="localhost_" + (START_PORT + i);
+    DefaultMessagingService svc=(DefaultMessagingService)(_participants[i].getMessagingService());
+    HelixTaskExecutor helixExecutor=svc.getExecutor();
+    ThreadPoolExecutor executor=(ThreadPoolExecutor)(helixExecutor._executorMap.get("TestMsg"));
+    ThreadPoolExecutor executor2=(ThreadPoolExecutor)(helixExecutor._executorMap.get("TestMsg2"));
+    if (i != 0) {
+      Assert.assertEquals(8,executor.getMaximumPoolSize());
+    }
+ else {
+      Assert.assertEquals(12,executor.getMaximumPoolSize());
+    }
+    Assert.assertEquals(HelixTaskExecutor.DEFAULT_PARALLEL_TASKS,executor2.getMaximumPoolSize());
+  }
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.messaging.handling.TestResourceThreadpoolSize </h4><pre class="type-4 type-7 type-1 type-8 type-6 type-12 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void TestThreadPoolSizeConfig(){
+  HelixManager manager=_participants[0];
+  ConfigAccessor accessor=manager.getConfigAccessor();
+  HelixConfigScope scope=new HelixConfigScopeBuilder(ConfigScopeProperty.RESOURCE).forCluster(manager.getClusterName()).forResource("NextDB").build();
+  accessor.set(scope,HelixTaskExecutor.MAX_THREADS,"" + 12);
+  _setupTool.addResourceToCluster(CLUSTER_NAME,"NextDB",64,STATE_MODEL);
+  _setupTool.rebalanceStorageCluster(CLUSTER_NAME,"NextDB",3);
+  boolean result=ClusterStateVerifier.verifyByPolling(new ClusterStateVerifier.BestPossAndExtViewZkVerifier(_zkaddr,CLUSTER_NAME));
+  Assert.assertTrue(result);
+  long taskcount=0;
+  for (int i=0; i < NODE_NR; i++) {
+    DefaultMessagingService svc=(DefaultMessagingService)(_participants[i].getMessagingService());
+    HelixTaskExecutor helixExecutor=svc.getExecutor();
+    ThreadPoolExecutor executor=(ThreadPoolExecutor)(helixExecutor._executorMap.get(MessageType.STATE_TRANSITION + "." + "NextDB"));
+    Assert.assertEquals(12,executor.getMaximumPoolSize());
+    taskcount+=executor.getCompletedTaskCount();
+    Assert.assertTrue(executor.getCompletedTaskCount() > 0);
+  }
+  Assert.assertEquals(taskcount,64 * 4);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.monitoring.TestClusterStatusMonitorLifecycle </h4><pre class="type-6 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testClusterStatusMonitorLifecycle() throws InstanceNotFoundException, MalformedObjectNameException, NullPointerException, IOException, InterruptedException {
+  ParticipantMonitorListener listener=new ParticipantMonitorListener("ClusterStatus");
+  int nMbeansUnregistered=listener._nMbeansUnregistered;
+  int nMbeansRegistered=listener._nMbeansRegistered;
+  _participants[0].disconnect();
+  Thread.sleep(1000);
+  Assert.assertEquals(nMbeansUnregistered,listener._nMbeansUnregistered - 2);
+  Assert.assertEquals(nMbeansRegistered,listener._nMbeansRegistered);
+  HelixDataAccessor accessor=_participants[n - 1].getHelixDataAccessor();
+  String firstControllerName=accessor.getProperty(accessor.keyBuilder().controllerLeader()).getId();
+  MockMultiClusterController firstController=null;
+  for (  MockMultiClusterController controller : _controllers) {
+    if (controller.getInstanceName().equals(firstControllerName)) {
+      firstController=controller;
+    }
+  }
+  firstController.disconnect();
+  Thread.sleep(1000);
+  Assert.assertEquals(nMbeansUnregistered,listener._nMbeansUnregistered - 16);
+  Assert.assertEquals(nMbeansRegistered,listener._nMbeansRegistered - 12);
+  String instanceName="localhost0_" + (12918 + 0);
+  _participants[0]=new MockParticipant(_zkaddr,_firstClusterName,instanceName);
+  _participants[0].syncStart();
+  Thread.sleep(1000);
+  Assert.assertEquals(nMbeansUnregistered,listener._nMbeansUnregistered - 16);
+  Assert.assertEquals(nMbeansRegistered,listener._nMbeansRegistered - 14);
+  IdealState idealState=accessor.getProperty(accessor.keyBuilder().idealStates("TestDB00"));
+  _setupTool.addResourceToCluster(_firstClusterName,"TestDB1",idealState.getNumPartitions(),"MasterSlave");
+  _setupTool.rebalanceResource(_firstClusterName,"TestDB1",Integer.parseInt(idealState.getReplicas()));
+  Thread.sleep(1000);
+  Assert.assertEquals(nMbeansUnregistered,listener._nMbeansUnregistered - 16);
+  Assert.assertEquals(nMbeansRegistered,listener._nMbeansRegistered - 20);
+  _setupTool.dropResourceFromCluster(_firstClusterName,"TestDB1");
+  Thread.sleep(1000);
+  Assert.assertEquals(nMbeansUnregistered,listener._nMbeansUnregistered - 22);
+  Assert.assertEquals(nMbeansRegistered,listener._nMbeansRegistered - 20);
+}
+
+</code></pre>
+
+<br>
+<h4 style="margin:0px">Class: org.apache.helix.webapp.TestHelixAdminScenariosRest </h4><pre class="type-7 type-1 type-8 type-12 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies values related to public fields.
+"></span><br>
+@Test public void testGetInstances() throws IOException {
+  final String clusterName="TestTagAwareness_testGetResources";
+  final String[] TAGS={"tag1","tag2"};
+  final String URL_BASE="http://localhost:" + ADMIN_PORT + "/clusters/"+ clusterName+ "/instances";
+  _setupTool.addCluster(clusterName,true);
+  HelixAdmin admin=_setupTool.getClusterManagementTool();
+  InstanceConfig instance1=new InstanceConfig("localhost_1");
+  instance1.addTag(TAGS[0]);
+  admin.addInstance(clusterName,instance1);
+  InstanceConfig instance2=new InstanceConfig("localhost_2");
+  instance2.addTag(TAGS[1]);
+  admin.addInstance(clusterName,instance2);
+  InstanceConfig instance3=new InstanceConfig("localhost_3");
+  instance3.addTag(TAGS[0]);
+  instance3.addTag(TAGS[1]);
+  admin.addInstance(clusterName,instance3);
+  InstanceConfig instance4=new InstanceConfig("localhost_4");
+  admin.addInstance(clusterName,instance4);
+  Reference resourceRef=new Reference(URL_BASE);
+  Request request=new Request(Method.GET,resourceRef);
+  Response response=_gClient.handle(request);
+  ListInstancesWrapper responseWrapper=ClusterRepresentationUtil.JsonToObject(ListInstancesWrapper.class,response.getEntityAsText());
+  Map<String,List<String>> tagInfo=responseWrapper.tagInfo;
+  Assert.assertTrue(tagInfo.containsKey(TAGS[0]));
+  Assert.assertTrue(tagInfo.containsKey(TAGS[1]));
+  Assert.assertTrue(tagInfo.get(TAGS[0]).contains("localhost_1"));
+  Assert.assertFalse(tagInfo.get(TAGS[0]).contains("localhost_2"));
+  Assert.assertTrue(tagInfo.get(TAGS[0]).contains("localhost_3"));
+  Assert.assertFalse(tagInfo.get(TAGS[0]).contains("localhost_4"));
+  Assert.assertFalse(tagInfo.get(TAGS[1]).contains("localhost_1"));
+  Assert.assertTrue(tagInfo.get(TAGS[1]).contains("localhost_2"));
+  Assert.assertTrue(tagInfo.get(TAGS[1]).contains("localhost_3"));
+  Assert.assertFalse(tagInfo.get(TAGS[1]).contains("localhost_4"));
+}
+
+</code></pre>
+
+<br>
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

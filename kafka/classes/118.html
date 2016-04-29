@@ -1,0 +1,268 @@
+<h3 style="margin:0px">Class: org.apache.kafka.streams.processor.internals.StreamThreadTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="12"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('12')" data-toggle="tooltip" title="Verifies values related to public fields."><kbd id="tag-12"class="label-info"style="display: inline-block;font-size:7pt" >PublicFieldVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-8 type-9 type-7 type-3 type-12 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@SuppressWarnings("unchecked") @Test public void testPartitionAssignmentChange() throws Exception {
+  StreamsConfig config=new StreamsConfig(configProps());
+  MockProducer<byte[],byte[]> producer=new MockProducer<>(true,serializer,serializer);
+  MockConsumer<byte[],byte[]> consumer=new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+  final MockConsumer<byte[],byte[]> mockRestoreConsumer=new MockConsumer<>(OffsetResetStrategy.LATEST);
+  TopologyBuilder builder=new TopologyBuilder();
+  builder.addSource("source1","topic1");
+  builder.addSource("source2","topic2");
+  builder.addSource("source3","topic3");
+  builder.addProcessor("processor",new MockProcessorSupplier(),"source2","source3");
+  StreamThread thread=new StreamThread(builder,config,producer,consumer,mockRestoreConsumer,jobId,clientId,processId,new Metrics(),new SystemTime()){
+    @Override protected StreamTask createStreamTask(    TaskId id,    Collection<TopicPartition> partitionsForTask){
+      ProcessorTopology topology=builder.build(id.topicGroupId);
+      return new TestStreamTask(id,jobId,partitionsForTask,topology,consumer,producer,mockRestoreConsumer,config);
+    }
+  }
+;
+  initPartitionGrouper(config,thread);
+  ConsumerRebalanceListener rebalanceListener=thread.rebalanceListener;
+  assertTrue(thread.tasks().isEmpty());
+  List<TopicPartition> revokedPartitions;
+  List<TopicPartition> assignedPartitions;
+  Set<TopicPartition> expectedGroup1;
+  Set<TopicPartition> expectedGroup2;
+  revokedPartitions=Collections.emptyList();
+  assignedPartitions=Collections.singletonList(t1p1);
+  expectedGroup1=new HashSet<>(Arrays.asList(t1p1));
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().containsKey(task1));
+  assertEquals(expectedGroup1,thread.tasks().get(task1).partitions());
+  assertEquals(1,thread.tasks().size());
+  revokedPartitions=assignedPartitions;
+  assignedPartitions=Collections.singletonList(t1p2);
+  expectedGroup2=new HashSet<>(Arrays.asList(t1p2));
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().containsKey(task2));
+  assertEquals(expectedGroup2,thread.tasks().get(task2).partitions());
+  assertEquals(1,thread.tasks().size());
+  revokedPartitions=assignedPartitions;
+  assignedPartitions=Arrays.asList(t1p1,t1p2);
+  expectedGroup1=new HashSet<>(Collections.singleton(t1p1));
+  expectedGroup2=new HashSet<>(Collections.singleton(t1p2));
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().containsKey(task1));
+  assertTrue(thread.tasks().containsKey(task2));
+  assertEquals(expectedGroup1,thread.tasks().get(task1).partitions());
+  assertEquals(expectedGroup2,thread.tasks().get(task2).partitions());
+  assertEquals(2,thread.tasks().size());
+  revokedPartitions=assignedPartitions;
+  assignedPartitions=Arrays.asList(t2p1,t2p2,t3p1,t3p2);
+  expectedGroup1=new HashSet<>(Arrays.asList(t2p1,t3p1));
+  expectedGroup2=new HashSet<>(Arrays.asList(t2p2,t3p2));
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().containsKey(task4));
+  assertTrue(thread.tasks().containsKey(task5));
+  assertEquals(expectedGroup1,thread.tasks().get(task4).partitions());
+  assertEquals(expectedGroup2,thread.tasks().get(task5).partitions());
+  assertEquals(2,thread.tasks().size());
+  revokedPartitions=assignedPartitions;
+  assignedPartitions=Arrays.asList(t1p1,t2p1,t3p1);
+  expectedGroup1=new HashSet<>(Arrays.asList(t1p1));
+  expectedGroup2=new HashSet<>(Arrays.asList(t2p1,t3p1));
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().containsKey(task1));
+  assertTrue(thread.tasks().containsKey(task4));
+  assertEquals(expectedGroup1,thread.tasks().get(task1).partitions());
+  assertEquals(expectedGroup2,thread.tasks().get(task4).partitions());
+  assertEquals(2,thread.tasks().size());
+  revokedPartitions=assignedPartitions;
+  assignedPartitions=Collections.emptyList();
+  rebalanceListener.onPartitionsRevoked(revokedPartitions);
+  rebalanceListener.onPartitionsAssigned(assignedPartitions);
+  assertTrue(thread.tasks().isEmpty());
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-3 type-12 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaybeCommit() throws Exception {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final long commitInterval=1000L;
+    Properties props=configProps();
+    props.setProperty(StreamsConfig.STATE_DIR_CONFIG,baseDir.getCanonicalPath());
+    props.setProperty(StreamsConfig.COMMIT_INTERVAL_MS_CONFIG,Long.toString(commitInterval));
+    StreamsConfig config=new StreamsConfig(props);
+    MockProducer<byte[],byte[]> producer=new MockProducer<>(true,serializer,serializer);
+    MockConsumer<byte[],byte[]> consumer=new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+    final MockConsumer<byte[],byte[]> mockRestoreConsumer=new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+    MockTime mockTime=new MockTime();
+    TopologyBuilder builder=new TopologyBuilder();
+    builder.addSource("source1","topic1");
+    StreamThread thread=new StreamThread(builder,config,producer,consumer,mockRestoreConsumer,jobId,clientId,processId,new Metrics(),mockTime){
+      @Override public void maybeCommit(){
+        super.maybeCommit();
+      }
+      @Override protected StreamTask createStreamTask(      TaskId id,      Collection<TopicPartition> partitionsForTask){
+        ProcessorTopology topology=builder.build(id.topicGroupId);
+        return new TestStreamTask(id,jobId,partitionsForTask,topology,consumer,producer,mockRestoreConsumer,config);
+      }
+    }
+;
+    initPartitionGrouper(config,thread);
+    ConsumerRebalanceListener rebalanceListener=thread.rebalanceListener;
+    List<TopicPartition> revokedPartitions;
+    List<TopicPartition> assignedPartitions;
+    revokedPartitions=Collections.emptyList();
+    assignedPartitions=Arrays.asList(t1p1,t1p2);
+    rebalanceListener.onPartitionsRevoked(revokedPartitions);
+    rebalanceListener.onPartitionsAssigned(assignedPartitions);
+    assertEquals(2,thread.tasks().size());
+    mockTime.sleep(commitInterval - 10L);
+    thread.maybeCommit();
+    for (    StreamTask task : thread.tasks().values()) {
+      assertFalse(((TestStreamTask)task).committed);
+    }
+    mockTime.sleep(11L);
+    thread.maybeCommit();
+    for (    StreamTask task : thread.tasks().values()) {
+      assertTrue(((TestStreamTask)task).committed);
+      ((TestStreamTask)task).committed=false;
+    }
+    mockTime.sleep(commitInterval - 10L);
+    thread.maybeCommit();
+    for (    StreamTask task : thread.tasks().values()) {
+      assertFalse(((TestStreamTask)task).committed);
+    }
+    mockTime.sleep(11L);
+    thread.maybeCommit();
+    for (    StreamTask task : thread.tasks().values()) {
+      assertTrue(((TestStreamTask)task).committed);
+      ((TestStreamTask)task).committed=false;
+    }
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-3 type-12 type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values related to public fields.">PublicFieldVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Verifies values related to public fields.
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void testMaybeClean() throws Exception {
+  File baseDir=Files.createTempDirectory("test").toFile();
+  try {
+    final long cleanupDelay=1000L;
+    Properties props=configProps();
+    props.setProperty(StreamsConfig.STATE_CLEANUP_DELAY_MS_CONFIG,Long.toString(cleanupDelay));
+    props.setProperty(StreamsConfig.STATE_DIR_CONFIG,baseDir.getCanonicalPath());
+    StreamsConfig config=new StreamsConfig(props);
+    File jobDir=new File(baseDir,jobId);
+    jobDir.mkdir();
+    File stateDir1=new File(jobDir,task1.toString());
+    File stateDir2=new File(jobDir,task2.toString());
+    File stateDir3=new File(jobDir,task3.toString());
+    File extraDir=new File(jobDir,"X");
+    stateDir1.mkdir();
+    stateDir2.mkdir();
+    stateDir3.mkdir();
+    extraDir.mkdir();
+    MockProducer<byte[],byte[]> producer=new MockProducer<>(true,serializer,serializer);
+    MockConsumer<byte[],byte[]> consumer=new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+    final MockConsumer<byte[],byte[]> mockRestoreConsumer=new MockConsumer<>(OffsetResetStrategy.LATEST);
+    MockTime mockTime=new MockTime();
+    TopologyBuilder builder=new TopologyBuilder();
+    builder.addSource("source1","topic1");
+    StreamThread thread=new StreamThread(builder,config,producer,consumer,mockRestoreConsumer,jobId,clientId,processId,new Metrics(),mockTime){
+      @Override public void maybeClean(){
+        super.maybeClean();
+      }
+      @Override protected StreamTask createStreamTask(      TaskId id,      Collection<TopicPartition> partitionsForTask){
+        ProcessorTopology topology=builder.build(id.topicGroupId);
+        return new TestStreamTask(id,jobId,partitionsForTask,topology,consumer,producer,mockRestoreConsumer,config);
+      }
+    }
+;
+    initPartitionGrouper(config,thread);
+    ConsumerRebalanceListener rebalanceListener=thread.rebalanceListener;
+    assertTrue(thread.tasks().isEmpty());
+    mockTime.sleep(cleanupDelay);
+    assertTrue(stateDir1.exists());
+    assertTrue(stateDir2.exists());
+    assertTrue(stateDir3.exists());
+    assertTrue(extraDir.exists());
+    List<TopicPartition> revokedPartitions;
+    List<TopicPartition> assignedPartitions;
+    Map<Integer,StreamTask> prevTasks;
+    revokedPartitions=Collections.emptyList();
+    assignedPartitions=Arrays.asList(t1p1,t1p2);
+    prevTasks=new HashMap(thread.tasks());
+    rebalanceListener.onPartitionsRevoked(revokedPartitions);
+    rebalanceListener.onPartitionsAssigned(assignedPartitions);
+    assertTrue(prevTasks.isEmpty());
+    assertEquals(2,thread.tasks().size());
+    mockTime.sleep(cleanupDelay - 10L);
+    thread.maybeClean();
+    assertTrue(stateDir1.exists());
+    assertTrue(stateDir2.exists());
+    assertTrue(stateDir3.exists());
+    assertTrue(extraDir.exists());
+    mockTime.sleep(11L);
+    thread.maybeClean();
+    assertTrue(stateDir1.exists());
+    assertTrue(stateDir2.exists());
+    assertFalse(stateDir3.exists());
+    assertTrue(extraDir.exists());
+    revokedPartitions=assignedPartitions;
+    assignedPartitions=Collections.emptyList();
+    prevTasks=new HashMap(thread.tasks());
+    rebalanceListener.onPartitionsRevoked(revokedPartitions);
+    rebalanceListener.onPartitionsAssigned(assignedPartitions);
+    assertEquals(2,prevTasks.size());
+    for (    StreamTask task : prevTasks.values()) {
+      assertTrue(((TestStreamTask)task).committed);
+      ((TestStreamTask)task).committed=false;
+    }
+    assertTrue(thread.tasks().isEmpty());
+    mockTime.sleep(cleanupDelay - 10L);
+    thread.maybeClean();
+    assertTrue(stateDir1.exists());
+    assertTrue(stateDir2.exists());
+    assertFalse(stateDir3.exists());
+    assertTrue(extraDir.exists());
+    mockTime.sleep(11L);
+    thread.maybeClean();
+    assertFalse(stateDir1.exists());
+    assertFalse(stateDir2.exists());
+    assertFalse(stateDir3.exists());
+    assertTrue(extraDir.exists());
+  }
+  finally {
+    Utils.delete(baseDir);
+  }
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

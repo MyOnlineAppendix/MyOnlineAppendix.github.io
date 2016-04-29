@@ -1,0 +1,264 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hbase.procedure.TestProcedureMember (9 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(8)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Fail correctly if coordinator aborts the procedure.  The subprocedure will not interrupt a
+ * running {@link Subprocedure#prepare} -- prepare needs to finish first, and the the abort
+ * is checked.  Thus, the {@link Subprocedure#prepare} should succeed but later get rolled back
+ * via {@link Subprocedure#cleanup}.
+ */
+@Test(timeout=60000) public void testCoordinatorAbort() throws Exception {
+  buildCohortMemberPair();
+  final TimeoutException oate=new TimeoutException("bogus timeout",1,2,0);
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      spySub.cancel("bogus message",oate);
+      Thread.sleep(WAKE_FREQUENCY);
+      return null;
+    }
+  }
+).when(spySub).waitForReachedGlobalBarrier();
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  member.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spySub);
+  order.verify(spySub).acquireBarrier();
+  order.verify(mockMemberComms).sendMemberAcquired(eq(spySub));
+  order.verify(spySub,never()).insideBarrier();
+  order.verify(mockMemberComms,never()).sendMemberCompleted(eq(spySub),eq(data));
+  order.verify(spySub).cancel(anyString(),any(Exception.class));
+  order.verify(spySub).cleanup(any(Exception.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test that the cohort member correctly doesn't attempt to start a task when the builder cannot
+ * correctly build a new task for the requested operation
+ * @throws Exception on failure
+ */
+@Test public void testNoTaskToBeRunFromRequest() throws Exception {
+  ThreadPoolExecutor pool=mock(ThreadPoolExecutor.class);
+  when(mockBuilder.buildSubprocedure(op,data)).thenReturn(null).thenThrow(new IllegalStateException("Wrong state!"),new IllegalArgumentException("can't understand the args"));
+  member=new ProcedureMember(mockMemberComms,pool,mockBuilder);
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  try {
+    Subprocedure subproc2=member.createSubprocedure(op,data);
+    member.submitSubprocedure(subproc2);
+  }
+ catch (  IllegalStateException ise) {
+  }
+  try {
+    Subprocedure subproc3=member.createSubprocedure(op,data);
+    member.submitSubprocedure(subproc3);
+  }
+ catch (  IllegalArgumentException iae) {
+  }
+  verifyZeroInteractions(pool);
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Handle failures if a member's commit phase fails.
+ * NOTE: This is the core difference that makes this different from traditional 2PC.  In true
+ * 2PC the transaction is committed just before the coordinator sends commit messages to the
+ * member.  Members are then responsible for reading its TX log.  This implementation actually
+ * rolls back, and thus breaks the normal TX guarantees.
+ */
+@Test(timeout=60000) public void testMemberCommitException() throws Exception {
+  buildCohortMemberPair();
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      throw new IOException("Forced IOException in memeber prepare");
+    }
+  }
+).when(spySub).insideBarrier();
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  member.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spySub);
+  order.verify(spySub).acquireBarrier();
+  order.verify(mockMemberComms).sendMemberAcquired(eq(spySub));
+  order.verify(spySub).insideBarrier();
+  order.verify(mockMemberComms,never()).sendMemberCompleted(eq(spySub),eq(data));
+  order.verify(spySub).cancel(anyString(),any(Exception.class));
+  order.verify(spySub).cleanup(any(Exception.class));
+}
+
+</code></pre>
+
+<pre class="type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+/** 
+ * Reset all the mock objects
+ */
+@After public void resetTest(){
+  reset(mockListener,mockBuilder,mockMemberComms);
+  if (member != null)   try {
+    member.close();
+  }
+ catch (  IOException e) {
+    e.printStackTrace();
+  }
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Test the normal sub procedure execution case.
+ */
+@Test(timeout=500) public void testSimpleRun() throws Exception {
+  member=buildCohortMember();
+  EmptySubprocedure subproc=new EmptySubprocedure(member,mockListener);
+  EmptySubprocedure spy=spy(subproc);
+  when(mockBuilder.buildSubprocedure(op,data)).thenReturn(spy);
+  addCommitAnswer();
+  Subprocedure subproc1=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc1);
+  subproc.waitForLocallyCompleted();
+  InOrder order=inOrder(mockMemberComms,spy);
+  order.verify(spy).acquireBarrier();
+  order.verify(mockMemberComms).sendMemberAcquired(eq(spy));
+  order.verify(spy).insideBarrier();
+  order.verify(mockMemberComms).sendMemberCompleted(eq(spy),eq(data));
+  order.verify(mockMemberComms,never()).sendMemberAborted(eq(spy),any(ForeignException.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Handle Failures if a member's commit phase succeeds but notification to coordinator fails
+ * NOTE: This is the core difference that makes this different from traditional 2PC.  In true
+ * 2PC the transaction is committed just before the coordinator sends commit messages to the
+ * member.  Members are then responsible for reading its TX log.  This implementation actually
+ * rolls back, and thus breaks the normal TX guarantees.
+ */
+@Test(timeout=60000) public void testMemberCommitCommsFailure() throws Exception {
+  buildCohortMemberPair();
+  final TimeoutException oate=new TimeoutException("bogus timeout",1,2,0);
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      spySub.cancel("commit comms fail",oate);
+      Thread.sleep(WAKE_FREQUENCY);
+      return null;
+    }
+  }
+).when(mockMemberComms).sendMemberCompleted(any(Subprocedure.class),eq(data));
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  member.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spySub);
+  order.verify(spySub).acquireBarrier();
+  order.verify(mockMemberComms).sendMemberAcquired(eq(spySub));
+  order.verify(spySub).insideBarrier();
+  order.verify(mockMemberComms).sendMemberCompleted(eq(spySub),eq(data));
+  order.verify(spySub).cancel(anyString(),any(Exception.class));
+  order.verify(spySub).cleanup(any(Exception.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Make sure we call cleanup etc, when we have an exception during prepare.
+ */
+@Test(timeout=60000) public void testSendMemberAcquiredCommsFailure() throws Exception {
+  buildCohortMemberPair();
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      throw new IOException("Forced IOException in memeber prepare");
+    }
+  }
+).when(mockMemberComms).sendMemberAcquired(any(Subprocedure.class));
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  member.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spySub);
+  order.verify(spySub).acquireBarrier();
+  order.verify(mockMemberComms).sendMemberAcquired(eq(spySub));
+  order.verify(spySub,never()).insideBarrier();
+  order.verify(mockMemberComms,never()).sendMemberCompleted(eq(spySub),eq(data));
+  order.verify(spySub).cancel(anyString(),any(Exception.class));
+  order.verify(spySub).cleanup(any(Exception.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Make sure we call cleanup etc, when we have an exception during{@link Subprocedure#acquireBarrier()}.
+ */
+@Test(timeout=60000) public void testMemberPrepareException() throws Exception {
+  buildCohortMemberPair();
+  doAnswer(new Answer<Void>(){
+    @Override public Void answer(    InvocationOnMock invocation) throws Throwable {
+      throw new IOException("Forced IOException in member acquireBarrier");
+    }
+  }
+).when(spySub).acquireBarrier();
+  Subprocedure subproc=member.createSubprocedure(op,data);
+  member.submitSubprocedure(subproc);
+  member.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spySub);
+  order.verify(spySub).acquireBarrier();
+  order.verify(mockMemberComms,never()).sendMemberAcquired(eq(spySub));
+  order.verify(spySub,never()).insideBarrier();
+  order.verify(mockMemberComms,never()).sendMemberCompleted(eq(spySub),eq(data));
+  order.verify(spySub).cancel(anyString(),any(Exception.class));
+  order.verify(spySub).cleanup(any(Exception.class));
+}
+
+</code></pre>
+
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Fail correctly on getting an external error while waiting for the prepared latch
+ * @throws Exception on failure
+ */
+@Test(timeout=60000) public void testPropagateConnectionErrorBackToManager() throws Exception {
+  member=buildCohortMember();
+  ProcedureMember memberSpy=spy(member);
+  final ForeignExceptionDispatcher dispatcher=new ForeignExceptionDispatcher();
+  ForeignExceptionDispatcher dispSpy=spy(dispatcher);
+  Subprocedure commit=new EmptySubprocedure(member,dispatcher);
+  Subprocedure spy=spy(commit);
+  when(mockBuilder.buildSubprocedure(op,data)).thenReturn(spy);
+  doThrow(new ForeignException("SRC","prepare exception")).when(spy).acquireBarrier();
+  doThrow(new IOException("Controller is down!")).when(mockMemberComms).sendMemberAborted(eq(spy),any(ForeignException.class));
+  Subprocedure subproc=memberSpy.createSubprocedure(op,data);
+  memberSpy.submitSubprocedure(subproc);
+  memberSpy.closeAndWait(TIMEOUT);
+  InOrder order=inOrder(mockMemberComms,spy,dispSpy);
+  order.verify(spy).acquireBarrier();
+  order.verify(mockMemberComms,never()).sendMemberAcquired(spy);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

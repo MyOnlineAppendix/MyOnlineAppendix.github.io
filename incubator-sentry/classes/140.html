@@ -1,0 +1,80 @@
+<h3 style="margin:0px">Class: org.apache.sentry.tests.e2e.hive.TestEndToEnd (2 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Steps:
+ * 1. admin create a new experimental database
+ * 2. admin create a new production database, create table, load data
+ * 3. admin grant privilege all@'experimental database' to usergroup1
+ * 4. user create table, load data in experimental DB
+ * 5. user create view based on table in experimental DB
+ * 6. admin create table (same name) in production DB
+ * 7. admin grant read@productionDB.table to group
+ * admin grant select@productionDB.table to group
+ * 8. user load data from experimental table to production table
+ */
+@Test public void testEndToEnd1() throws Exception {
+  policyFile.setUserGroupMapping(StaticUserGroup.getStaticMapping());
+  writePolicyFile(policyFile);
+  String tableName1="tb_1";
+  String tableName2="tb_2";
+  String viewName1="view_1";
+  Connection connection=context.createConnection(ADMIN1);
+  Statement statement=context.createStatement(connection);
+  statement.execute("DROP DATABASE IF EXISTS " + DB1 + " CASCADE");
+  statement.execute("CREATE DATABASE " + DB1);
+  statement.execute("DROP DATABASE IF EXISTS " + DB2 + " CASCADE");
+  statement.execute("CREATE DATABASE " + DB2);
+  statement.execute("USE " + DB2);
+  statement.execute("DROP TABLE IF EXISTS " + DB2 + "."+ tableName2);
+  statement.execute("create table " + DB2 + "."+ tableName2+ " (under_col int comment 'the under column', value string)");
+  statement.execute("load data local inpath '" + dataFile.getPath() + "' into table "+ tableName2);
+  statement.close();
+  connection.close();
+  policyFile.addRolesToGroup(USERGROUP1,"all_db1","data_uri","select_tb1","insert_tb1").addPermissionsToRole("all_db1","server=server1->db=" + DB1).addPermissionsToRole("select_tb1","server=server1->db=" + DB2 + "->table=tb_1->action=select").addPermissionsToRole("insert_tb2","server=server1->db=" + DB2 + "->table=tb_2->action=insert").addPermissionsToRole("insert_tb1","server=server1->db=" + DB2 + "->table=tb_2->action=insert").addPermissionsToRole("data_uri","server=server1->uri=file://" + dataDir.getPath());
+  writePolicyFile(policyFile);
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB1);
+  statement.execute("DROP TABLE IF EXISTS " + DB1 + "."+ tableName1);
+  statement.execute("create table " + DB1 + "."+ tableName1+ " (under_col int comment 'the under column', value string)");
+  statement.execute("load data local inpath '" + dataFile.getPath() + "' into table "+ tableName1);
+  statement.execute("CREATE VIEW " + viewName1 + " (value) AS SELECT value from "+ tableName1+ " LIMIT 10");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(ADMIN1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB2);
+  statement.execute("DROP TABLE IF EXISTS " + DB1 + "."+ tableName1);
+  statement.execute("create table " + DB1 + "."+ tableName1+ " (under_col int comment 'the under column', value string)");
+  statement.close();
+  connection.close();
+  connection=context.createConnection(USER1_1);
+  statement=context.createStatement(connection);
+  statement.execute("USE " + DB2);
+  statement.execute("INSERT OVERWRITE TABLE " + DB2 + "."+ tableName2+ " SELECT * FROM "+ DB1+ "."+ tableName1);
+  statement.close();
+  connection.close();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  dataFile=new File(dataDir,SINGLE_TYPE_DATA_FILE_NAME);
+  FileOutputStream to=new FileOutputStream(dataFile);
+  Resources.copy(Resources.getResource(SINGLE_TYPE_DATA_FILE_NAME),to);
+  to.close();
+  policyFile=PolicyFile.setAdminOnServer1(ADMINGROUP);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

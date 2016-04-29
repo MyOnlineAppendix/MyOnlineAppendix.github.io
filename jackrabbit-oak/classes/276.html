@@ -1,0 +1,95 @@
+<h3 style="margin:0px">Class: org.apache.jackrabbit.oak.plugins.document.VersionGCWithSplitTest (3 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-1 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  store.dispose();
+  Revision.resetClockToDefault();
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws InterruptedException {
+  final DocumentStore docStore=fixture.createDocumentStore();
+  DocumentStore testStore=new TestStore(docStore);
+  clock=new Clock.Virtual();
+  store=new DocumentMK.Builder().clock(clock).setDocumentStore(testStore).setAsyncDelay(0).getNodeStore();
+  gc=store.getVersionGarbageCollector();
+  clock.waitUntil(Revision.getCurrentTimestamp());
+}
+
+</code></pre>
+
+<pre class="type-7 type-6 type-4 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test public void gcWithConcurrentSplit() throws Exception {
+  Revision.setClock(clock);
+  NodeBuilder builder=store.getRoot().builder();
+  builder.child("test").setProperty("prop",-1);
+  merge(store,builder);
+  final String id=Utils.getIdFromPath("/test");
+  DocumentStore docStore=store.getDocumentStore();
+  int count=0;
+  while (docStore.find(NODES,id).getPreviousRanges().size() < PREV_SPLIT_FACTOR) {
+    builder=store.getRoot().builder();
+    builder.child("test").setProperty("prop",count);
+    merge(store,builder);
+    if (count++ % NUM_REVS_THRESHOLD == 0) {
+      store.runBackgroundOperations();
+    }
+  }
+  clock.waitUntil(Revision.getCurrentTimestamp() + HOURS.toMillis(1) + 2 * SECONDS.toMillis(MODIFIED_IN_SECS_RESOLUTION));
+  final AtomicReference<VersionGarbageCollector.VersionGCStats> stats=new AtomicReference<VersionGarbageCollector.VersionGCStats>();
+  Thread t=new Thread(new Runnable(){
+    @Override public void run(){
+      try {
+        stats.set(gc.gc(1,HOURS));
+      }
+ catch (      IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
+  }
+);
+  Semaphore gcLock=new Semaphore(0);
+  updateLocks.put(t,gcLock);
+  t.start();
+  while (!gcLock.hasQueuedThreads()) {
+    Thread.sleep(1);
+  }
+  while (docStore.find(NODES,id).getPreviousRanges().size() >= PREV_SPLIT_FACTOR) {
+    builder=store.getRoot().builder();
+    builder.child("test").setProperty("prop",count);
+    merge(store,builder);
+    if (count++ % NUM_REVS_THRESHOLD == 0) {
+      store.runBackgroundOperations();
+    }
+  }
+  gcLock.release();
+  t.join();
+  assertEquals(10,stats.get().splitDocGCCount);
+  NodeDocument doc=docStore.find(NODES,id);
+  assertEquals(1,doc.getStalePrev().size());
+  store.addSplitCandidate(id);
+  store.runBackgroundOperations();
+  doc=docStore.find(NODES,id);
+  assertTrue(doc.getStalePrev().isEmpty());
+  Map<Revision,String> valueMap=doc.getValueMap("prop");
+  assertEquals(NUM_REVS_THRESHOLD + 1,valueMap.size());
+  assertEquals(NUM_REVS_THRESHOLD + 1,size(valueMap.entrySet()));
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

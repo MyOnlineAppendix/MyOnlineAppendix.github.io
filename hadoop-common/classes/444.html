@@ -1,0 +1,312 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.datanode.TestFsDatasetCache (10 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(4)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(2)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=600000) public void testFilesExceedMaxLockedMemory() throws Exception {
+  LOG.info("beginning testFilesExceedMaxLockedMemory");
+  final int numFiles=5;
+  final long fileSize=CACHE_CAPACITY / (numFiles - 1);
+  final Path[] testFiles=new Path[numFiles];
+  final HdfsBlockLocation[][] fileLocs=new HdfsBlockLocation[numFiles][];
+  final long[] fileSizes=new long[numFiles];
+  for (int i=0; i < numFiles; i++) {
+    testFiles[i]=new Path("/testFilesExceedMaxLockedMemory-" + i);
+    DFSTestUtil.createFile(fs,testFiles[i],fileSize,(short)1,0xDFAl);
+    fileLocs[i]=(HdfsBlockLocation[])fs.getFileBlockLocations(testFiles[i],0,fileSize);
+    long[] sizes=getBlockSizes(fileLocs[i]);
+    for (int j=0; j < sizes.length; j++) {
+      fileSizes[i]+=sizes[j];
+    }
+  }
+  long total=0;
+  DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+  for (int i=0; i < numFiles - 1; i++) {
+    setHeartbeatResponse(cacheBlocks(fileLocs[i]));
+    total=DFSTestUtil.verifyExpectedCacheUsage(rounder.round(total + fileSizes[i]),4 * (i + 1),fsd);
+  }
+  final LogVerificationAppender appender=new LogVerificationAppender();
+  final Logger logger=Logger.getRootLogger();
+  logger.addAppender(appender);
+  setHeartbeatResponse(cacheBlocks(fileLocs[numFiles - 1]));
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      int lines=appender.countLinesWithMessage("more bytes in the cache: " + DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY);
+      return lines > 0;
+    }
+  }
+,500,30000);
+  assertTrue("Expected more than 0 failed cache attempts",fsd.getNumBlocksFailedToCache() > 0);
+  int curCachedBlocks=16;
+  for (int i=0; i < numFiles - 1; i++) {
+    setHeartbeatResponse(uncacheBlocks(fileLocs[i]));
+    long uncachedBytes=rounder.round(fileSizes[i]);
+    total-=uncachedBytes;
+    curCachedBlocks-=uncachedBytes / BLOCK_SIZE;
+    DFSTestUtil.verifyExpectedCacheUsage(total,curCachedBlocks,fsd);
+  }
+  LOG.info("finishing testFilesExceedMaxLockedMemory");
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=600000) public void testCacheAndUncacheBlockSimple() throws Exception {
+  testCacheAndUncacheBlock();
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=600000) public void testUncachingBlocksBeforeCachingFinishes() throws Exception {
+  LOG.info("beginning testUncachingBlocksBeforeCachingFinishes");
+  final int NUM_BLOCKS=5;
+  DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+  final Path testFile=new Path("/testCacheBlock");
+  final long testFileLen=BLOCK_SIZE * NUM_BLOCKS;
+  DFSTestUtil.createFile(fs,testFile,testFileLen,(short)1,0xABBAl);
+  HdfsBlockLocation[] locs=(HdfsBlockLocation[])fs.getFileBlockLocations(testFile,0,testFileLen);
+  assertEquals("Unexpected number of blocks",NUM_BLOCKS,locs.length);
+  final long[] blockSizes=getBlockSizes(locs);
+  final long cacheCapacity=fsd.getCacheCapacity();
+  long cacheUsed=fsd.getCacheUsed();
+  long current=0;
+  assertEquals("Unexpected cache capacity",CACHE_CAPACITY,cacheCapacity);
+  assertEquals("Unexpected amount of cache used",current,cacheUsed);
+  NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator(){
+    @Override public void mlock(    String identifier,    ByteBuffer mmap,    long length) throws IOException {
+      LOG.info("An mlock operation is starting on " + identifier);
+      try {
+        Thread.sleep(3000);
+      }
+ catch (      InterruptedException e) {
+        Assert.fail();
+      }
+    }
+  }
+);
+  for (int i=0; i < NUM_BLOCKS; i++) {
+    setHeartbeatResponse(cacheBlock(locs[i]));
+    current=DFSTestUtil.verifyExpectedCacheUsage(current + blockSizes[i],i + 1,fsd);
+  }
+  setHeartbeatResponse(new DatanodeCommand[]{getResponse(locs,DatanodeProtocol.DNA_UNCACHE)});
+  current=DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+  LOG.info("finishing testUncachingBlocksBeforeCachingFinishes");
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testUncacheUnknownBlock() throws Exception {
+  Path fileName=new Path("/testUncacheUnknownBlock");
+  int fileLen=4096;
+  DFSTestUtil.createFile(fs,fileName,fileLen,(short)1,0xFDFD);
+  HdfsBlockLocation[] locs=(HdfsBlockLocation[])fs.getFileBlockLocations(fileName,0,fileLen);
+  setHeartbeatResponse(uncacheBlocks(locs));
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      return fsd.getNumBlocksFailedToUncache() > 0;
+    }
+  }
+,100,10000);
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testReCacheAfterUncache() throws Exception {
+  final int TOTAL_BLOCKS_PER_CACHE=Ints.checkedCast(CACHE_CAPACITY / BLOCK_SIZE);
+  BlockReaderTestUtil.enableHdfsCachingTracing();
+  Assert.assertEquals(0,CACHE_CAPACITY % BLOCK_SIZE);
+  final Path SMALL_FILE=new Path("/smallFile");
+  DFSTestUtil.createFile(fs,SMALL_FILE,BLOCK_SIZE,(short)1,0xcafe);
+  final Path BIG_FILE=new Path("/bigFile");
+  DFSTestUtil.createFile(fs,BIG_FILE,TOTAL_BLOCKS_PER_CACHE * BLOCK_SIZE,(short)1,0xbeef);
+  final DistributedFileSystem dfs=cluster.getFileSystem();
+  dfs.addCachePool(new CachePoolInfo("pool"));
+  final long bigCacheDirectiveId=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool("pool").setPath(BIG_FILE).setReplication((short)1).build());
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      MetricsRecordBuilder dnMetrics=getMetrics(dn.getMetrics().name());
+      long blocksCached=MetricsAsserts.getLongCounter("BlocksCached",dnMetrics);
+      if (blocksCached != TOTAL_BLOCKS_PER_CACHE) {
+        LOG.info("waiting for " + TOTAL_BLOCKS_PER_CACHE + " to "+ "be cached.   Right now only "+ blocksCached+ " blocks are cached.");
+        return false;
+      }
+      LOG.info(TOTAL_BLOCKS_PER_CACHE + " blocks are now cached.");
+      return true;
+    }
+  }
+,1000,30000);
+  final long shortCacheDirectiveId=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool("pool").setPath(SMALL_FILE).setReplication((short)1).build());
+  Thread.sleep(10000);
+  MetricsRecordBuilder dnMetrics=getMetrics(dn.getMetrics().name());
+  Assert.assertEquals(TOTAL_BLOCKS_PER_CACHE,MetricsAsserts.getLongCounter("BlocksCached",dnMetrics));
+  dfs.removeCacheDirective(bigCacheDirectiveId);
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      RemoteIterator<CacheDirectiveEntry> iter;
+      try {
+        iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().build());
+        CacheDirectiveEntry entry;
+        do {
+          entry=iter.next();
+        }
+ while (entry.getInfo().getId() != shortCacheDirectiveId);
+        if (entry.getStats().getFilesCached() != 1) {
+          LOG.info("waiting for directive " + shortCacheDirectiveId + " to be cached.  stats = "+ entry.getStats());
+          return false;
+        }
+        LOG.info("directive " + shortCacheDirectiveId + " has been cached.");
+      }
+ catch (      IOException e) {
+        Assert.fail("unexpected exception" + e.toString());
+      }
+      return true;
+    }
+  }
+,1000,30000);
+  dfs.removeCacheDirective(shortCacheDirectiveId);
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setUp() throws Exception {
+  conf=new HdfsConfiguration();
+  conf.setLong(DFSConfigKeys.DFS_NAMENODE_PATH_BASED_CACHE_REFRESH_INTERVAL_MS,100);
+  conf.setLong(DFSConfigKeys.DFS_CACHEREPORT_INTERVAL_MSEC_KEY,500);
+  conf.setLong(DFSConfigKeys.DFS_BLOCK_SIZE_KEY,BLOCK_SIZE);
+  conf.setLong(DFSConfigKeys.DFS_DATANODE_MAX_LOCKED_MEMORY_KEY,CACHE_CAPACITY);
+  conf.setLong(DFSConfigKeys.DFS_HEARTBEAT_INTERVAL_KEY,1);
+  prevCacheManipulator=NativeIO.POSIX.getCacheManipulator();
+  NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator());
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(1).build();
+  cluster.waitActive();
+  fs=cluster.getFileSystem();
+  nn=cluster.getNameNode();
+  fsImage=nn.getFSImage();
+  dn=cluster.getDataNodes().get(0);
+  fsd=dn.getFSDataset();
+  spyNN=DataNodeTestUtils.spyOnBposToNN(dn,nn);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Run testCacheAndUncacheBlock with some failures injected into the mlock
+ * call.  This tests the ability of the NameNode to resend commands.
+ */
+@Test(timeout=600000) public void testCacheAndUncacheBlockWithRetries() throws Exception {
+  NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator(){
+    private final Set<String> seenIdentifiers=new HashSet<String>();
+    @Override public void mlock(    String identifier,    ByteBuffer mmap,    long length) throws IOException {
+      if (seenIdentifiers.contains(identifier)) {
+        LOG.info("mlocking " + identifier);
+        return;
+      }
+      seenIdentifiers.add(identifier);
+      throw new IOException("injecting IOException during mlock of " + identifier);
+    }
+  }
+);
+  testCacheAndUncacheBlock();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void tearDown() throws Exception {
+  DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+  if (fs != null) {
+    fs.close();
+  }
+  if (cluster != null) {
+    cluster.shutdown();
+  }
+  NativeIO.POSIX.setCacheManipulator(prevCacheManipulator);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testUncacheQuiesces() throws Exception {
+  Path fileName=new Path("/testUncacheQuiesces");
+  int fileLen=4096;
+  DFSTestUtil.createFile(fs,fileName,fileLen,(short)1,0xFDFD);
+  DistributedFileSystem dfs=cluster.getFileSystem();
+  dfs.addCachePool(new CachePoolInfo("pool"));
+  dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool("pool").setPath(fileName).setReplication((short)3).build());
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      MetricsRecordBuilder dnMetrics=getMetrics(dn.getMetrics().name());
+      long blocksCached=MetricsAsserts.getLongCounter("BlocksCached",dnMetrics);
+      return blocksCached > 0;
+    }
+  }
+,1000,30000);
+  dfs.removeCacheDirective(1);
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      MetricsRecordBuilder dnMetrics=getMetrics(dn.getMetrics().name());
+      long blocksUncached=MetricsAsserts.getLongCounter("BlocksUncached",dnMetrics);
+      return blocksUncached > 0;
+    }
+  }
+,1000,30000);
+  Thread.sleep(10000);
+  MetricsRecordBuilder dnMetrics=getMetrics(dn.getMetrics().name());
+  MetricsAsserts.assertCounter("BlocksCached",1l,dnMetrics);
+  MetricsAsserts.assertCounter("BlocksUncached",1l,dnMetrics);
+}
+
+</code></pre>
+
+<pre class="type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=60000) public void testPageRounder() throws Exception {
+  Path fileName=new Path("/testPageRounder");
+  final int smallBlocks=512;
+  assertTrue("Page size should be greater than smallBlocks!",PAGE_SIZE > smallBlocks);
+  final int numBlocks=5;
+  final int fileLen=smallBlocks * numBlocks;
+  FSDataOutputStream out=fs.create(fileName,false,4096,(short)1,smallBlocks);
+  out.write(new byte[fileLen]);
+  out.close();
+  HdfsBlockLocation[] locs=(HdfsBlockLocation[])fs.getFileBlockLocations(fileName,0,fileLen);
+  setHeartbeatResponse(cacheBlocks(locs));
+  DFSTestUtil.verifyExpectedCacheUsage(PAGE_SIZE * numBlocks,numBlocks,fsd);
+  setHeartbeatResponse(uncacheBlocks(locs));
+  DFSTestUtil.verifyExpectedCacheUsage(0,0,fsd);
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>

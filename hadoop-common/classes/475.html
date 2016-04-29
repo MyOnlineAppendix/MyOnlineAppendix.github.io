@@ -1,0 +1,846 @@
+<h3 style="margin:0px">Class: org.apache.hadoop.hdfs.server.namenode.TestCacheDirectives (14 methods) </h3><br><pre style="padding:0"><code class="html"><div id="tags"><button id="7"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('7')" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls"><kbd id="tag-7"class="label-info"style="display: inline-block;font-size:7pt" >InternalCallVerifier&nbsp;(8)</kbd></button>&nbsp;<button id="10"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('10')" data-toggle="tooltip" title="Verifies boolean conditions"><kbd id="tag-10"class="label-info"style="display: inline-block;font-size:7pt" >BooleanVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="6"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('6')" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value "><kbd id="tag-6"class="label-info"style="display: inline-block;font-size:7pt" >EqualityVerifier&nbsp;(7)</kbd></button>&nbsp;<button id="3"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('3')" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes"><kbd id="tag-3"class="label-info"style="display: inline-block;font-size:7pt" >HybridVerifier&nbsp;(6)</kbd></button>&nbsp;<button id="2"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('2')" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure"><kbd id="tag-2"class="label-info"style="display: inline-block;font-size:7pt" >UtilityVerifier&nbsp;(5)</kbd></button>&nbsp;<button id="9"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('9')" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) "><kbd id="tag-9"class="label-info"style="display: inline-block;font-size:7pt" >APIUtilityVerifier&nbsp;(3)</kbd></button>&nbsp;<button id="5"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('5')" data-toggle="tooltip" title="Executes methods or other tests from the same test unit"><kbd id="tag-5"class="label-info"style="display: inline-block;font-size:7pt" >ExecutionTester&nbsp;(3)</kbd></button>&nbsp;<button id="8"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('8')" data-toggle="tooltip" title="Allocates resources before the execution of the test cases"><kbd id="tag-8"class="label-info"style="display: inline-block;font-size:7pt" >TestInitializer&nbsp;(1)</kbd></button>&nbsp;<button id="4"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('4')" data-toggle="tooltip" title="Releases resources used by the test cases"><kbd id="tag-4"class="label-info"style="display: inline-block;font-size:7pt" >TestCleaner&nbsp;(1)</kbd></button>&nbsp;<button id="13"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('13')" data-toggle="tooltip" title="Verifies assertions in iterations"><kbd id="tag-13"class="label-info"style="display: inline-block;font-size:7pt" >IterativeVerifier&nbsp;(1)</kbd></button>&nbsp;<button id="1"style="border-width:0;padding:0;background:#282B2E"  onclick="filter('1')" data-toggle="tooltip" title="Verifies whether objects are null"><kbd id="tag-1"class="label-info"style="display: inline-block;font-size:7pt" >NullVerifier&nbsp;(1)</kbd></button>&nbsp;</div></code></pre><center><button onclick="showBlocks()" style="margin:6px">Update filter <span class="glyphicon glyphicon-refresh" aria-hidden="true"></span> </button></center><br>
+<pre class="type-7 type-6 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies whether objects/variable are equal to an expected value 
+"></span><br>
+@Test(timeout=120000) public void testWaitForCachedReplicas() throws Exception {
+  FileSystemTestHelper helper=new FileSystemTestHelper();
+  GenericTestUtils.waitFor(new Supplier<Boolean>(){
+    @Override public Boolean get(){
+      return ((namenode.getNamesystem().getCacheCapacity() == (NUM_DATANODES * CACHE_CAPACITY)) && (namenode.getNamesystem().getCacheUsed() == 0));
+    }
+  }
+,500,60000);
+  NamenodeProtocols nnRpc=namenode.getRpcServer();
+  DataNode dn0=cluster.getDataNodes().get(0);
+  String bpid=cluster.getNamesystem().getBlockPoolId();
+  LinkedList<Long> bogusBlockIds=new LinkedList<Long>();
+  bogusBlockIds.add(999999L);
+  nnRpc.cacheReport(dn0.getDNRegistrationForBP(bpid),bpid,bogusBlockIds);
+  Path rootDir=helper.getDefaultWorkingDirectory(dfs);
+  final String pool="friendlyPool";
+  nnRpc.addCachePool(new CachePoolInfo("friendlyPool"));
+  final int numFiles=2;
+  final int numBlocksPerFile=2;
+  final List<String> paths=new ArrayList<String>(numFiles);
+  for (int i=0; i < numFiles; i++) {
+    Path p=new Path(rootDir,"testCachePaths-" + i);
+    FileSystemTestHelper.createFile(dfs,p,numBlocksPerFile,(int)BLOCK_SIZE);
+    paths.add(p.toUri().getPath());
+  }
+  waitForCachedBlocks(namenode,0,0,"testWaitForCachedReplicas:0");
+  int expected=0;
+  for (int i=0; i < numFiles; i++) {
+    CacheDirectiveInfo directive=new CacheDirectiveInfo.Builder().setPath(new Path(paths.get(i))).setPool(pool).build();
+    nnRpc.addCacheDirective(directive,EnumSet.noneOf(CacheFlag.class));
+    expected+=numBlocksPerFile;
+    waitForCachedBlocks(namenode,expected,expected,"testWaitForCachedReplicas:1");
+  }
+  DatanodeInfo[] live=dfs.getDataNodeStats(DatanodeReportType.LIVE);
+  assertEquals("Unexpected number of live nodes",NUM_DATANODES,live.length);
+  long totalUsed=0;
+  for (  DatanodeInfo dn : live) {
+    final long cacheCapacity=dn.getCacheCapacity();
+    final long cacheUsed=dn.getCacheUsed();
+    final long cacheRemaining=dn.getCacheRemaining();
+    assertEquals("Unexpected cache capacity",CACHE_CAPACITY,cacheCapacity);
+    assertEquals("Capacity not equal to used + remaining",cacheCapacity,cacheUsed + cacheRemaining);
+    assertEquals("Remaining not equal to capacity - used",cacheCapacity - cacheUsed,cacheRemaining);
+    totalUsed+=cacheUsed;
+  }
+  assertEquals(expected * BLOCK_SIZE,totalUsed);
+  RemoteIterator<CacheDirectiveEntry> entries=new CacheDirectiveIterator(nnRpc,null);
+  for (int i=0; i < numFiles; i++) {
+    CacheDirectiveEntry entry=entries.next();
+    nnRpc.removeCacheDirective(entry.getInfo().getId());
+    expected-=numBlocksPerFile;
+    waitForCachedBlocks(namenode,expected,expected,"testWaitForCachedReplicas:2");
+  }
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=120000) public void testWaitForCachedReplicasInDirectory() throws Exception {
+  final String pool="friendlyPool";
+  final CachePoolInfo poolInfo=new CachePoolInfo(pool);
+  dfs.addCachePool(poolInfo);
+  final List<Path> paths=new LinkedList<Path>();
+  paths.add(new Path("/foo/bar"));
+  paths.add(new Path("/foo/baz"));
+  paths.add(new Path("/foo2/bar2"));
+  paths.add(new Path("/foo2/baz2"));
+  dfs.mkdir(new Path("/foo"),FsPermission.getDirDefault());
+  dfs.mkdir(new Path("/foo2"),FsPermission.getDirDefault());
+  final int numBlocksPerFile=2;
+  for (  Path path : paths) {
+    FileSystemTestHelper.createFile(dfs,path,numBlocksPerFile,(int)BLOCK_SIZE,(short)3,false);
+  }
+  waitForCachedBlocks(namenode,0,0,"testWaitForCachedReplicasInDirectory:0");
+  long id=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path("/foo")).setReplication((short)2).setPool(pool).build());
+  waitForCachedBlocks(namenode,4,8,"testWaitForCachedReplicasInDirectory:1:blocks");
+  waitForCacheDirectiveStats(dfs,4 * numBlocksPerFile * BLOCK_SIZE,4 * numBlocksPerFile * BLOCK_SIZE,2,2,new CacheDirectiveInfo.Builder().setPath(new Path("/foo")).build(),"testWaitForCachedReplicasInDirectory:1:directive");
+  waitForCachePoolStats(dfs,4 * numBlocksPerFile * BLOCK_SIZE,4 * numBlocksPerFile * BLOCK_SIZE,2,2,poolInfo,"testWaitForCachedReplicasInDirectory:1:pool");
+  long id2=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path("/foo/bar")).setReplication((short)4).setPool(pool).build());
+  waitForCachedBlocks(namenode,4,10,"testWaitForCachedReplicasInDirectory:2:blocks");
+  waitForCacheDirectiveStats(dfs,4 * numBlocksPerFile * BLOCK_SIZE,4 * numBlocksPerFile * BLOCK_SIZE,2,2,new CacheDirectiveInfo.Builder().setPath(new Path("/foo")).build(),"testWaitForCachedReplicasInDirectory:2:directive-1");
+  waitForCacheDirectiveStats(dfs,4 * numBlocksPerFile * BLOCK_SIZE,3 * numBlocksPerFile * BLOCK_SIZE,1,0,new CacheDirectiveInfo.Builder().setPath(new Path("/foo/bar")).build(),"testWaitForCachedReplicasInDirectory:2:directive-2");
+  waitForCachePoolStats(dfs,(4 + 4) * numBlocksPerFile * BLOCK_SIZE,(4 + 3) * numBlocksPerFile * BLOCK_SIZE,3,2,poolInfo,"testWaitForCachedReplicasInDirectory:2:pool");
+  dfs.removeCacheDirective(id);
+  dfs.removeCacheDirective(id2);
+  waitForCachedBlocks(namenode,0,0,"testWaitForCachedReplicasInDirectory:3:blocks");
+  waitForCachePoolStats(dfs,0,0,0,0,poolInfo,"testWaitForCachedReplicasInDirectory:3:pool");
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testCreateAndModifyPools() throws Exception {
+  String poolName="pool1";
+  String ownerName="abc";
+  String groupName="123";
+  FsPermission mode=new FsPermission((short)0755);
+  long limit=150;
+  dfs.addCachePool(new CachePoolInfo(poolName).setOwnerName(ownerName).setGroupName(groupName).setMode(mode).setLimit(limit));
+  RemoteIterator<CachePoolEntry> iter=dfs.listCachePools();
+  CachePoolInfo info=iter.next().getInfo();
+  assertEquals(poolName,info.getPoolName());
+  assertEquals(ownerName,info.getOwnerName());
+  assertEquals(groupName,info.getGroupName());
+  ownerName="def";
+  groupName="456";
+  mode=new FsPermission((short)0700);
+  limit=151;
+  dfs.modifyCachePool(new CachePoolInfo(poolName).setOwnerName(ownerName).setGroupName(groupName).setMode(mode).setLimit(limit));
+  iter=dfs.listCachePools();
+  info=iter.next().getInfo();
+  assertEquals(poolName,info.getPoolName());
+  assertEquals(ownerName,info.getOwnerName());
+  assertEquals(groupName,info.getGroupName());
+  assertEquals(mode,info.getMode());
+  assertEquals(limit,(long)info.getLimit());
+  dfs.removeCachePool(poolName);
+  iter=dfs.listCachePools();
+  assertFalse("expected no cache pools after deleting pool",iter.hasNext());
+  proto.listCachePools(null);
+  try {
+    proto.removeCachePool("pool99");
+    fail("expected to get an exception when " + "removing a non-existent pool.");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("Cannot remove non-existent",ioe);
+  }
+  try {
+    proto.removeCachePool(poolName);
+    fail("expected to get an exception when " + "removing a non-existent pool.");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("Cannot remove non-existent",ioe);
+  }
+  iter=dfs.listCachePools();
+  assertFalse("expected no cache pools after deleting pool",iter.hasNext());
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=30000) public void testMaxRelativeExpiry() throws Exception {
+  try {
+    dfs.addCachePool(new CachePoolInfo("failpool").setMaxRelativeExpiryMs(-1l));
+    fail("Added a pool with a negative max expiry.");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("negative",e);
+  }
+  try {
+    dfs.addCachePool(new CachePoolInfo("failpool").setMaxRelativeExpiryMs(Long.MAX_VALUE - 1));
+    fail("Added a pool with too big of a max expiry.");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("too big",e);
+  }
+  CachePoolInfo coolPool=new CachePoolInfo("coolPool");
+  final long poolExpiration=1000 * 60 * 10l;
+  dfs.addCachePool(coolPool.setMaxRelativeExpiryMs(poolExpiration));
+  RemoteIterator<CachePoolEntry> poolIt=dfs.listCachePools();
+  CachePoolInfo listPool=poolIt.next().getInfo();
+  assertFalse("Should only be one pool",poolIt.hasNext());
+  assertEquals("Expected max relative expiry to match set value",poolExpiration,listPool.getMaxRelativeExpiryMs().longValue());
+  try {
+    dfs.addCachePool(coolPool.setMaxRelativeExpiryMs(-1l));
+    fail("Added a pool with a negative max expiry.");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("negative",e);
+  }
+  try {
+    dfs.modifyCachePool(coolPool.setMaxRelativeExpiryMs(CachePoolInfo.RELATIVE_EXPIRY_NEVER + 1));
+    fail("Added a pool with too big of a max expiry.");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("too big",e);
+  }
+  CacheDirectiveInfo defaultExpiry=new CacheDirectiveInfo.Builder().setPath(new Path("/blah")).setPool(coolPool.getPoolName()).build();
+  dfs.addCacheDirective(defaultExpiry);
+  RemoteIterator<CacheDirectiveEntry> dirIt=dfs.listCacheDirectives(defaultExpiry);
+  CacheDirectiveInfo listInfo=dirIt.next().getInfo();
+  assertFalse("Should only have one entry in listing",dirIt.hasNext());
+  long listExpiration=listInfo.getExpiration().getAbsoluteMillis() - new Date().getTime();
+  assertTrue("Directive expiry should be approximately the pool's max expiry",Math.abs(listExpiration - poolExpiration) < 10 * 1000);
+  CacheDirectiveInfo.Builder builder=new CacheDirectiveInfo.Builder().setPath(new Path("/lolcat")).setPool(coolPool.getPoolName());
+  try {
+    dfs.addCacheDirective(builder.setExpiration(Expiration.newRelative(poolExpiration + 1)).build());
+    fail("Added a directive that exceeds pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  try {
+    dfs.addCacheDirective(builder.setExpiration(Expiration.newAbsolute(new Date().getTime() + poolExpiration + (10 * 1000))).build());
+    fail("Added a directive that exceeds pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setExpiration(Expiration.newRelative(poolExpiration + 1)).build());
+    fail("Modified a directive to exceed pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setExpiration(Expiration.newAbsolute(new Date().getTime() + poolExpiration + (10 * 1000))).build());
+    fail("Modified a directive to exceed pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  try {
+    dfs.addCacheDirective(builder.setExpiration(Expiration.newRelative(Long.MAX_VALUE)).build());
+    fail("Added a directive with a gigantic max value");
+  }
+ catch (  IllegalArgumentException e) {
+    assertExceptionContains("is too far in the future",e);
+  }
+  try {
+    dfs.addCacheDirective(builder.setExpiration(Expiration.newAbsolute(Long.MAX_VALUE)).build());
+    fail("Added a directive with a gigantic max value");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("is too far in the future",e);
+  }
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setExpiration(Expiration.NEVER).build());
+    fail("Modified a directive to exceed pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setExpiration(Expiration.newAbsolute(Long.MAX_VALUE)).build());
+    fail("Modified a directive to exceed pool's max relative expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("is too far in the future",e);
+  }
+  CachePoolInfo destPool=new CachePoolInfo("destPool");
+  dfs.addCachePool(destPool.setMaxRelativeExpiryMs(poolExpiration / 2));
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setPool(destPool.getPoolName()).build());
+    fail("Modified a directive to a pool with a lower max expiration");
+  }
+ catch (  InvalidRequestException e) {
+    assertExceptionContains("exceeds the max relative expiration",e);
+  }
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(defaultExpiry).setId(listInfo.getId()).setPool(destPool.getPoolName()).setExpiration(Expiration.newRelative(poolExpiration / 2)).build());
+  dirIt=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setPool(destPool.getPoolName()).build());
+  listInfo=dirIt.next().getInfo();
+  listExpiration=listInfo.getExpiration().getAbsoluteMillis() - new Date().getTime();
+  assertTrue("Unexpected relative expiry " + listExpiration + " expected approximately "+ poolExpiration / 2,Math.abs(poolExpiration / 2 - listExpiration) < 10 * 1000);
+  dfs.modifyCachePool(destPool.setMaxRelativeExpiryMs(CachePoolInfo.RELATIVE_EXPIRY_NEVER));
+  poolIt=dfs.listCachePools();
+  listPool=poolIt.next().getInfo();
+  while (!listPool.getPoolName().equals(destPool.getPoolName())) {
+    listPool=poolIt.next().getInfo();
+  }
+  assertEquals("Expected max relative expiry to match set value",CachePoolInfo.RELATIVE_EXPIRY_NEVER,listPool.getMaxRelativeExpiryMs().longValue());
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(listInfo.getId()).setExpiration(Expiration.newRelative(RELATIVE_EXPIRY_NEVER)).build());
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(listInfo.getId()).setExpiration(Expiration.newRelative(RELATIVE_EXPIRY_NEVER - 1)).build());
+}
+
+</code></pre>
+
+<pre class="type-8 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Allocates resources before the execution of the test cases">TestInitializer</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Allocates resources before the execution of the test cases
+"></span><br>
+@Before public void setup() throws Exception {
+  conf=createCachingConf();
+  cluster=new MiniDFSCluster.Builder(conf).numDataNodes(NUM_DATANODES).build();
+  cluster.waitActive();
+  dfs=cluster.getFileSystem();
+  proto=cluster.getNameNodeRpc();
+  namenode=cluster.getNameNode();
+  prevCacheManipulator=NativeIO.POSIX.getCacheManipulator();
+  NativeIO.POSIX.setCacheManipulator(new NoMlockCacheManipulator());
+  BlockReaderTestUtil.enableHdfsCachingTracing();
+}
+
+</code></pre>
+
+<pre class="type-4 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Releases resources used by the test cases">TestCleaner</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Releases resources used by the test cases
+"></span><br>
+@After public void teardown() throws Exception {
+  RemoteIterator<CacheDirectiveEntry> iter=dfs.listCacheDirectives(null);
+  while (iter.hasNext()) {
+    dfs.removeCacheDirective(iter.next().getInfo().getId());
+  }
+  waitForCachedBlocks(namenode,0,0,"teardown");
+  if (cluster != null) {
+    cluster.shutdown();
+  }
+  NativeIO.POSIX.setCacheManipulator(prevCacheManipulator);
+}
+
+</code></pre>
+
+<pre class="type-7 type-10 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+"></span><br>
+@Test(timeout=120000) public void testExpiry() throws Exception {
+  String pool="pool1";
+  dfs.addCachePool(new CachePoolInfo(pool));
+  Path p=new Path("/mypath");
+  DFSTestUtil.createFile(dfs,p,BLOCK_SIZE * 2,(short)2,0x999);
+  Date start=new Date();
+  Date expiry=DateUtils.addSeconds(start,120);
+  final long id=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(p).setPool(pool).setExpiration(CacheDirectiveInfo.Expiration.newAbsolute(expiry)).setReplication((short)2).build());
+  waitForCachedBlocks(cluster.getNameNode(),2,4,"testExpiry:1");
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(id).setExpiration(Expiration.newRelative(0)).build());
+  waitForCachedBlocks(cluster.getNameNode(),0,0,"testExpiry:2");
+  RemoteIterator<CacheDirectiveEntry> it=dfs.listCacheDirectives(null);
+  CacheDirectiveEntry ent=it.next();
+  assertFalse(it.hasNext());
+  Date entryExpiry=new Date(ent.getInfo().getExpiration().getMillis());
+  assertTrue("Directive should have expired",entryExpiry.before(new Date()));
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(id).setExpiration(Expiration.newRelative(120000)).build());
+  waitForCachedBlocks(cluster.getNameNode(),2,4,"testExpiry:3");
+  it=dfs.listCacheDirectives(null);
+  ent=it.next();
+  assertFalse(it.hasNext());
+  entryExpiry=new Date(ent.getInfo().getExpiration().getMillis());
+  assertTrue("Directive should not have expired",entryExpiry.after(new Date()));
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(id).setExpiration(Expiration.newRelative(-1)).build());
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("Cannot set a negative expiration",e);
+  }
+}
+
+</code></pre>
+
+<pre class="type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=120000) public void testLimit() throws Exception {
+  try {
+    dfs.addCachePool(new CachePoolInfo("poolofnegativity").setLimit(-99l));
+    fail("Should not be able to set a negative limit");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("negative",e);
+  }
+  final String destiny="poolofdestiny";
+  final Path path1=new Path("/destiny");
+  DFSTestUtil.createFile(dfs,path1,2 * BLOCK_SIZE,(short)1,0x9494);
+  final CachePoolInfo poolInfo=new CachePoolInfo(destiny).setLimit(2 * BLOCK_SIZE - 1);
+  dfs.addCachePool(poolInfo);
+  final CacheDirectiveInfo info1=new CacheDirectiveInfo.Builder().setPool(destiny).setPath(path1).build();
+  try {
+    dfs.addCacheDirective(info1);
+    fail("Should not be able to cache when there is no more limit");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("remaining capacity",e);
+  }
+  poolInfo.setLimit(2 * BLOCK_SIZE);
+  dfs.modifyCachePool(poolInfo);
+  long id1=dfs.addCacheDirective(info1);
+  waitForCachePoolStats(dfs,2 * BLOCK_SIZE,2 * BLOCK_SIZE,1,1,poolInfo,"testLimit:1");
+  final Path path2=new Path("/failure");
+  DFSTestUtil.createFile(dfs,path2,BLOCK_SIZE,(short)1,0x9495);
+  try {
+    dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool(destiny).setPath(path2).build(),EnumSet.noneOf(CacheFlag.class));
+    fail("Should not be able to add another cached file");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("remaining capacity",e);
+  }
+  poolInfo.setLimit(BLOCK_SIZE);
+  dfs.modifyCachePool(poolInfo);
+  waitForCachePoolStats(dfs,2 * BLOCK_SIZE,0,1,0,poolInfo,"testLimit:2");
+  RemoteIterator<CachePoolEntry> it=dfs.listCachePools();
+  assertTrue("Expected a cache pool",it.hasNext());
+  CachePoolStats stats=it.next().getStats();
+  assertEquals("Overlimit bytes should be difference of needed and limit",BLOCK_SIZE,stats.getBytesOverlimit());
+  CachePoolInfo inadequate=new CachePoolInfo("poolofinadequacy").setLimit(BLOCK_SIZE);
+  dfs.addCachePool(inadequate);
+  try {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(info1).setId(id1).setPool(inadequate.getPoolName()).build(),EnumSet.noneOf(CacheFlag.class));
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("remaining capacity",e);
+  }
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(info1).setId(id1).setPool(inadequate.getPoolName()).build(),EnumSet.of(CacheFlag.FORCE));
+  dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool(inadequate.getPoolName()).setPath(path1).build(),EnumSet.of(CacheFlag.FORCE));
+}
+
+</code></pre>
+
+<pre class="type-2 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+"></span><br>
+@Test(timeout=60000) public void testBasicPoolOperations() throws Exception {
+  final String poolName="pool1";
+  CachePoolInfo info=new CachePoolInfo(poolName).setOwnerName("bob").setGroupName("bobgroup").setMode(new FsPermission((short)0755)).setLimit(150l);
+  dfs.addCachePool(info);
+  try {
+    dfs.addCachePool(info);
+    fail("added the pool with the same name twice");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("pool1 already exists",ioe);
+  }
+  try {
+    dfs.addCachePool(new CachePoolInfo(""));
+    fail("added empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    dfs.addCachePool(null);
+    fail("added null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("CachePoolInfo is null",ioe);
+  }
+  try {
+    proto.addCachePool(new CachePoolInfo(""));
+    fail("added empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    proto.addCachePool(null);
+    fail("added null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("CachePoolInfo is null",ioe);
+  }
+  info.setOwnerName("jane").setGroupName("janegroup").setMode(new FsPermission((short)0700)).setLimit(314l);
+  dfs.modifyCachePool(info);
+  try {
+    dfs.modifyCachePool(new CachePoolInfo("fool"));
+    fail("modified non-existent cache pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("fool does not exist",ioe);
+  }
+  try {
+    dfs.modifyCachePool(new CachePoolInfo(""));
+    fail("modified empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    dfs.modifyCachePool(null);
+    fail("modified null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("CachePoolInfo is null",ioe);
+  }
+  try {
+    proto.modifyCachePool(new CachePoolInfo(""));
+    fail("modified empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    proto.modifyCachePool(null);
+    fail("modified null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("CachePoolInfo is null",ioe);
+  }
+  dfs.removeCachePool(poolName);
+  try {
+    dfs.removeCachePool("pool99");
+    fail("expected to get an exception when " + "removing a non-existent pool.");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("Cannot remove " + "non-existent cache pool",ioe);
+  }
+  try {
+    dfs.removeCachePool(poolName);
+    fail("expected to get an exception when " + "removing a non-existent pool.");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("Cannot remove " + "non-existent cache pool",ioe);
+  }
+  try {
+    dfs.removeCachePool("");
+    fail("removed empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    dfs.removeCachePool(null);
+    fail("removed null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    proto.removeCachePool("");
+    fail("removed empty pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  try {
+    proto.removeCachePool(null);
+    fail("removed null pool");
+  }
+ catch (  IOException ioe) {
+    GenericTestUtils.assertExceptionContains("invalid empty cache pool name",ioe);
+  }
+  info=new CachePoolInfo("pool2");
+  dfs.addCachePool(info);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+@Test(timeout=60000) public void testExceedsCapacity() throws Exception {
+  final Path fileName=new Path("/exceeds");
+  final long fileLen=CACHE_CAPACITY * (NUM_DATANODES * 2);
+  int numCachedReplicas=(int)((CACHE_CAPACITY * NUM_DATANODES) / BLOCK_SIZE);
+  DFSTestUtil.createFile(dfs,fileName,fileLen,(short)NUM_DATANODES,0xFADED);
+  dfs.addCachePool(new CachePoolInfo("pool"));
+  dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPool("pool").setPath(fileName).setReplication((short)1).build());
+  waitForCachedBlocks(namenode,-1,numCachedReplicas,"testExceeds:1");
+  checkPendingCachedEmpty(cluster);
+  Thread.sleep(1000);
+  checkPendingCachedEmpty(cluster);
+  dfs.delete(fileName,false);
+  DFSTestUtil.createFile(dfs,fileName,4096,fileLen,CACHE_CAPACITY * 2,(short)1,0xFADED);
+  checkPendingCachedEmpty(cluster);
+  Thread.sleep(1000);
+  checkPendingCachedEmpty(cluster);
+}
+
+</code></pre>
+
+<pre class="type-9 type-13 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies assertions in iterations">IterativeVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies assertions in iterations
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testCacheManagerRestart() throws Exception {
+  SecondaryNameNode secondary=null;
+  try {
+    conf.set(DFSConfigKeys.DFS_NAMENODE_SECONDARY_HTTP_ADDRESS_KEY,"0.0.0.0:0");
+    secondary=new SecondaryNameNode(conf);
+    final String pool="poolparty";
+    String groupName="partygroup";
+    FsPermission mode=new FsPermission((short)0777);
+    long limit=747;
+    dfs.addCachePool(new CachePoolInfo(pool).setGroupName(groupName).setMode(mode).setLimit(limit));
+    RemoteIterator<CachePoolEntry> pit=dfs.listCachePools();
+    assertTrue("No cache pools found",pit.hasNext());
+    CachePoolInfo info=pit.next().getInfo();
+    assertEquals(pool,info.getPoolName());
+    assertEquals(groupName,info.getGroupName());
+    assertEquals(mode,info.getMode());
+    assertEquals(limit,(long)info.getLimit());
+    assertFalse("Unexpected # of cache pools found",pit.hasNext());
+    int numEntries=10;
+    String entryPrefix="/party-";
+    long prevId=-1;
+    final Date expiry=new Date();
+    for (int i=0; i < numEntries; i++) {
+      prevId=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path(entryPrefix + i)).setPool(pool).setExpiration(CacheDirectiveInfo.Expiration.newAbsolute(expiry.getTime())).build());
+    }
+    RemoteIterator<CacheDirectiveEntry> dit=dfs.listCacheDirectives(null);
+    for (int i=0; i < numEntries; i++) {
+      assertTrue("Unexpected # of cache entries: " + i,dit.hasNext());
+      CacheDirectiveInfo cd=dit.next().getInfo();
+      assertEquals(i + 1,cd.getId().longValue());
+      assertEquals(entryPrefix + i,cd.getPath().toUri().getPath());
+      assertEquals(pool,cd.getPool());
+    }
+    assertFalse("Unexpected # of cache directives found",dit.hasNext());
+    secondary.doCheckpoint();
+    final String imagePool="imagePool";
+    dfs.addCachePool(new CachePoolInfo(imagePool));
+    prevId=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path("/image")).setPool(imagePool).build());
+    dfs.setSafeMode(SafeModeAction.SAFEMODE_ENTER);
+    dfs.saveNamespace();
+    dfs.setSafeMode(SafeModeAction.SAFEMODE_LEAVE);
+    boolean fetchImage=secondary.doCheckpoint();
+    assertTrue("Secondary should have fetched a new fsimage from NameNode",fetchImage);
+    dfs.removeCachePool(imagePool);
+    cluster.restartNameNode();
+    pit=dfs.listCachePools();
+    assertTrue("No cache pools found",pit.hasNext());
+    info=pit.next().getInfo();
+    assertEquals(pool,info.getPoolName());
+    assertEquals(pool,info.getPoolName());
+    assertEquals(groupName,info.getGroupName());
+    assertEquals(mode,info.getMode());
+    assertEquals(limit,(long)info.getLimit());
+    assertFalse("Unexpected # of cache pools found",pit.hasNext());
+    dit=dfs.listCacheDirectives(null);
+    for (int i=0; i < numEntries; i++) {
+      assertTrue("Unexpected # of cache entries: " + i,dit.hasNext());
+      CacheDirectiveInfo cd=dit.next().getInfo();
+      assertEquals(i + 1,cd.getId().longValue());
+      assertEquals(entryPrefix + i,cd.getPath().toUri().getPath());
+      assertEquals(pool,cd.getPool());
+      assertEquals(expiry.getTime(),cd.getExpiration().getMillis());
+    }
+    assertFalse("Unexpected # of cache directives found",dit.hasNext());
+    long nextId=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path("/foobar")).setPool(pool).build());
+    assertEquals(prevId + 1,nextId);
+  }
+  finally {
+    if (secondary != null) {
+      secondary.shutdown();
+    }
+  }
+}
+
+</code></pre>
+
+<pre class="type-9 type-2 type-7 type-10 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies (un)successful execution of the test case by reporting explicitly a failure">UtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies (un)successful execution of the test case by reporting explicitly a failure
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testAddRemoveDirectives() throws Exception {
+  proto.addCachePool(new CachePoolInfo("pool1").setMode(new FsPermission((short)0777)));
+  proto.addCachePool(new CachePoolInfo("pool2").setMode(new FsPermission((short)0777)));
+  proto.addCachePool(new CachePoolInfo("pool3").setMode(new FsPermission((short)0777)));
+  proto.addCachePool(new CachePoolInfo("pool4").setMode(new FsPermission((short)0)));
+  CacheDirectiveInfo alpha=new CacheDirectiveInfo.Builder().setPath(new Path("/alpha")).setPool("pool1").build();
+  CacheDirectiveInfo beta=new CacheDirectiveInfo.Builder().setPath(new Path("/beta")).setPool("pool2").build();
+  CacheDirectiveInfo delta=new CacheDirectiveInfo.Builder().setPath(new Path("/delta")).setPool("pool1").build();
+  long alphaId=addAsUnprivileged(alpha);
+  long alphaId2=addAsUnprivileged(alpha);
+  assertFalse("Expected to get unique directives when re-adding an " + "existing CacheDirectiveInfo",alphaId == alphaId2);
+  long betaId=addAsUnprivileged(beta);
+  try {
+    addAsUnprivileged(new CacheDirectiveInfo.Builder().setPath(new Path("/unicorn")).setPool("no_such_pool").build());
+    fail("expected an error when adding to a non-existent pool.");
+  }
+ catch (  InvalidRequestException ioe) {
+    GenericTestUtils.assertExceptionContains("Unknown pool",ioe);
+  }
+  try {
+    addAsUnprivileged(new CacheDirectiveInfo.Builder().setPath(new Path("/blackhole")).setPool("pool4").build());
+    fail("expected an error when adding to a pool with " + "mode 0 (no permissions for anyone).");
+  }
+ catch (  AccessControlException e) {
+    GenericTestUtils.assertExceptionContains("Permission denied while accessing pool",e);
+  }
+  try {
+    addAsUnprivileged(new CacheDirectiveInfo.Builder().setPath(new Path("/illegal:path/")).setPool("pool1").build());
+    fail("expected an error when adding a malformed path " + "to the cache directives.");
+  }
+ catch (  IllegalArgumentException e) {
+    GenericTestUtils.assertExceptionContains("is not a valid DFS filename",e);
+  }
+  try {
+    addAsUnprivileged(new CacheDirectiveInfo.Builder().setPath(new Path("/emptypoolname")).setReplication((short)1).setPool("").build());
+    fail("expected an error when adding a cache " + "directive with an empty pool name.");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("Invalid empty pool name",e);
+  }
+  long deltaId=addAsUnprivileged(delta);
+  long relativeId=addAsUnprivileged(new CacheDirectiveInfo.Builder().setPath(new Path("relative")).setPool("pool1").build());
+  RemoteIterator<CacheDirectiveEntry> iter;
+  iter=dfs.listCacheDirectives(null);
+  validateListAll(iter,alphaId,alphaId2,betaId,deltaId,relativeId);
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setPool("pool3").build());
+  assertFalse(iter.hasNext());
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setPool("pool1").build());
+  validateListAll(iter,alphaId,alphaId2,deltaId,relativeId);
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setPool("pool2").build());
+  validateListAll(iter,betaId);
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setId(alphaId2).build());
+  validateListAll(iter,alphaId2);
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setId(relativeId).build());
+  validateListAll(iter,relativeId);
+  dfs.removeCacheDirective(betaId);
+  iter=dfs.listCacheDirectives(new CacheDirectiveInfo.Builder().setPool("pool2").build());
+  assertFalse(iter.hasNext());
+  try {
+    dfs.removeCacheDirective(betaId);
+    fail("expected an error when removing a non-existent ID");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("No directive with ID",e);
+  }
+  try {
+    proto.removeCacheDirective(-42l);
+    fail("expected an error when removing a negative ID");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("Invalid negative ID",e);
+  }
+  try {
+    proto.removeCacheDirective(43l);
+    fail("expected an error when removing a non-existent ID");
+  }
+ catch (  InvalidRequestException e) {
+    GenericTestUtils.assertExceptionContains("No directive with ID",e);
+  }
+  dfs.removeCacheDirective(alphaId);
+  dfs.removeCacheDirective(alphaId2);
+  dfs.removeCacheDirective(deltaId);
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(relativeId).setReplication((short)555).build());
+  iter=dfs.listCacheDirectives(null);
+  assertTrue(iter.hasNext());
+  CacheDirectiveInfo modified=iter.next().getInfo();
+  assertEquals(relativeId,modified.getId().longValue());
+  assertEquals((short)555,modified.getReplication().shortValue());
+  dfs.removeCacheDirective(relativeId);
+  iter=dfs.listCacheDirectives(null);
+  assertFalse(iter.hasNext());
+  CacheDirectiveInfo directive=new CacheDirectiveInfo.Builder().setPath(new Path(".")).setPool("pool1").build();
+  long id=dfs.addCacheDirective(directive);
+  dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder(directive).setId(id).setReplication((short)2).build());
+  dfs.removeCacheDirective(id);
+}
+
+</code></pre>
+
+<pre class="type-5 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Executes methods or other tests from the same test unit">ExecutionTester</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Executes methods or other tests from the same test unit
+"></span><br>
+/** 
+ * Tests stepping the cache replication factor up and down, checking the
+ * number of cached replicas and blocks as well as the advertised locations.
+ * @throws Exception
+ */
+@Test(timeout=120000) public void testReplicationFactor() throws Exception {
+  final String pool="friendlyPool";
+  dfs.addCachePool(new CachePoolInfo(pool));
+  final List<Path> paths=new LinkedList<Path>();
+  paths.add(new Path("/foo/bar"));
+  paths.add(new Path("/foo/baz"));
+  paths.add(new Path("/foo2/bar2"));
+  paths.add(new Path("/foo2/baz2"));
+  dfs.mkdir(new Path("/foo"),FsPermission.getDirDefault());
+  dfs.mkdir(new Path("/foo2"),FsPermission.getDirDefault());
+  final int numBlocksPerFile=2;
+  for (  Path path : paths) {
+    FileSystemTestHelper.createFile(dfs,path,numBlocksPerFile,(int)BLOCK_SIZE,(short)3,false);
+  }
+  waitForCachedBlocks(namenode,0,0,"testReplicationFactor:0");
+  checkNumCachedReplicas(dfs,paths,0,0);
+  long id=dfs.addCacheDirective(new CacheDirectiveInfo.Builder().setPath(new Path("/foo")).setReplication((short)1).setPool(pool).build());
+  waitForCachedBlocks(namenode,4,4,"testReplicationFactor:1");
+  checkNumCachedReplicas(dfs,paths,4,4);
+  for (int i=2; i <= 3; i++) {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(id).setReplication((short)i).build());
+    waitForCachedBlocks(namenode,4,4 * i,"testReplicationFactor:2");
+    checkNumCachedReplicas(dfs,paths,4,4 * i);
+  }
+  for (int i=2; i >= 1; i--) {
+    dfs.modifyCacheDirective(new CacheDirectiveInfo.Builder().setId(id).setReplication((short)i).build());
+    waitForCachedBlocks(namenode,4,4 * i,"testReplicationFactor:3");
+    checkNumCachedReplicas(dfs,paths,4,4 * i);
+  }
+  dfs.removeCacheDirective(id);
+  waitForCachedBlocks(namenode,0,0,"testReplicationFactor:4");
+  checkNumCachedReplicas(dfs,paths,0,0);
+}
+
+</code></pre>
+
+<pre class="type-9 type-7 type-10 type-1 type-6 type-3 "><code><span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to API calls (Java or TPL) ">APIUtilityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies values of objects/variables related to AUT calls">InternalCallVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies boolean conditions">BooleanVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects are null">NullVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Verifies whether objects/variable are equal to an expected value ">EqualityVerifier</span>&nbsp;<span class="label label-info" style="display: inline-block;" data-toggle="tooltip" title="Contains more than 2 JUnit-based stereotypes">HybridVerifier</span>&nbsp;<span class=" glyphicon glyphicon-comment" aria-hidden="true" label-info" data-toggle="tooltip" title="This method/test case: 
+- Verifies values of objects/variables related to API calls (Java or TPL) 
+- Verifies values of objects/variables related to AUT calls
+- Verifies boolean conditions
+- Verifies whether objects are null
+- Verifies whether objects/variable are equal to an expected value 
+- Contains more than 2 JUnit-based stereotypes
+"></span><br>
+@Test(timeout=60000) public void testListCachePoolPermissions() throws Exception {
+  final UserGroupInformation myUser=UserGroupInformation.createRemoteUser("myuser");
+  final DistributedFileSystem myDfs=(DistributedFileSystem)DFSTestUtil.getFileSystemAs(myUser,conf);
+  final String poolName="poolparty";
+  dfs.addCachePool(new CachePoolInfo(poolName).setMode(new FsPermission((short)0700)));
+  RemoteIterator<CachePoolEntry> it=myDfs.listCachePools();
+  CachePoolInfo info=it.next().getInfo();
+  assertFalse(it.hasNext());
+  assertEquals("Expected pool name",poolName,info.getPoolName());
+  assertNull("Unexpected owner name",info.getOwnerName());
+  assertNull("Unexpected group name",info.getGroupName());
+  assertNull("Unexpected mode",info.getMode());
+  assertNull("Unexpected limit",info.getLimit());
+  final long limit=99;
+  dfs.modifyCachePool(new CachePoolInfo(poolName).setOwnerName(myUser.getShortUserName()).setLimit(limit));
+  it=myDfs.listCachePools();
+  info=it.next().getInfo();
+  assertFalse(it.hasNext());
+  assertEquals("Expected pool name",poolName,info.getPoolName());
+  assertEquals("Mismatched owner name",myUser.getShortUserName(),info.getOwnerName());
+  assertNotNull("Expected group name",info.getGroupName());
+  assertEquals("Mismatched mode",(short)0700,info.getMode().toShort());
+  assertEquals("Mismatched limit",limit,(long)info.getLimit());
+}
+
+</code></pre>
+
+<script>$(document).ready(function() {
+  $('pre code').each(function(i, block) {
+    hljs.highlightBlock(block);
+  });
+});</script>
